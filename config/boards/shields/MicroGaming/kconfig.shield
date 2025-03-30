@@ -1,2 +1,2 @@
-config SHIELD_MICROGAMING
-    def_bool $(SHIELD_list_contains, MICROGAMING)
+config SHIELD_MicroGaming
+    def_bool $(SHIELD_list_contains, MicroGaming)
