@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include "net_sample_common.h"
 
 #define MY_PORT 4242
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS) || defined(CONFIG_NET_TCP) || \
@@ -73,14 +74,14 @@ void stop_tcp(void);
 
 void quit(void);
 
-#if defined(CONFIG_NET_VLAN)
-int init_vlan(void);
+#if defined(CONFIG_NET_SAMPLE_WEBSOCKET_CONSOLE)
+int init_ws(void);
 #else
-static inline int init_vlan(void)
+static inline int init_ws(void)
 {
 	return 0;
 }
-#endif /* CONFIG_NET_VLAN */
+#endif /* CONFIG_NET_SAMPLE_WEBSOCKET_CONSOLE */
 
 #if defined(CONFIG_NET_L2_IPIP)
 int init_tunnel(void);
@@ -98,7 +99,7 @@ static inline bool is_tunnel(struct net_if *iface)
 }
 #endif /* CONFIG_NET_L2_IPIP */
 
-#if defined(CONFIG_USB_DEVICE_STACK)
+#if defined(CONFIG_USB_DEVICE_STACK) || defined(CONFIG_USB_DEVICE_STACK_NEXT)
 int init_usb(void);
 #else
 static inline int init_usb(void)

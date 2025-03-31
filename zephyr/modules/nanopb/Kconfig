@@ -6,6 +6,8 @@ config ZEPHYR_NANOPB_MODULE
 
 menuconfig NANOPB
 	bool "Nanopb Support"
+	# Nanopb requires c_std_11 compiler features like _Static_assert
+	select REQUIRES_STD_C11
 	help
 	  This option enables the Nanopb library and generator.
 
@@ -41,12 +43,6 @@ config NANOPB_WITHOUT_64BIT
 	help
 	  Disable support of 64-bit integer fields, for old compilers or
 	  for a slight speedup on 8-bit platforms.
-
-config NANOPB_NO_ENCODE_SIZE_CHECK
-	bool "Disable size checks when encoding sub-messages"
-	help
-	  Disable checking the size of encoded submessages between initial sizing
-	  encoding and final encoding to the stream.
 
 config NANOPB_ENCODE_ARRAYS_UNPACKED
 	bool "Encode arrays unpacked"

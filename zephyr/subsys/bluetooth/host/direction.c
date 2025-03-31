@@ -16,7 +16,6 @@
 #include <zephyr/bluetooth/direction.h>
 
 #include "hci_core.h"
-#include "scan.h"
 #include "conn_internal.h"
 #include "direction_internal.h"
 
@@ -383,7 +382,7 @@ int hci_df_prepare_connectionless_iq_report(struct net_buf *buf,
 
 	evt = net_buf_pull_mem(buf, sizeof(*evt));
 
-	per_adv_sync = bt_hci_get_per_adv_sync(sys_le16_to_cpu(evt->sync_handle));
+	per_adv_sync = bt_hci_per_adv_sync_lookup_handle(sys_le16_to_cpu(evt->sync_handle));
 
 	if (!per_adv_sync) {
 		LOG_ERR("Unknown handle 0x%04X for iq samples report",
@@ -431,7 +430,7 @@ int hci_df_vs_prepare_connectionless_iq_report(struct net_buf *buf,
 
 	evt = net_buf_pull_mem(buf, sizeof(*evt));
 
-	per_adv_sync = bt_hci_get_per_adv_sync(sys_le16_to_cpu(evt->sync_handle));
+	per_adv_sync = bt_hci_per_adv_sync_lookup_handle(sys_le16_to_cpu(evt->sync_handle));
 
 	if (!per_adv_sync) {
 		LOG_ERR("Unknown handle 0x%04X for iq samples report",
@@ -1144,7 +1143,7 @@ static int bt_df_set_conn_cte_req_enable(struct bt_conn *conn, bool enable,
 	}
 
 	if (!atomic_test_bit(conn->flags, BT_CONN_CTE_RX_PARAMS_SET)) {
-		LOG_ERR("Can't start CTE requres procedure before CTE RX params setup");
+		LOG_ERR("Can't start CTE request procedure before CTE RX params setup");
 		return -EINVAL;
 	}
 

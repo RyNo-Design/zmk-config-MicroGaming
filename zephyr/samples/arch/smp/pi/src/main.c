@@ -30,6 +30,8 @@ static struct k_thread tthread[THREADS_NUM];
 static char th_buffer[THREADS_NUM][DIGITS_NUM + 1];
 static atomic_t th_counter = THREADS_NUM;
 
+struct k_sem main_sem;
+
 void test_thread(void *arg1, void *arg2, void *arg3)
 {
 	atomic_t *counter = (atomic_t *)arg1;
@@ -74,13 +76,20 @@ void test_thread(void *arg1, void *arg2, void *arg3)
 		buffer += 4;
 	}
 
-	atomic_dec(counter);
+	if (atomic_dec(counter) == 1) {
+		k_sem_give(&main_sem);
+	}
 }
 
 int main(void)
 {
 	uint32_t start_time, stop_time, cycles_spent, nanoseconds_spent;
 	int i;
+
+	if (k_sem_init(&main_sem, 0, 1)) {
+		printk("Failed initialization!\n");
+		return -1;
+	}
 
 	printk("Calculate first %d digits of Pi independently by %d threads.\n",
 	       DIGITS_NUM, THREADS_NUM);
@@ -90,15 +99,13 @@ int main(void)
 
 	for (i = 0; i < THREADS_NUM; i++) {
 		k_thread_create(&tthread[i], tstack[i], STACK_SIZE,
-			       (k_thread_entry_t)test_thread,
+			       test_thread,
 			       (void *)&th_counter, (void *)th_buffer[i], NULL,
 			       K_PRIO_COOP(10), 0, K_NO_WAIT);
 	}
 
 	/* Wait for all workers to finish their calculations */
-	while (th_counter) {
-		k_sleep(K_MSEC(1));
-	}
+	k_sem_take(&main_sem, K_FOREVER);
 
 	/* Capture final time stamp */
 	stop_time = k_cycle_get_32();

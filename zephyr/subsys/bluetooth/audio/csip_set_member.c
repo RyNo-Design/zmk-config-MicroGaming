@@ -6,42 +6,57 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-#include <zephyr/kernel.h>
-#include <zephyr/types.h>
-
-#include <zephyr/device.h>
-#include <zephyr/init.h>
+#include <sys/types.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
+#include <zephyr/autoconf.h>
+#include <zephyr/bluetooth/addr.h>
+#include <zephyr/bluetooth/att.h>
+#include <zephyr/bluetooth/audio/csip.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/crypto.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/buf.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/util_macro.h>
+#include <zephyr/sys_clock.h>
+#include <zephyr/types.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/check.h>
 
+#include "../host/conn_internal.h"
+#include "../host/keys.h"
+
+#include "common/bt_str.h"
 #include "audio_internal.h"
 #include "csip_internal.h"
 #include "csip_crypto.h"
-#include "../host/conn_internal.h"
-#include "../host/hci_core.h"
-#include "../host/keys.h"
 
 #define CSIP_SET_LOCK_TIMER_VALUE       K_SECONDS(60)
 
 #define CSIS_CHAR_ATTR_COUNT	  3 /* declaration + value + cccd */
 #define CSIS_RANK_CHAR_ATTR_COUNT 2 /* declaration + value */
 
-#include "common/bt_str.h"
-
-#include <zephyr/logging/log.h>
-
 LOG_MODULE_REGISTER(bt_csip_set_member, CONFIG_BT_CSIP_SET_MEMBER_LOG_LEVEL);
 
-enum csip_pending_notify_flag {
+enum csip_flag {
 	FLAG_ACTIVE,
-	FLAG_SET_MEMBER_LOCK,
+	FLAG_NOTIFY_LOCK,
+	FLAG_NOTIFY_SIRK,
+	FLAG_NOTIFY_SIZE,
 	FLAG_NUM,
 };
 
@@ -53,10 +68,11 @@ struct csip_client {
 };
 
 struct bt_csip_set_member_svc_inst {
-	struct bt_csip_set_sirk set_sirk;
+	struct bt_csip_sirk sirk;
 	uint8_t set_size;
 	uint8_t set_lock;
 	uint8_t rank;
+	bool lockable;
 	struct bt_csip_set_member_cb *cb;
 	struct k_work_delayable set_lock_timer;
 	bt_addr_le_t lock_client_addr;
@@ -65,18 +81,10 @@ struct bt_csip_set_member_svc_inst {
 };
 
 static struct bt_csip_set_member_svc_inst svc_insts[CONFIG_BT_CSIP_SET_MEMBER_MAX_INSTANCE_COUNT];
-static bt_addr_le_t server_dummy_addr; /* 0'ed address */
-
-static atomic_t notify_in_progress;
 
 static void deferred_nfy_work_handler(struct k_work *work);
 
-static K_WORK_DEFINE(deferred_nfy_work, deferred_nfy_work_handler);
-
-struct csip_notify_foreach {
-	struct bt_conn *excluded_client;
-	struct bt_csip_set_member_svc_inst *svc_inst;
-};
+static K_WORK_DELAYABLE_DEFINE(deferred_nfy_work, deferred_nfy_work_handler);
 
 static bool is_last_client_to_write(const struct bt_csip_set_member_svc_inst *svc_inst,
 				    const struct bt_conn *conn)
@@ -85,115 +93,31 @@ static bool is_last_client_to_write(const struct bt_csip_set_member_svc_inst *sv
 		return bt_addr_le_eq(bt_conn_get_dst(conn),
 				     &svc_inst->lock_client_addr);
 	} else {
-		return bt_addr_le_eq(&server_dummy_addr,
-				     &svc_inst->lock_client_addr);
+		return bt_addr_le_eq(BT_ADDR_LE_NONE, &svc_inst->lock_client_addr);
 	}
 }
 
-static void csip_gatt_notify_complete_cb(struct bt_conn *conn, void *user_data)
-{
-	/* Notification done, clear bit and reschedule work */
-	atomic_clear(&notify_in_progress);
-	k_work_submit(&deferred_nfy_work);
-}
-
-static int csip_gatt_notify_set_lock(struct bt_conn *conn,
-				     const struct bt_gatt_attr *attr,
-				     const void *data,
-				     uint16_t len)
+static void notify_work_reschedule(k_timeout_t delay)
 {
 	int err;
-	struct bt_gatt_notify_params params;
 
-	memset(&params, 0, sizeof(params));
-	params.uuid = BT_UUID_CSIS_SET_LOCK;
-	params.attr = attr;
-	params.data = data;
-	params.len  = len;
-	params.func = csip_gatt_notify_complete_cb;
-
-	/* Mark notification in progress */
-	atomic_set(&notify_in_progress, 1);
-
-	err = bt_gatt_notify_cb(conn, &params);
-	if (err != 0) {
-		atomic_clear(&notify_in_progress);
-
-		if (err != -ENOTCONN) {
-			return err;
-		}
-	}
-
-	return 0;
-}
-
-static void csip_set_notify_bit(struct bt_csip_set_member_svc_inst *svc_inst,
-				enum csip_pending_notify_flag flag)
-{
-	for (size_t i = 0U; i < ARRAY_SIZE(svc_inst->clients); i++) {
-		struct csip_client *client;
-
-		client = &svc_inst->clients[i];
-		if (atomic_test_bit(client->flags, FLAG_ACTIVE)) {
-			atomic_set_bit(client->flags, flag);
-		}
-	}
-}
-
-static int notify_lock_value(const struct bt_csip_set_member_svc_inst *svc_inst,
-			      struct bt_conn *conn)
-{
-	LOG_DBG("");
-	return csip_gatt_notify_set_lock(conn, svc_inst->service_p->attrs,
-					 &svc_inst->set_lock,
-					 sizeof(svc_inst->set_lock));
-}
-
-static void notify_client(struct bt_conn *conn, void *data)
-{
-	struct csip_notify_foreach *csip_data = (struct csip_notify_foreach *)data;
-	struct bt_csip_set_member_svc_inst *svc_inst = csip_data->svc_inst;
-	struct bt_conn *excluded_conn = csip_data->excluded_client;
-
-	if (excluded_conn != NULL && conn == excluded_conn) {
+	/* If it is already scheduled, don't reschedule */
+	if (k_work_delayable_remaining_get(&deferred_nfy_work) > 0) {
 		return;
 	}
 
-
-
-	for (size_t i = 0U; i < ARRAY_SIZE(svc_inst->clients); i++) {
-		struct csip_client *client;
-
-		client = &svc_inst->clients[i];
-
-		if (atomic_test_bit(client->flags, FLAG_SET_MEMBER_LOCK) &&
-		    bt_addr_le_eq(bt_conn_get_dst(conn), &client->addr)) {
-			/* First try to send the notification directly, and if it fails add it
-			 * to system workqueue for retry. We do it like this here as the client
-			 * wants the lock notification asap to begin ordered access procedure
-			 */
-			if (notify_lock_value(svc_inst, conn) != 0) {
-				csip_set_notify_bit(svc_inst, FLAG_SET_MEMBER_LOCK);
-				k_work_submit(&deferred_nfy_work);
-			} else {
-				atomic_clear_bit(client->flags, FLAG_SET_MEMBER_LOCK);
-				break;
-			}
-		}
+	err = k_work_reschedule(&deferred_nfy_work, delay);
+	if (err < 0) {
+		LOG_ERR("Failed to reschedule notification work err %d", err);
 	}
 }
 
 static void notify_clients(struct bt_csip_set_member_svc_inst *svc_inst,
-			   struct bt_conn *excluded_client)
+			   struct bt_conn *excluded_client, enum csip_flag flag)
 {
-	struct csip_notify_foreach data = {
-		.excluded_client = excluded_client,
-		.svc_inst = svc_inst,
-	};
+	bool submit_work = false;
 
-	/* Mark all bonded devices as pending notifications, and clear those
-	 * that are notified in `notify_client`
-	 */
+	/* Mark all bonded devices (except the excluded one) as pending notifications */
 	for (size_t i = 0U; i < ARRAY_SIZE(svc_inst->clients); i++) {
 		struct csip_client *client;
 
@@ -205,36 +129,38 @@ static void notify_clients(struct bt_csip_set_member_svc_inst *svc_inst,
 				continue;
 			}
 
-			atomic_set_bit(client->flags, FLAG_SET_MEMBER_LOCK);
+			atomic_set_bit(client->flags, flag);
+			submit_work = true;
 		}
 	}
 
-	bt_conn_foreach(BT_CONN_TYPE_LE, notify_client, &data);
+	/* Reschedule work for notifying */
+	if (submit_work) {
+		notify_work_reschedule(K_NO_WAIT);
+	}
 }
 
-static int sirk_encrypt(struct bt_conn *conn,
-			const struct bt_csip_set_sirk *sirk,
-			struct bt_csip_set_sirk *enc_sirk)
+static int sirk_encrypt(struct bt_conn *conn, const struct bt_csip_sirk *sirk,
+			struct bt_csip_sirk *enc_sirk)
 {
 	int err;
-	uint8_t *k;
+	const uint8_t *k;
 
 	if (IS_ENABLED(CONFIG_BT_CSIP_SET_MEMBER_TEST_SAMPLE_DATA)) {
 		/* test_k is from the sample data from A.2 in the CSIS spec */
-		static uint8_t test_k[] = {0x67, 0x6e, 0x1b, 0x9b,
-					   0xd4, 0x48, 0x69, 0x6f,
-					   0x06, 0x1e, 0xc6, 0x22,
-					   0x3c, 0xe5, 0xce, 0xd9};
-		static bool swapped;
-
-		if (!swapped && IS_ENABLED(CONFIG_LITTLE_ENDIAN)) {
-			/* Swap test_k to little endian */
-			sys_mem_swap(test_k, 16);
-			swapped = true;
-		}
+		static const uint8_t test_k[] = {
+			/* Sample data is in big-endian, we need it in little-endian. */
++                       REVERSE_ARGS(0x67, 0x6e, 0x1b, 0x9b,
+				     0xd4, 0x48, 0x69, 0x6f,
+				     0x06, 0x1e, 0xc6, 0x22,
+				     0x3c, 0xe5, 0xce, 0xd9) };
 		LOG_DBG("Encrypting test SIRK");
 		k = test_k;
 	} else {
+		if (conn == NULL) {
+			return -EINVAL;
+		}
+
 		k = conn->le.keys->ltk.val;
 	}
 
@@ -295,7 +221,7 @@ int bt_csip_set_member_generate_rsi(const struct bt_csip_set_member_svc_inst *sv
 		}
 	}
 
-	res = bt_csip_sih(svc_inst->set_sirk.value, prand, hash);
+	res = bt_csip_sih(svc_inst->sirk.value, prand, hash);
 	if (res != 0) {
 		LOG_WRN("Could not generate new RSI");
 		return res;
@@ -307,12 +233,11 @@ int bt_csip_set_member_generate_rsi(const struct bt_csip_set_member_svc_inst *sv
 	return res;
 }
 
-static ssize_t read_set_sirk(struct bt_conn *conn,
-			     const struct bt_gatt_attr *attr,
-			     void *buf, uint16_t len, uint16_t offset)
+static ssize_t read_sirk(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
+			 uint16_t len, uint16_t offset)
 {
-	struct bt_csip_set_sirk enc_sirk;
-	struct bt_csip_set_sirk *sirk;
+	struct bt_csip_sirk enc_sirk;
+	struct bt_csip_sirk *sirk;
 	struct bt_csip_set_member_svc_inst *svc_inst = BT_AUDIO_CHRC_USER_DATA(attr);
 
 	if (svc_inst->cb != NULL && svc_inst->cb->sirk_read_req != NULL) {
@@ -323,22 +248,20 @@ static ssize_t read_set_sirk(struct bt_conn *conn,
 		cb_rsp = svc_inst->cb->sirk_read_req(conn, &svc_insts[0]);
 
 		if (cb_rsp == BT_CSIP_READ_SIRK_REQ_RSP_ACCEPT) {
-			sirk = &svc_inst->set_sirk;
+			sirk = &svc_inst->sirk;
 		} else if (IS_ENABLED(CONFIG_BT_CSIP_SET_MEMBER_ENC_SIRK_SUPPORT) &&
 			   cb_rsp == BT_CSIP_READ_SIRK_REQ_RSP_ACCEPT_ENC) {
 			int err;
 
-			err = sirk_encrypt(conn, &svc_inst->set_sirk,
-					   &enc_sirk);
+			err = sirk_encrypt(conn, &svc_inst->sirk, &enc_sirk);
 			if (err != 0) {
 				LOG_ERR("Could not encrypt SIRK: %d",
 					err);
 				gatt_err = BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
 			} else {
 				sirk = &enc_sirk;
-				LOG_HEXDUMP_DBG(enc_sirk.value,
-						sizeof(enc_sirk.value),
-						"Encrypted Set SIRK");
+				LOG_HEXDUMP_DBG(enc_sirk.value, sizeof(enc_sirk.value),
+						"Encrypted SIRK");
 			}
 		} else if (cb_rsp == BT_CSIP_READ_SIRK_REQ_RSP_REJECT) {
 			gatt_err = BT_GATT_ERR(BT_ATT_ERR_AUTHORIZATION);
@@ -353,23 +276,21 @@ static ssize_t read_set_sirk(struct bt_conn *conn,
 			return gatt_err;
 		}
 	} else {
-		sirk = &svc_inst->set_sirk;
+		sirk = &svc_inst->sirk;
 	}
 
-
-	LOG_DBG("Set sirk %sencrypted",
-	       sirk->type ==  BT_CSIP_SIRK_TYPE_PLAIN ? "not " : "");
-	LOG_HEXDUMP_DBG(svc_inst->set_sirk.value,
-			sizeof(svc_inst->set_sirk.value), "Set SIRK");
+	LOG_DBG("SIRK %sencrypted", sirk->type == BT_CSIP_SIRK_TYPE_PLAIN ? "not " : "");
+	LOG_HEXDUMP_DBG(svc_inst->sirk.value, sizeof(svc_inst->sirk.value), "SIRK");
 	return bt_gatt_attr_read(conn, attr, buf, len, offset,
 				 sirk, sizeof(*sirk));
 }
 
-static void set_sirk_cfg_changed(const struct bt_gatt_attr *attr,
-				 uint16_t value)
+#if defined(CONFIG_BT_CSIP_SET_MEMBER_SIRK_NOTIFIABLE)
+static void sirk_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
 {
 	LOG_DBG("value 0x%04x", value);
 }
+#endif /* CONFIG_BT_CSIP_SET_MEMBER_SIRK_NOTIFIABLE */
 
 static ssize_t read_set_size(struct bt_conn *conn,
 			     const struct bt_gatt_attr *attr,
@@ -384,11 +305,13 @@ static ssize_t read_set_size(struct bt_conn *conn,
 				 sizeof(svc_inst->set_size));
 }
 
+#if defined(CONFIG_BT_CSIP_SET_MEMBER_SIZE_NOTIFIABLE)
 static void set_size_cfg_changed(const struct bt_gatt_attr *attr,
 				 uint16_t value)
 {
 	LOG_DBG("value 0x%04x", value);
 }
+#endif /* CONFIG_BT_CSIP_SET_MEMBER_SIZE_NOTIFIABLE */
 
 static ssize_t read_set_lock(struct bt_conn *conn,
 			     const struct bt_gatt_attr *attr,
@@ -446,8 +369,7 @@ static uint8_t set_lock(struct bt_conn *conn,
 		(void)k_work_reschedule(&svc_inst->set_lock_timer,
 					CSIP_SET_LOCK_TIMER_VALUE);
 	} else {
-		(void)memset(&svc_inst->lock_client_addr, 0,
-			     sizeof(svc_inst->lock_client_addr));
+		bt_addr_le_copy(&svc_inst->lock_client_addr, BT_ADDR_LE_NONE);
 		(void)k_work_cancel_delayable(&svc_inst->set_lock_timer);
 	}
 
@@ -459,7 +381,7 @@ static uint8_t set_lock(struct bt_conn *conn,
 		 * client writing the value, shall be notified
 		 * (if subscribed)
 		 */
-		notify_clients(svc_inst, conn);
+		notify_clients(svc_inst, conn, FLAG_NOTIFY_LOCK);
 
 		if (svc_inst->cb != NULL && svc_inst->cb->lock_changed != NULL) {
 			bool locked = svc_inst->set_lock == BT_CSIP_LOCK_VALUE;
@@ -526,7 +448,7 @@ static void set_lock_timer_handler(struct k_work *work)
 
 	LOG_DBG("Lock timeout, releasing");
 	svc_inst->set_lock = BT_CSIP_RELEASE_VALUE;
-	notify_clients(svc_inst, NULL);
+	notify_clients(svc_inst, NULL, FLAG_NOTIFY_LOCK);
 
 	if (svc_inst->cb != NULL && svc_inst->cb->lock_changed != NULL) {
 		bool locked = svc_inst->set_lock == BT_CSIP_LOCK_VALUE;
@@ -542,7 +464,7 @@ static void csip_security_changed(struct bt_conn *conn, bt_security_t level,
 		return;
 	}
 
-	if (!bt_addr_le_is_bonded(conn->id, &conn->le.dst)) {
+	if (!bt_le_bond_exists(conn->id, &conn->le.dst)) {
 		return;
 	}
 
@@ -554,9 +476,9 @@ static void csip_security_changed(struct bt_conn *conn, bt_security_t level,
 
 			client = &svc_inst->clients[i];
 
-			if (atomic_test_bit(client->flags, FLAG_SET_MEMBER_LOCK) &&
+			if (atomic_test_bit(client->flags, FLAG_NOTIFY_LOCK) &&
 			    bt_addr_le_eq(bt_conn_get_dst(conn), &client->addr)) {
-				k_work_submit(&deferred_nfy_work);
+				notify_work_reschedule(K_NO_WAIT);
 				break;
 			}
 		}
@@ -568,10 +490,9 @@ static void handle_csip_disconnect(struct bt_csip_set_member_svc_inst *svc_inst,
 {
 	LOG_DBG("Non-bonded device");
 	if (is_last_client_to_write(svc_inst, conn)) {
-		(void)memset(&svc_inst->lock_client_addr, 0,
-			     sizeof(svc_inst->lock_client_addr));
+		bt_addr_le_copy(&svc_inst->lock_client_addr, BT_ADDR_LE_NONE);
 		svc_inst->set_lock = BT_CSIP_RELEASE_VALUE;
-		notify_clients(svc_inst, NULL);
+		notify_clients(svc_inst, NULL, FLAG_NOTIFY_LOCK);
 
 		if (svc_inst->cb != NULL && svc_inst->cb->lock_changed != NULL) {
 			bool locked = svc_inst->set_lock == BT_CSIP_LOCK_VALUE;
@@ -599,7 +520,7 @@ static void csip_disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	LOG_DBG("Disconnected: %s (reason %u)", bt_addr_le_str(bt_conn_get_dst(conn)), reason);
 
-	if (!bt_addr_le_is_bonded(conn->id, &conn->le.dst)) {
+	if (!bt_le_bond_exists(conn->id, &conn->le.dst)) {
 		for (size_t i = 0U; i < ARRAY_SIZE(svc_insts); i++) {
 			handle_csip_disconnect(&svc_insts[i], conn);
 		}
@@ -632,7 +553,7 @@ static void handle_csip_auth_complete(struct bt_csip_set_member_svc_inst *svc_in
 			memcpy(&client->addr, bt_conn_get_dst(conn), sizeof(bt_addr_le_t));
 
 			/* Send out all pending notifications */
-			k_work_submit(&deferred_nfy_work);
+			notify_work_reschedule(K_NO_WAIT);
 			return;
 		}
 	}
@@ -693,18 +614,32 @@ static struct bt_conn_auth_info_cb auth_callbacks = {
 	.bond_deleted = csip_bond_deleted
 };
 
+#if defined(CONFIG_BT_CSIP_SET_MEMBER_SIRK_NOTIFIABLE)
+#define BT_CSIS_CHR_SIRK(_csip)                                                                    \
+	BT_AUDIO_CHRC(BT_UUID_CSIS_SIRK, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,                  \
+		      BT_GATT_PERM_READ_ENCRYPT, read_sirk, NULL, &_csip),                         \
+		BT_AUDIO_CCC(sirk_cfg_changed)
+#else
+#define BT_CSIS_CHR_SIRK(_csip)                                                                    \
+	BT_AUDIO_CHRC(BT_UUID_CSIS_SIRK, BT_GATT_CHRC_READ, BT_GATT_PERM_READ_ENCRYPT, read_sirk,  \
+		      NULL, &_csip)
+#endif /* CONFIG_BT_CSIP_SET_MEMBER_SIRK_NOTIFIABLE */
+
+#if defined(CONFIG_BT_CSIP_SET_MEMBER_SIZE_NOTIFIABLE)
+#define BT_CSIS_CHR_SIZE(_csip)                                                                    \
+	BT_AUDIO_CHRC(BT_UUID_CSIS_SET_SIZE, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,              \
+		      BT_GATT_PERM_READ_ENCRYPT, read_set_size, NULL, &_csip),                     \
+		BT_AUDIO_CCC(set_size_cfg_changed)
+#else
+#define BT_CSIS_CHR_SIZE(_csip)                                                                    \
+	BT_AUDIO_CHRC(BT_UUID_CSIS_SET_SIZE, BT_GATT_CHRC_READ, BT_GATT_PERM_READ_ENCRYPT,         \
+		      read_set_size, NULL, &_csip)
+#endif /* CONFIG_BT_CSIP_SET_MEMBER_SIZE_NOTIFIABLE */
+
 #define BT_CSIP_SERVICE_DEFINITION(_csip) {\
 	BT_GATT_PRIMARY_SERVICE(BT_UUID_CSIS), \
-	BT_AUDIO_CHRC(BT_UUID_CSIS_SET_SIRK, \
-		      BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, \
-		      BT_GATT_PERM_READ_ENCRYPT, \
-		      read_set_sirk, NULL, &_csip), \
-	BT_AUDIO_CCC(set_sirk_cfg_changed), \
-	BT_AUDIO_CHRC(BT_UUID_CSIS_SET_SIZE, \
-		      BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, \
-		      BT_GATT_PERM_READ_ENCRYPT, \
-		      read_set_size, NULL, &_csip), \
-	BT_AUDIO_CCC(set_size_cfg_changed), \
+	BT_CSIS_CHR_SIRK(_csip), \
+	BT_CSIS_CHR_SIZE(_csip), \
 	BT_AUDIO_CHRC(BT_UUID_CSIS_SET_LOCK, \
 		      BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY | BT_GATT_CHRC_WRITE, \
 		      BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT, \
@@ -723,6 +658,10 @@ BT_GATT_SERVICE_INSTANCE_DEFINE(csip_set_member_service_list, svc_insts,
 /****************************** Public API ******************************/
 void *bt_csip_set_member_svc_decl_get(const struct bt_csip_set_member_svc_inst *svc_inst)
 {
+	if (svc_inst == NULL || svc_inst->service_p == NULL) {
+		return NULL;
+	}
+
 	return svc_inst->service_p->attrs;
 }
 
@@ -793,6 +732,25 @@ static void remove_csis_char(const struct bt_uuid *uuid, struct bt_gatt_service 
 	__ASSERT(false, "Failed to remove CSIS char %s", bt_uuid_str(uuid));
 }
 
+static void notify(struct bt_csip_set_member_svc_inst *svc_inst, struct bt_conn *conn,
+		   const struct bt_uuid *uuid, const void *data, uint16_t len)
+{
+	int err;
+
+	if (svc_inst->service_p == NULL) {
+		return;
+	}
+
+	err = bt_gatt_notify_uuid(conn, uuid, svc_inst->service_p->attrs, data, len);
+	if (err) {
+		if (err == -ENOTCONN) {
+			LOG_DBG("Notification error: ENOTCONN (%d)", err);
+		} else {
+			LOG_ERR("Notification error: %d", err);
+		}
+	}
+}
+
 static void notify_cb(struct bt_conn *conn, void *data)
 {
 	struct bt_conn_info info;
@@ -805,7 +763,7 @@ static void notify_cb(struct bt_conn *conn, void *data)
 
 	if (info.state != BT_CONN_STATE_CONNECTED) {
 		/* Not connected */
-		LOG_DBG("Not connected");
+		LOG_DBG("Not connected: %u", info.state);
 		return;
 	}
 
@@ -813,22 +771,27 @@ static void notify_cb(struct bt_conn *conn, void *data)
 		struct bt_csip_set_member_svc_inst *svc_inst = &svc_insts[i];
 		struct csip_client *client = &svc_inst->clients[bt_conn_index(conn)];
 
-		if (atomic_test_bit(client->flags, FLAG_SET_MEMBER_LOCK)) {
-			err = notify_lock_value(svc_inst, conn);
-			if (!err) {
-				atomic_clear_bit(client->flags, FLAG_SET_MEMBER_LOCK);
-			}
+		if (atomic_test_and_clear_bit(client->flags, FLAG_NOTIFY_LOCK)) {
+			notify(svc_inst, conn, BT_UUID_CSIS_SET_LOCK, &svc_inst->set_lock,
+			       sizeof(svc_inst->set_lock));
+		}
+
+		if (IS_ENABLED(CONFIG_BT_CSIP_SET_MEMBER_SIRK_NOTIFIABLE) &&
+		    atomic_test_and_clear_bit(client->flags, FLAG_NOTIFY_SIRK)) {
+			notify(svc_inst, conn, BT_UUID_CSIS_SIRK, &svc_inst->sirk,
+			       sizeof(svc_inst->sirk));
+		}
+
+		if (IS_ENABLED(CONFIG_BT_CSIP_SET_MEMBER_SIZE_NOTIFIABLE) &&
+		    atomic_test_and_clear_bit(client->flags, FLAG_NOTIFY_SIZE)) {
+			notify(svc_inst, conn, BT_UUID_CSIS_SET_SIZE, &svc_inst->set_size,
+			       sizeof(svc_inst->set_size));
 		}
 	}
 }
 
 static void deferred_nfy_work_handler(struct k_work *work)
 {
-	/* Check if we have unverified notifications in progress */
-	if (atomic_get(&notify_in_progress)) {
-		return;
-	}
-
 	bt_conn_foreach(BT_CONN_TYPE_LE, notify_cb, NULL);
 }
 
@@ -919,8 +882,10 @@ int bt_csip_set_member_register(const struct bt_csip_set_member_register_param *
 	inst->rank = param->rank;
 	inst->set_size = param->set_size;
 	inst->set_lock = BT_CSIP_RELEASE_VALUE;
-	inst->set_sirk.type = BT_CSIP_SIRK_TYPE_PLAIN;
+	inst->sirk.type = BT_CSIP_SIRK_TYPE_PLAIN;
 	inst->cb = param->cb;
+	inst->lockable = param->lockable;
+	bt_addr_le_copy(&inst->lock_client_addr, BT_ADDR_LE_NONE);
 
 	if (IS_ENABLED(CONFIG_BT_CSIP_SET_MEMBER_TEST_SAMPLE_DATA)) {
 		uint8_t test_sirk[] = {
@@ -928,15 +893,137 @@ int bt_csip_set_member_register(const struct bt_csip_set_member_register_param *
 			0x22, 0xfd, 0xa1, 0x21, 0x09, 0x7d, 0x7d, 0x45,
 		};
 
-		(void)memcpy(inst->set_sirk.value, test_sirk,
-			     sizeof(test_sirk));
+		(void)memcpy(inst->sirk.value, test_sirk, sizeof(test_sirk));
 		LOG_DBG("CSIP SIRK was overwritten by sample data SIRK");
 	} else {
-		(void)memcpy(inst->set_sirk.value, param->set_sirk,
-			     sizeof(inst->set_sirk.value));
+		(void)memcpy(inst->sirk.value, param->sirk, sizeof(inst->sirk.value));
 	}
 
 	*svc_inst = inst;
+	return 0;
+}
+
+int bt_csip_set_member_unregister(struct bt_csip_set_member_svc_inst *svc_inst)
+{
+	int err;
+
+	CHECKIF(svc_inst == NULL) {
+		LOG_DBG("NULL svc_inst");
+		return -EINVAL;
+	}
+
+	err = bt_gatt_service_unregister(svc_inst->service_p);
+	if (err != 0) {
+		LOG_DBG("CSIS service unregister failed: %d", err);
+		return err;
+	}
+
+	(void)k_work_cancel_delayable(&svc_inst->set_lock_timer);
+	memset(svc_inst, 0, sizeof(*svc_inst));
+
+	return 0;
+}
+
+int bt_csip_set_member_sirk(struct bt_csip_set_member_svc_inst *svc_inst,
+			    const uint8_t sirk[BT_CSIP_SIRK_SIZE])
+{
+	CHECKIF(svc_inst == NULL) {
+		LOG_DBG("NULL svc_inst");
+		return -EINVAL;
+	}
+
+	CHECKIF(sirk == NULL) {
+		LOG_DBG("NULL SIRK");
+		return -EINVAL;
+	}
+
+	if (memcmp(sirk, svc_inst->sirk.value, BT_CSIP_SIRK_SIZE) != 0) {
+		memcpy(svc_inst->sirk.value, sirk, BT_CSIP_SIRK_SIZE);
+
+		if (IS_ENABLED(CONFIG_BT_CSIP_SET_MEMBER_SIRK_NOTIFIABLE)) {
+			notify_clients(svc_inst, NULL, FLAG_NOTIFY_SIRK);
+		}
+	}
+
+	return 0;
+}
+
+int bt_csip_set_member_get_sirk(struct bt_csip_set_member_svc_inst *svc_inst,
+				uint8_t sirk[BT_CSIP_SIRK_SIZE])
+{
+	CHECKIF(svc_inst == NULL) {
+		LOG_DBG("NULL svc_inst");
+		return -EINVAL;
+	}
+
+	CHECKIF(sirk == NULL) {
+		LOG_DBG("NULL SIRK");
+		return -EINVAL;
+	}
+
+	memcpy(sirk, svc_inst->sirk.value, BT_CSIP_SIRK_SIZE);
+
+	return 0;
+}
+
+int bt_csip_set_member_set_size_and_rank(struct bt_csip_set_member_svc_inst *svc_inst, uint8_t size,
+					 uint8_t rank)
+{
+	if (svc_inst == NULL) {
+		LOG_DBG("svc_inst is NULL");
+		return -EINVAL;
+	}
+
+	if (size < 1U) {
+		LOG_DBG("Invalid set size %u", size);
+		return -EINVAL;
+	}
+
+	if (!svc_inst->lockable && rank != 0U) {
+		LOG_DBG("Invalid rank %u for non-lockable service", rank);
+		return -EINVAL;
+	}
+
+	if (svc_inst->lockable && !IN_RANGE(rank, 1U, size)) {
+		LOG_DBG("Invalid rank: %u for size %u", rank, size);
+		return -EINVAL;
+	}
+
+	if (svc_inst->set_size == size && svc_inst->rank == rank) {
+		LOG_DBG("Set size %u and rank %u is already set", size, rank);
+		return -EALREADY;
+	}
+
+	svc_inst->set_size = size;
+	svc_inst->rank = svc_inst->lockable ? rank : 0U;
+
+	if (IS_ENABLED(CONFIG_BT_CSIP_SET_MEMBER_SIZE_NOTIFIABLE)) {
+		notify_clients(svc_inst, NULL, FLAG_NOTIFY_SIZE);
+	}
+
+	return 0;
+}
+
+int bt_csip_set_member_get_info(const struct bt_csip_set_member_svc_inst *svc_inst,
+				struct bt_csip_set_member_set_info *info)
+{
+	if (svc_inst == NULL) {
+		LOG_DBG("svc_inst is NULL");
+		return -EINVAL;
+	}
+
+	if (info == NULL) {
+		LOG_DBG("info is NULL");
+		return -EINVAL;
+	}
+
+	info->lockable = svc_inst->lockable;
+	info->locked = svc_inst->set_lock == BT_CSIP_LOCK_VALUE;
+	info->rank = svc_inst->rank;
+	info->set_size = svc_inst->set_size;
+	memcpy(info->sirk, svc_inst->sirk.value, BT_CSIP_SIRK_SIZE);
+	bt_addr_le_copy(&info->lock_client_addr, &svc_inst->lock_client_addr);
+
 	return 0;
 }
 
@@ -954,7 +1041,7 @@ int bt_csip_set_member_lock(struct bt_csip_set_member_svc_inst *svc_inst,
 
 	if (!lock && force) {
 		svc_inst->set_lock = BT_CSIP_RELEASE_VALUE;
-		notify_clients(svc_inst, NULL);
+		notify_clients(svc_inst, NULL, FLAG_NOTIFY_LOCK);
 
 		if (svc_inst->cb != NULL && svc_inst->cb->lock_changed != NULL) {
 			svc_inst->cb->lock_changed(NULL, &svc_insts[0], false);
@@ -968,10 +1055,4 @@ int bt_csip_set_member_lock(struct bt_csip_set_member_svc_inst *svc_inst,
 	} else {
 		return 0;
 	}
-}
-
-void bt_csip_set_member_print_sirk(const struct bt_csip_set_member_svc_inst *svc_inst)
-{
-	LOG_HEXDUMP_DBG(&svc_inst->set_sirk, sizeof(svc_inst->set_sirk),
-			"Set SIRK");
 }

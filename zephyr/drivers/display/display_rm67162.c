@@ -13,6 +13,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/policy.h>
+#include <zephyr/pm/device.h>
 #include <zephyr/sys/byteorder.h>
 
 LOG_MODULE_REGISTER(rm67162, CONFIG_DISPLAY_LOG_LEVEL);
@@ -333,7 +334,11 @@ static int rm67162_init(const struct device *dev)
 		/* Init and install GPIO callback */
 		gpio_init_callback(&data->te_gpio_cb, rm67162_te_isr_handler,
 				BIT(config->te_gpio.pin));
-		gpio_add_callback(config->te_gpio.port, &data->te_gpio_cb);
+		ret = gpio_add_callback(config->te_gpio.port, &data->te_gpio_cb);
+		if (ret < 0) {
+			LOG_ERR("Could not add TE gpio callback");
+			return ret;
+		}
 
 		/* Setup te pin semaphore */
 		k_sem_init(&data->te_sem, 0, 1);
@@ -349,7 +354,7 @@ static int rm67162_write_fb(const struct device *dev, bool first_write,
 			const uint8_t *src, uint32_t len)
 {
 	const struct rm67162_config *config = dev->config;
-	uint32_t wlen = 0;
+	ssize_t wlen;
 	struct mipi_dsi_msg msg = {0};
 
 	/* Note- we need to set custom flags on the DCS message,
@@ -367,7 +372,7 @@ static int rm67162_write_fb(const struct device *dev, bool first_write,
 		msg.tx_buf = src;
 		wlen = mipi_dsi_transfer(config->mipi_dsi, config->channel, &msg);
 		if (wlen < 0) {
-			return wlen;
+			return (int)wlen;
 		}
 		/* Advance source pointer and decrement remaining */
 		src += wlen;
@@ -433,18 +438,14 @@ static int rm67162_write(const struct device *dev, const uint16_t x,
 	 * give to the TE semaphore) before sending the frame
 	 */
 	if (config->te_gpio.port != NULL) {
-		if (IS_ENABLED(CONFIG_PM)) {
-			/* Block sleep state until next TE interrupt
-			 * so we can send frame during that interval
-			 */
-			pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE,
-						PM_ALL_SUBSTATES);
-		}
+		/* Block sleep state until next TE interrupt so we can send
+		 * frame during that interval
+		 */
+		pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE,
+					 PM_ALL_SUBSTATES);
 		k_sem_take(&data->te_sem, K_FOREVER);
-		if (IS_ENABLED(CONFIG_PM)) {
-			pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE,
-						PM_ALL_SUBSTATES);
-		}
+		pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE,
+					 PM_ALL_SUBSTATES);
 	}
 	src = buf;
 	first_cmd = true;
@@ -515,20 +516,6 @@ static int rm67162_blanking_on(const struct device *dev)
 	}
 }
 
-static int rm67162_set_brightness(const struct device *dev,
-				  const uint8_t brightness)
-{
-	LOG_WRN("Set brightness not implemented");
-	return -ENOTSUP;
-}
-
-static int rm67162_set_contrast(const struct device *dev,
-				const uint8_t contrast)
-{
-	LOG_ERR("Set contrast not implemented");
-	return -ENOTSUP;
-}
-
 static int rm67162_set_pixel_format(const struct device *dev,
 				    const enum display_pixel_format pixel_format)
 {
@@ -539,20 +526,17 @@ static int rm67162_set_pixel_format(const struct device *dev,
 	switch (pixel_format) {
 	case PIXEL_FORMAT_RGB_565:
 		data->pixel_format = MIPI_DSI_PIXFMT_RGB565;
-		return 0;
+		param = MIPI_DCS_PIXEL_FORMAT_16BIT;
+		data->bytes_per_pixel = 2;
+		break;
 	case PIXEL_FORMAT_RGB_888:
 		data->pixel_format = MIPI_DSI_PIXFMT_RGB888;
-		return 0;
+		param = MIPI_DCS_PIXEL_FORMAT_24BIT;
+		data->bytes_per_pixel = 3;
+		break;
 	default:
 		/* Other display formats not implemented */
 		return -ENOTSUP;
-	}
-	if (data->pixel_format == MIPI_DSI_PIXFMT_RGB888) {
-		param = MIPI_DCS_PIXEL_FORMAT_24BIT;
-		data->bytes_per_pixel = 3;
-	} else if (data->pixel_format == MIPI_DSI_PIXFMT_RGB565) {
-		param = MIPI_DCS_PIXEL_FORMAT_16BIT;
-		data->bytes_per_pixel = 2;
 	}
 	return mipi_dsi_dcs_write(config->mipi_dsi, config->channel,
 				MIPI_DCS_SET_PIXEL_FORMAT, &param, 1);
@@ -568,13 +552,36 @@ static int rm67162_set_orientation(const struct device *dev,
 	return -ENOTSUP;
 }
 
-static const struct display_driver_api rm67162_api = {
+#ifdef CONFIG_PM_DEVICE
+
+static int rm67162_pm_action(const struct device *dev,
+			     enum pm_device_action action)
+{
+	const struct rm67162_config *config = dev->config;
+	struct rm67162_data *data = dev->data;
+	struct mipi_dsi_device mdev = {0};
+
+	mdev.data_lanes = config->num_of_lanes;
+	mdev.pixfmt = data->pixel_format;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		/* Detach from the MIPI DSI controller */
+		return mipi_dsi_detach(config->mipi_dsi, config->channel, &mdev);
+	case PM_DEVICE_ACTION_RESUME:
+		return mipi_dsi_attach(config->mipi_dsi, config->channel, &mdev);
+	default:
+		return -ENOTSUP;
+	}
+}
+
+#endif /* CONFIG_PM_DEVICE */
+
+static DEVICE_API(display, rm67162_api) = {
 	.blanking_on = rm67162_blanking_on,
 	.blanking_off = rm67162_blanking_off,
 	.get_capabilities = rm67162_get_capabilities,
 	.write = rm67162_write,
-	.set_brightness = rm67162_set_brightness,
-	.set_contrast = rm67162_set_contrast,
 	.set_pixel_format = rm67162_set_pixel_format,
 	.set_orientation = rm67162_set_orientation,
 };
@@ -593,9 +600,10 @@ static const struct display_driver_api rm67162_api = {
 	static struct rm67162_data rm67162_data_##id = {			\
 		.pixel_format = DT_INST_PROP(id, pixel_format),			\
 	};									\
+	PM_DEVICE_DT_INST_DEFINE(id, rm67162_pm_action);			\
 	DEVICE_DT_INST_DEFINE(id,						\
 			    &rm67162_init,					\
-			    NULL,						\
+			    PM_DEVICE_DT_INST_GET(id),				\
 			    &rm67162_data_##id,					\
 			    &rm67162_config_##id,				\
 			    POST_KERNEL,					\
