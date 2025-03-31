@@ -1,2 +1,2 @@
-mkdir boards/shields/<MICROGAMING>
-    def_bool $(shield_list_contains, hummingbird)
+config SHIELD_MICROGAMING
+    def_bool $(shields_list_contains,hummingbird)
