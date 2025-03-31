@@ -26,7 +26,7 @@ GTEXT(_isr_wrapper)
 GTEXT(_isr_demux)
 
 #if defined(CONFIG_PM)
-GTEXT(pm_system_resume)
+GTEXT(z_pm_save_idle_exit)
 #endif
 
 /*
@@ -253,7 +253,7 @@ rirq_path:
 
 	st 0, [r1, _kernel_offset_to_idle] /* zero idle duration */
 	PUSHR blink
-	jl pm_system_resume
+	jl z_pm_save_idle_exit
 	POPR blink
 
 _skip_pm_save_idle_exit:

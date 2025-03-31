@@ -45,23 +45,19 @@ zephyr_check_cache(SNIPPET WATCH)
 function(zephyr_process_snippets)
   set(snippets_py ${ZEPHYR_BASE}/scripts/snippets.py)
   set(snippets_generated ${CMAKE_BINARY_DIR}/zephyr/snippets_generated.cmake)
-  set_ifndef(SNIPPET_NAMESPACE SNIPPET)
-  set_ifndef(SNIPPET_PYTHON_EXTRA_ARGS "")
-  set_ifndef(SNIPPET_APP_DIR "${APPLICATION_SOURCE_DIR}")
 
   # Set SNIPPET_AS_LIST, removing snippets_generated.cmake if we are
   # running cmake again and snippets are no longer requested.
-  if(NOT DEFINED SNIPPET)
+  if (NOT DEFINED SNIPPET)
     set(SNIPPET_AS_LIST "" PARENT_SCOPE)
     file(REMOVE ${snippets_generated})
   else()
-    string(REPLACE " " ";" SNIPPET_AS_LIST "${${SNIPPET_NAMESPACE}}")
+    string(REPLACE " " ";" SNIPPET_AS_LIST "${SNIPPET}")
     set(SNIPPET_AS_LIST "${SNIPPET_AS_LIST}" PARENT_SCOPE)
   endif()
 
   # Set SNIPPET_ROOT.
-  zephyr_get(SNIPPET_ROOT MERGE SYSBUILD GLOBAL)
-  list(APPEND SNIPPET_ROOT ${SNIPPET_APP_DIR})
+  list(APPEND SNIPPET_ROOT ${APPLICATION_SOURCE_DIR})
   list(APPEND SNIPPET_ROOT ${ZEPHYR_BASE})
   unset(real_snippet_root)
   foreach(snippet_dir ${SNIPPET_ROOT})
@@ -89,25 +85,11 @@ function(zephyr_process_snippets)
     ${snippet_root_args}
     ${requested_snippet_args}
     --cmake-out ${snippets_generated}
-    ${SNIPPET_PYTHON_EXTRA_ARGS}
     OUTPUT_VARIABLE output
     ERROR_VARIABLE output
     RESULT_VARIABLE ret)
   if(${ret})
-    list(JOIN SNIPPET_ROOT "\n    " snippet_root_paths)
-    set(snippet_root_paths "\n    ${snippet_root_paths}")
-
-    if(SYSBUILD)
-      zephyr_get(SYSBUILD_NAME SYSBUILD GLOBAL)
-      set(extra_output "Snippet roots for image ${SYSBUILD_NAME}:${snippet_root_paths}\n"
-          "Note that snippets will be applied to all images unless prefixed with the image name "
-          "e.g. `-D${SYSBUILD_NAME}_SNIPPET=...`, local snippet roots for one image are not set "
-          "for other images in a build")
-    else()
-      set(extra_output "Snippet roots for application:${snippet_root_paths}")
-    endif()
-
-    message(FATAL_ERROR "${output}" ${extra_output})
+    message(FATAL_ERROR "${output}")
   endif()
   include(${snippets_generated})
 

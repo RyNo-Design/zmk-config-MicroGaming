@@ -11,8 +11,9 @@
 #include <zephyr/bluetooth/mesh.h>
 #include <zephyr/bluetooth/mesh/shell.h>
 
-#include "common/bt_shell_private.h"
 #include "utils.h"
+
+extern const struct shell *bt_mesh_shell_ctx_shell;
 
 /***************************************************************************************************
  * Implementation of models' instances
@@ -84,7 +85,8 @@ static void blob_cli_lost_target(struct bt_mesh_blob_cli *cli,
 				 struct bt_mesh_blob_target *target,
 				 enum bt_mesh_blob_status reason)
 {
-	bt_shell_print("Mesh Blob: Lost target 0x%04x (reason: %u)", target->addr, reason);
+	shell_print(bt_mesh_shell_ctx_shell, "Mesh Blob: Lost target 0x%04x (reason: %u)",
+		    target->addr, reason);
 }
 
 static void blob_cli_caps(struct bt_mesh_blob_cli *cli,
@@ -98,29 +100,30 @@ static void blob_cli_caps(struct bt_mesh_blob_cli *cli,
 	};
 
 	if (!caps) {
-		bt_shell_print("None of the targets can be used for BLOB transfer");
+		shell_print(bt_mesh_shell_ctx_shell,
+			    "None of the targets can be used for BLOB transfer");
 		return;
 	}
 
-	bt_shell_print("Mesh BLOB: capabilities:");
-	bt_shell_print("\tMax BLOB size: %u bytes", caps->max_size);
-	bt_shell_print("\tBlock size: %u-%u (%u-%u bytes)",
-		       caps->min_block_size_log, caps->max_block_size_log,
-		       1 << caps->min_block_size_log,
-		       1 << caps->max_block_size_log);
-	bt_shell_print("\tMax chunks: %u", caps->max_chunks);
-	bt_shell_print("\tChunk size: %u", caps->max_chunk_size);
-	bt_shell_print("\tMTU size: %u", caps->mtu_size);
-	bt_shell_print("\tModes: %s", modes[caps->modes]);
+	shell_print(bt_mesh_shell_ctx_shell, "Mesh BLOB: capabilities:");
+	shell_print(bt_mesh_shell_ctx_shell, "\tMax BLOB size: %u bytes", caps->max_size);
+	shell_print(bt_mesh_shell_ctx_shell, "\tBlock size: %u-%u (%u-%u bytes)",
+		    caps->min_block_size_log, caps->max_block_size_log,
+		    1 << caps->min_block_size_log,
+		    1 << caps->max_block_size_log);
+	shell_print(bt_mesh_shell_ctx_shell, "\tMax chunks: %u", caps->max_chunks);
+	shell_print(bt_mesh_shell_ctx_shell, "\tChunk size: %u", caps->max_chunk_size);
+	shell_print(bt_mesh_shell_ctx_shell, "\tMTU size: %u", caps->mtu_size);
+	shell_print(bt_mesh_shell_ctx_shell, "\tModes: %s", modes[caps->modes]);
 }
 
 static void blob_cli_end(struct bt_mesh_blob_cli *cli,
 			 const struct bt_mesh_blob_xfer *xfer, bool success)
 {
 	if (success) {
-		bt_shell_print("Mesh BLOB transfer complete.");
+		shell_print(bt_mesh_shell_ctx_shell, "Mesh BLOB transfer complete.");
 	} else {
-		bt_shell_print("Mesh BLOB transfer failed.");
+		shell_print(bt_mesh_shell_ctx_shell, "Mesh BLOB transfer failed.");
 	}
 }
 
@@ -139,7 +142,7 @@ static uint8_t get_progress(const struct bt_mesh_blob_xfer_info *info)
 		blocks_not_rxed += info->missing_blocks[i % 8] & (1 << (i % 8));
 	}
 
-	return (total_blocks - blocks_not_rxed) / total_blocks;
+	return  (total_blocks - blocks_not_rxed) / total_blocks;
 }
 
 static void xfer_progress(struct bt_mesh_blob_cli *cli,
@@ -148,15 +151,16 @@ static void xfer_progress(struct bt_mesh_blob_cli *cli,
 {
 	uint8_t progress = get_progress(info);
 
-	bt_shell_print("BLOB transfer progress received from target 0x%04x:\n"
-		       "\tphase: %d\n"
-		       "\tprogress: %u%%",
-		       target->addr, info->phase, progress);
+	shell_print(bt_mesh_shell_ctx_shell,
+		    "BLOB transfer progress received from target 0x%04x:\n"
+		    "\tphase: %d\n"
+		    "\tprogress: %u%%",
+		    target->addr, info->phase, progress);
 }
 
 static void xfer_progress_complete(struct bt_mesh_blob_cli *cli)
 {
-	bt_shell_print("Determine BLOB transfer progress procedure complete");
+	shell_print(bt_mesh_shell_ctx_shell, "Determine BLOB transfer progress procedure complete");
 }
 
 static const struct bt_mesh_blob_cli_cb blob_cli_handlers = {
@@ -181,7 +185,7 @@ static int blob_srv_start(struct bt_mesh_blob_srv *srv,
 			  struct bt_mesh_msg_ctx *ctx,
 			  struct bt_mesh_blob_xfer *xfer)
 {
-	bt_shell_print("BLOB start");
+	shell_print(bt_mesh_shell_ctx_shell, "BLOB start");
 	blob_time = k_uptime_get();
 	return 0;
 }
@@ -192,11 +196,11 @@ static void blob_srv_end(struct bt_mesh_blob_srv *srv, uint64_t id,
 	if (success) {
 		int64_t duration = k_uptime_delta(&blob_time);
 
-		bt_shell_print("BLOB completed in %u.%03u s",
-			       (uint32_t)(duration / MSEC_PER_SEC),
-			       (uint32_t)(duration % MSEC_PER_SEC));
+		shell_print(bt_mesh_shell_ctx_shell, "BLOB completed in %u.%03u s",
+			(uint32_t)(duration / MSEC_PER_SEC),
+			(uint32_t)(duration % MSEC_PER_SEC));
 	} else {
-		bt_shell_print("BLOB cancelled");
+		shell_print(bt_mesh_shell_ctx_shell, "BLOB cancelled");
 	}
 }
 
@@ -267,7 +271,7 @@ static int cmd_flash_stream_unset(const struct shell *sh, size_t argc, char *arg
 
 #if defined(CONFIG_BT_MESH_SHELL_BLOB_CLI)
 
-static const struct bt_mesh_model *mod_cli;
+static struct bt_mesh_model *mod_cli;
 
 static void blob_cli_inputs_prepare(uint16_t group)
 {
@@ -347,7 +351,7 @@ static int cmd_tx(const struct shell *sh, size_t argc, char *argv[])
 			    "pull",
 		    blob_cli_xfer.xfer.size, group);
 
-	err = bt_mesh_blob_cli_send((struct bt_mesh_blob_cli *)mod_cli->rt->user_data,
+	err = bt_mesh_blob_cli_send((struct bt_mesh_blob_cli *)mod_cli->user_data,
 				    &blob_cli_xfer.inputs,
 				    &blob_cli_xfer.xfer, bt_mesh_shell_blob_io);
 	if (err) {
@@ -417,7 +421,7 @@ static int cmd_caps(const struct shell *sh, size_t argc, char *argv[])
 
 	blob_cli_inputs_prepare(group);
 
-	err = bt_mesh_blob_cli_caps_get((struct bt_mesh_blob_cli *)mod_cli->rt->user_data,
+	err = bt_mesh_blob_cli_caps_get((struct bt_mesh_blob_cli *)mod_cli->user_data,
 					&blob_cli_xfer.inputs);
 	if (err) {
 		shell_print(sh, "Boundary check start failed (err: %d)", err);
@@ -434,7 +438,7 @@ static int cmd_tx_cancel(const struct shell *sh, size_t argc,
 	}
 
 	shell_print(sh, "Cancelling transfer");
-	bt_mesh_blob_cli_cancel((struct bt_mesh_blob_cli *)mod_cli->rt->user_data);
+	bt_mesh_blob_cli_cancel((struct bt_mesh_blob_cli *)mod_cli->user_data);
 
 	return 0;
 }
@@ -461,7 +465,7 @@ static int cmd_tx_get(const struct shell *sh, size_t argc, char *argv[])
 
 	blob_cli_inputs_prepare(group);
 
-	err = bt_mesh_blob_cli_xfer_progress_get((struct bt_mesh_blob_cli *)mod_cli->rt->user_data,
+	err = bt_mesh_blob_cli_xfer_progress_get((struct bt_mesh_blob_cli *)mod_cli->user_data,
 						 &blob_cli_xfer.inputs);
 	if (err) {
 		shell_print(sh, "ERR %d", err);
@@ -478,7 +482,7 @@ static int cmd_tx_suspend(const struct shell *sh, size_t argc,
 	}
 
 	shell_print(sh, "Suspending transfer");
-	bt_mesh_blob_cli_suspend((struct bt_mesh_blob_cli *)mod_cli->rt->user_data);
+	bt_mesh_blob_cli_suspend((struct bt_mesh_blob_cli *)mod_cli->user_data);
 
 	return 0;
 }
@@ -490,7 +494,7 @@ static int cmd_tx_resume(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	shell_print(sh, "Resuming transfer");
-	bt_mesh_blob_cli_resume((struct bt_mesh_blob_cli *)mod_cli->rt->user_data);
+	bt_mesh_blob_cli_resume((struct bt_mesh_blob_cli *)mod_cli->user_data);
 
 	return 0;
 }
@@ -499,7 +503,7 @@ static int cmd_tx_resume(const struct shell *sh, size_t argc, char *argv[])
 
 #if defined(CONFIG_BT_MESH_SHELL_BLOB_SRV)
 
-static const struct bt_mesh_model *mod_srv;
+static struct bt_mesh_model *mod_srv;
 
 static int cmd_rx(const struct shell *sh, size_t argc, char *argv[])
 {
@@ -526,7 +530,7 @@ static int cmd_rx(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	shell_print(sh, "Receive BLOB 0x%x", id);
-	err = bt_mesh_blob_srv_recv((struct bt_mesh_blob_srv *)mod_srv->rt->user_data,
+	err = bt_mesh_blob_srv_recv((struct bt_mesh_blob_srv *)mod_srv->user_data,
 				    id, bt_mesh_shell_blob_io, BT_MESH_TTL_MAX, timeout_base);
 	if (err) {
 		shell_print(sh, "BLOB RX setup failed (%d)", err);
@@ -544,7 +548,7 @@ static int cmd_rx_cancel(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	shell_print(sh, "Cancelling BLOB rx");
-	err = bt_mesh_blob_srv_cancel((struct bt_mesh_blob_srv *)mod_srv->rt->user_data);
+	err = bt_mesh_blob_srv_cancel((struct bt_mesh_blob_srv *)mod_srv->user_data);
 	if (err) {
 		shell_print(sh, "BLOB cancel failed (%d)", err);
 	}

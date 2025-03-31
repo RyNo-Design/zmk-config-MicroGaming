@@ -8,15 +8,15 @@
 #include <zephyr/sys/iterable_sections.h>
 
 struct test_ram {
-	long i;
+	int i;
 };
 
 struct test_ram_named {
-	long i;
+	int i;
 };
 
 struct test_ram_numeric {
-	long i;
+	int i;
 };
 
 #define CHECK_BIT 0x80
@@ -39,16 +39,10 @@ const STRUCT_SECTION_ITERABLE_NAMED(test_ram_named, D, ram8) = {0x04};
 const STRUCT_SECTION_ITERABLE_NAMED(test_ram_named, B, ram9) = {0x02};
 
 /* declare in random order to check that the linker is sorting numerically */
-const STRUCT_SECTION_ITERABLE(test_ram_numeric, ramn_3) = {0x02};
 const STRUCT_SECTION_ITERABLE(test_ram_numeric, ramn_1) = {0x01};
-const STRUCT_SECTION_ITERABLE(test_ram_numeric, ramn_99999) = {0x04};
-const STRUCT_SECTION_ITERABLE(test_ram_numeric, ramn_11) = {0x03};
-
-#define NAMED_ALT_EXPECT 0x4273
-
-/* alternate naming */
-const STRUCT_SECTION_ITERABLE_NAMED_ALTERNATE(test_ram_named, ramn_alt, R, ramn_42) = {0x42};
-const STRUCT_SECTION_ITERABLE_NAMED_ALTERNATE(test_ram_named, ramn_alt, W, ramn_73) = {0x73};
+const STRUCT_SECTION_ITERABLE(test_ram_numeric, ramn_10) = {0x03};
+const STRUCT_SECTION_ITERABLE(test_ram_numeric, ramn_11) = {0x04};
+const STRUCT_SECTION_ITERABLE(test_ram_numeric, ramn_3) = {0x02};
 
 /**
  *
@@ -95,25 +89,18 @@ ZTEST(iterable_sections, test_ram)
 	}
 
 	zassert_equal(out, RAM_EXPECT, "Check value incorrect (got: 0x%x)", out);
-
-	out = 0;
-	STRUCT_SECTION_FOREACH_ALTERNATE(ramn_alt, test_ram_named, t) {
-		out = (out << 8) | t->i;
-	}
-
-	zassert_equal(out, NAMED_ALT_EXPECT, "Check value incorrect (got: 0x%x)", out);
 }
 
 struct test_rom {
-	long i;
+	int i;
 };
 
 struct test_rom_named {
-	long i;
+	int i;
 };
 
 struct test_rom_numeric {
-	long i;
+	int i;
 };
 
 /* declare in random order to check that the linker is sorting by name */
@@ -134,14 +121,10 @@ const STRUCT_SECTION_ITERABLE_NAMED(test_rom_named, D, rom8) = {0x40};
 const STRUCT_SECTION_ITERABLE_NAMED(test_rom_named, B, rom9) = {0x20};
 
 /* declare in random order to check that the linker is sorting numerically */
-const STRUCT_SECTION_ITERABLE(test_rom_numeric, romn_3) = {0x20};
 const STRUCT_SECTION_ITERABLE(test_rom_numeric, romn_1) = {0x10};
-const STRUCT_SECTION_ITERABLE(test_rom_numeric, romn_99999) = {0x40};
-const STRUCT_SECTION_ITERABLE(test_rom_numeric, romn_11) = {0x30};
-
-/* alternate naming */
-const STRUCT_SECTION_ITERABLE_NAMED_ALTERNATE(test_rom_named, romn_alt, R, romn_73) = {0x73};
-const STRUCT_SECTION_ITERABLE_NAMED_ALTERNATE(test_rom_named, romn_alt, O, romn_42) = {0x42};
+const STRUCT_SECTION_ITERABLE(test_rom_numeric, romn_10) = {0x30};
+const STRUCT_SECTION_ITERABLE(test_rom_numeric, romn_11) = {0x40};
+const STRUCT_SECTION_ITERABLE(test_rom_numeric, romn_3) = {0x20};
 
 /**
  *
@@ -178,13 +161,6 @@ ZTEST(iterable_sections, test_rom)
 	}
 
 	zassert_equal(out, ROM_EXPECT, "Check value incorrect (got: 0x%x)", out);
-
-	out = 0;
-	STRUCT_SECTION_FOREACH_ALTERNATE(romn_alt, test_rom_named, t) {
-		out = (out << 8) | t->i;
-	}
-
-	zassert_equal(out, NAMED_ALT_EXPECT, "Check value incorrect (got: 0x%x)", out);
 }
 
 ZTEST_SUITE(iterable_sections, NULL, NULL, NULL, NULL, NULL);

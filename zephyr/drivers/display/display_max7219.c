@@ -139,6 +139,20 @@ static inline void skip_pixel(uint8_t *mask, uint8_t *data, const uint8_t **buf,
 	}
 }
 
+static int max7219_blanking_on(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return -ENOTSUP;
+}
+
+static int max7219_blanking_off(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return -ENOTSUP;
+}
+
 static int max7219_write(const struct device *dev, const uint16_t x, const uint16_t y,
 			 const struct display_buffer_descriptor *desc, const void *buf)
 {
@@ -151,8 +165,8 @@ static int max7219_write(const struct device *dev, const uint16_t x, const uint1
 	/*
 	 * MAX7219 only supports PIXEL_FORMAT_MONO01. 1 bit stands for 1 pixel.
 	 */
-	__ASSERT((desc->pitch * desc->height) <= (desc->buf_size * 8U), "Input buffer too small");
-	__ASSERT(desc->width <= desc->pitch, "Pitch is smaller than width");
+	__ASSERT((desc->pitch * desc->height) <= (desc->buf_size * 8U), "Input buffer to small");
+	__ASSERT(desc->width <= desc->pitch, "Pitch is smaller then width");
 	__ASSERT(desc->pitch <= max_width, "Pitch in descriptor is larger than screen size");
 	__ASSERT(desc->height <= max_height, "Height in descriptor is larger than screen size");
 	__ASSERT(x + desc->pitch <= max_width,
@@ -199,6 +213,25 @@ static int max7219_write(const struct device *dev, const uint16_t x, const uint1
 	return 0;
 }
 
+static int max7219_read(const struct device *dev, const uint16_t x, const uint16_t y,
+			const struct display_buffer_descriptor *desc, void *buf)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(x);
+	ARG_UNUSED(y);
+	ARG_UNUSED(desc);
+	ARG_UNUSED(buf);
+
+	return -ENOTSUP;
+}
+
+static void *max7219_get_framebuffer(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return NULL;
+}
+
 static int max7219_set_brightness(const struct device *dev, const uint8_t brightness)
 {
 	int ret;
@@ -214,6 +247,14 @@ static int max7219_set_brightness(const struct device *dev, const uint8_t bright
 	}
 
 	return 0;
+}
+
+static int max7219_set_contrast(const struct device *dev, const uint8_t contrast)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(contrast);
+
+	return -ENOTSUP;
 }
 
 static int max7219_set_pixel_format(const struct device *dev,
@@ -254,9 +295,14 @@ static void max7219_get_capabilities(const struct device *dev, struct display_ca
 	caps->current_orientation = DISPLAY_ORIENTATION_NORMAL;
 }
 
-static DEVICE_API(display, max7219_api) = {
+static const struct display_driver_api max7219_api = {
+	.blanking_on = max7219_blanking_on,
+	.blanking_off = max7219_blanking_off,
 	.write = max7219_write,
+	.read = max7219_read,
+	.get_framebuffer = max7219_get_framebuffer,
 	.set_brightness = max7219_set_brightness,
+	.set_contrast = max7219_set_contrast,
 	.get_capabilities = max7219_get_capabilities,
 	.set_pixel_format = max7219_set_pixel_format,
 	.set_orientation = max7219_set_orientation,

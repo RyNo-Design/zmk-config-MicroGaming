@@ -13,6 +13,3 @@ include: i2c-controller.yaml
 properties:
   reg:
     required: true
-
-  clock-frequency:
-    required: true

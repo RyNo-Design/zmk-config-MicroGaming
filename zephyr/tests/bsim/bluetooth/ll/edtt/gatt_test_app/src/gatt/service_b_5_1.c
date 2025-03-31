@@ -88,12 +88,10 @@ static ssize_t write_value_v8(struct bt_conn *conn,
 {
 	uint8_t *value = attr->user_data;
 
-	if (offset >= sizeof(value_v8_value)) {
+	if (offset >= sizeof(value_v8_value))
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
-	}
-	if (offset + len > sizeof(value_v8_value)) {
+	if (offset + len > sizeof(value_v8_value))
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-	}
 
 	memcpy(value + offset, buf, len);
 
@@ -141,12 +139,10 @@ static ssize_t write_des_v8d1(struct bt_conn *conn,
 {
 	uint8_t *value = attr->user_data;
 
-	if (offset >= sizeof(des_v8d1_value)) {
+	if (offset >= sizeof(des_v8d1_value))
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
-	}
-	if (offset + len > sizeof(des_v8d1_value)) {
+	if (offset + len > sizeof(des_v8d1_value))
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-	}
 
 	memcpy(value + offset, buf, len);
 
@@ -171,9 +167,8 @@ static ssize_t read_des_v8d2(struct bt_conn *conn,
 {
 	const uint8_t *value = attr->user_data;
 
-	if (!bAuthorized) {
+	if (!bAuthorized)
 		return BT_GATT_ERR(BT_ATT_ERR_AUTHORIZATION);
-	}
 
 	return bt_gatt_attr_read(conn, attr, buf, len, offset, value,
 				 sizeof(des_v8d2_value));
@@ -198,15 +193,12 @@ static ssize_t write_des_v8d2(struct bt_conn *conn,
 {
 	uint8_t *value = attr->user_data;
 
-	if (offset >= sizeof(des_v8d2_value)) {
+	if (offset >= sizeof(des_v8d2_value))
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
-	}
-	if (offset + len > sizeof(des_v8d2_value)) {
+	if (offset + len > sizeof(des_v8d2_value))
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-	}
-	if (!bAuthorized) {
+	if (!bAuthorized)
 		return BT_GATT_ERR(BT_ATT_ERR_AUTHORIZATION);
-	}
 
 	memcpy(value + offset, buf, len);
 
@@ -254,12 +246,10 @@ static ssize_t write_des_v8d3(struct bt_conn *conn,
 {
 	uint8_t *value = attr->user_data;
 
-	if (offset >= sizeof(des_v8d3_value)) {
+	if (offset >= sizeof(des_v8d3_value))
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
-	}
-	if (offset + len > sizeof(des_v8d3_value)) {
+	if (offset + len > sizeof(des_v8d3_value))
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-	}
 
 	memcpy(value + offset, buf, len);
 

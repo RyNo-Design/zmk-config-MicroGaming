@@ -1,9 +1,11 @@
 # Copyright (c) 2021-2022 Arm Limited (or its affiliates). All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+set(armfvp_bin_path $ENV{ARMFVP_BIN_PATH})
+
 find_program(
   ARMFVP
-  PATHS ENV ARMFVP_BIN_PATH
+  PATHS ${armfvp_bin_path}
   NO_DEFAULT_PATH
   NAMES ${ARMFVP_BIN_NAME}
   )
@@ -53,12 +55,9 @@ elseif(CONFIG_ARMV8_A_NS)
     --data cluster0.cpu0="${APPLICATION_BINARY_DIR}/zephyr/${KERNEL_BIN_NAME}"@0x88000000
     )
 else()
-  string(FIND "${ARMFVP_FLAGS}" " -a " ARMFVP_APPARG_POS)
-  if(${ARMFVP_APPARG_POS} EQUAL -1)
-    set(ARMFVP_FLAGS ${ARMFVP_FLAGS}
-      -a ${APPLICATION_BINARY_DIR}/zephyr/${KERNEL_ELF_NAME}
+  set(ARMFVP_FLAGS ${ARMFVP_FLAGS}
+    -a ${APPLICATION_BINARY_DIR}/zephyr/${KERNEL_ELF_NAME}
     )
-  endif()
 endif()
 
 if(CONFIG_ETH_SMSC91X)

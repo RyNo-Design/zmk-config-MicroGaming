@@ -45,7 +45,7 @@ static void net_neighbor_table_clear(struct net_nbr_table *table)
 }
 
 NET_NBR_POOL_INIT(net_test_neighbor_pool, CONFIG_NET_IPV6_MAX_NEIGHBORS,
-		  0, net_neighbor_data_remove);
+		  0, net_neighbor_data_remove, 0);
 
 NET_NBR_TABLE_INIT(NET_NBR_LOCAL, test_neighbor, net_test_neighbor_pool,
 		   net_neighbor_table_clear);
@@ -72,7 +72,7 @@ ZTEST(neighbor_test_suite, test_neighbor)
 
 	struct net_nbr *nbr;
 	struct net_linkaddr lladdr;
-	struct net_linkaddr *lladdr_ptr;
+	struct net_linkaddr_storage *lladdr_ptr;
 	struct net_if *iface1 = INT_TO_POINTER(1);
 	struct net_if *iface2 = INT_TO_POINTER(2);
 	int ret, i;
@@ -95,7 +95,7 @@ ZTEST(neighbor_test_suite, test_neighbor)
 	for (i = 0; i < 2; i++) {
 		eth_addr = addrs[i];
 
-		memcpy(lladdr.addr, eth_addr->addr, sizeof(struct net_eth_addr));
+		lladdr.addr = eth_addr->addr;
 
 		ret = net_nbr_link(nbr, iface1, &lladdr);
 
@@ -111,15 +111,14 @@ ZTEST(neighbor_test_suite, test_neighbor)
 		}
 	}
 
-	memcpy(lladdr.addr, addrs[0]->addr, sizeof(struct net_eth_addr));
-
+	lladdr.addr = addrs[0]->addr;
 	nbr = net_nbr_lookup(&net_test_neighbor.table, iface1, &lladdr);
 	zassert_true(nbr->idx == 0, "Wrong index %d should be %d\n", nbr->idx, 0);
 
 	for (i = 0; i < 2; i++) {
 		eth_addr = addrs[i];
 
-		memcpy(lladdr.addr, eth_addr->addr, sizeof(struct net_eth_addr));
+		lladdr.addr = eth_addr->addr;
 
 		ret = net_nbr_unlink(nbr, &lladdr);
 		zassert_false(i == 0 && ret < 0, "Cannot add %s to nbr cache (%d)\n",
@@ -156,7 +155,7 @@ ZTEST(neighbor_test_suite, test_neighbor)
 
 		eth_addr = addrs[i];
 
-		memcpy(lladdr.addr, eth_addr->addr, sizeof(struct net_eth_addr));
+		lladdr.addr = eth_addr->addr;
 
 		ret = net_nbr_link(nbr, iface1, &lladdr);
 		zassert_false(ret < 0, "Cannot add %s to nbr cache (%d)\n",
@@ -167,7 +166,7 @@ ZTEST(neighbor_test_suite, test_neighbor)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(addrs) - 2; i++) {
-		memcpy(lladdr.addr, addrs[i]->addr, sizeof(struct net_eth_addr));
+		lladdr.addr = addrs[i]->addr;
 		nbr = net_nbr_lookup(&net_test_neighbor.table, iface1, &lladdr);
 		zassert_false(nbr->idx != i, "Wrong index %d should be %d\n", nbr->idx, i);
 	}
@@ -175,7 +174,7 @@ ZTEST(neighbor_test_suite, test_neighbor)
 	for (i = 0; i < ARRAY_SIZE(addrs); i++) {
 		eth_addr = addrs[i];
 		nbr = nbrs[i];
-		memcpy(lladdr.addr, eth_addr->addr, sizeof(struct net_eth_addr));
+		lladdr.addr = eth_addr->addr;
 
 		if (!nbr || i >= CONFIG_NET_IPV6_MAX_NEIGHBORS) {
 			break;
@@ -215,7 +214,7 @@ ZTEST(neighbor_test_suite, test_neighbor)
 
 		eth_addr = addrs[i];
 
-		memcpy(lladdr.addr, eth_addr->addr, sizeof(struct net_eth_addr));
+		lladdr.addr = eth_addr->addr;
 
 		if (i % 2) {
 			ret = net_nbr_link(nbr, iface1, &lladdr);
@@ -233,8 +232,7 @@ ZTEST(neighbor_test_suite, test_neighbor)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(addrs) - 2; i++) {
-		memcpy(lladdr.addr, addrs[i]->addr, sizeof(struct net_eth_addr));
-
+		lladdr.addr = addrs[i]->addr;
 		if (i % 2) {
 			nbr = net_nbr_lookup(&net_test_neighbor.table, iface1,
 					     &lladdr);
@@ -259,7 +257,7 @@ ZTEST(neighbor_test_suite, test_neighbor)
 
 		eth_addr = addrs[i];
 		nbr = nbrs[i];
-		memcpy(lladdr.addr, eth_addr->addr, sizeof(struct net_eth_addr));
+		lladdr.addr = eth_addr->addr;
 
 		if (!nbr || i >= CONFIG_NET_IPV6_MAX_NEIGHBORS) {
 			break;
@@ -287,8 +285,7 @@ ZTEST(neighbor_test_suite, test_neighbor)
 	zassert_true(clear_called, "Table clear check failed");
 
 	/* The table should be empty now */
-	memcpy(lladdr.addr, addrs[0]->addr, sizeof(struct net_eth_addr));
-
+	lladdr.addr = addrs[0]->addr;
 	nbr = net_nbr_lookup(&net_test_neighbor.table, iface1, &lladdr);
 
 	zassert_is_null(nbr, "Some entries still found in nbr cache");

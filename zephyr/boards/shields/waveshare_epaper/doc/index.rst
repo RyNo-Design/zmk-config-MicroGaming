@@ -1,4 +1,4 @@
-.. _waveshare_epaper:
+.. _waveshare_e_paper_raw_panel_shield:
 
 WAVESHARE e-Paper Raw Panel Shield
 ##################################
@@ -65,9 +65,6 @@ Current supported displays
 | Good Display | WFT0420CZ15     | UC8176 /     | waveshare_epaper_gdew042t2   |
 | GDEW042T2    |                 | gd7965       | waveshare_epaper_gdew042t2-p |
 +--------------+-----------------+--------------+------------------------------+
-| Good Display | FPC-A002        | SSD1680 /    | waveshare_epaper_gdey0213b74 |
-| GDEY0213B74  |                 | ssd16xx      |                              |
-+--------------+-----------------+--------------+------------------------------+
 
 
 Requirements
@@ -86,7 +83,7 @@ For example:
 
 .. zephyr-app-commands::
    :zephyr-app: samples/subsys/display/lvgl
-   :board: nrf52840dk/nrf52840
+   :board: nrf52840dk_nrf52840
    :shield: waveshare_epaper_gdeh0213b1
    :goals: build
 

@@ -25,8 +25,12 @@ struct clock_control_data {
 
 static int clock_init(const struct device *dev)
 {
+	DEVICE_MMIO_MAP(dev, K_MEM_CACHE_NONE);
 
-	LOG_DBG("Intel Agilex5 clock driver initialized!");
+	/* Initialize the low layer clock driver */
+	clock_agilex5_ll_init(DEVICE_MMIO_GET(dev));
+
+	LOG_INF("Intel Agilex5 clock driver initialized!");
 
 	return 0;
 }
@@ -50,23 +54,11 @@ static int clock_get_rate(const struct device *dev, clock_control_subsys_t sub_s
 		break;
 
 	case INTEL_SOCFPGA_CLOCK_MMC:
-		*rate = get_sdmmc_clk();
+		*rate = get_mmc_clk();
 		break;
 
 	case INTEL_SOCFPGA_CLOCK_TIMER:
 		*rate = get_timer_clk();
-		break;
-
-	case INTEL_SOCFPGA_CLOCK_QSPI:
-		*rate = get_qspi_clk();
-		break;
-
-	case INTEL_SOCFPGA_CLOCK_I2C:
-		*rate = get_i2c_clk();
-		break;
-
-	case INTEL_SOCFPGA_CLOCK_I3C:
-		*rate = get_i3c_clk();
 		break;
 
 	default:
@@ -77,9 +69,7 @@ static int clock_get_rate(const struct device *dev, clock_control_subsys_t sub_s
 	return 0;
 }
 
-static DEVICE_API(clock_control, clock_api) = {
-	.get_rate = clock_get_rate,
-};
+static const struct clock_control_driver_api clock_api = {.get_rate = clock_get_rate};
 
 #define CLOCK_CONTROL_DEVICE(_inst)                                                                \
                                                                                                    \

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # Copyright (c) 2020 Intel Corporation
-# Copyright (c) 2024 Arm Limited (or its affiliates). All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 """
@@ -9,7 +8,6 @@ This test file contains foundational testcases for Twister tool
 
 import os
 import sys
-import mock
 import pytest
 
 from pathlib import Path
@@ -53,27 +51,17 @@ def test_incorrect_schema(filename, schema, test_data):
 
 def test_testsuite_config_files():
     """ Test to validate conf and overlay files are extracted properly """
-    filename = Path(ZEPHYR_BASE) / "scripts/tests/twister/test_data/test_data_with_deprecation_warnings.yaml"
+    filename = Path(ZEPHYR_BASE) / "scripts/tests/twister/test_data/testsuites/tests/test_config/test_data.yaml"
     schema = scl.yaml_load(Path(ZEPHYR_BASE) / "scripts/schemas/twister/testsuite-schema.yaml")
     data = TwisterConfigParser(filename, schema)
     data.load()
 
-    with mock.patch('warnings.warn') as warn_mock:
-        # Load and validate the specific scenario from testcases.yaml
-        scenario = data.get_scenario("test_config.main")
-        assert scenario
+    # Load and validate the specific scenario from testcases.yaml
+    scenario = data.get_scenario("test_config.main")
+    assert scenario
 
-        # CONF_FILE, DTC_OVERLAY_FILE, OVERLAY_CONFIG fields should be stripped out
-        # of extra_args. Other fields should remain untouched.
-        warn_mock.assert_called_once_with(
-            "Do not specify CONF_FILE, OVERLAY_CONFIG, or DTC_OVERLAY_FILE in extra_args."
-            " This feature is deprecated and will soon result in an error."
-            " Use extra_conf_files, extra_overlay_confs"
-            " or extra_dtc_overlay_files YAML fields instead",
-            DeprecationWarning,
-            stacklevel=2
-        )
-
+    # CONF_FILE, DTC_OVERLAY_FILE, OVERLAY_CONFIG fields should be stripped out
+    # of extra_args. Other fields should remain untouched.
     assert scenario["extra_args"] == ["UNRELATED1=abc", "UNRELATED2=xyz"]
 
     # Check that all conf files have been assembled in the correct order

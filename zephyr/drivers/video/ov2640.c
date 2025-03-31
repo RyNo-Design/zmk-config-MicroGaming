@@ -5,16 +5,16 @@
  */
 
 #define DT_DRV_COMPAT ovti_ov2640
-
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
-#include <zephyr/logging/log.h>
+
 #include <zephyr/drivers/video.h>
-#include <zephyr/drivers/video-controls.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/gpio.h>
 
-LOG_MODULE_REGISTER(video_ov2640, CONFIG_VIDEO_LOG_LEVEL);
+#define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(ov2640);
 
 /* DSP register bank FF=0x00*/
 #define QS                  0x44
@@ -108,7 +108,6 @@ LOG_MODULE_REGISTER(video_ov2640, CONFIG_VIDEO_LOG_LEVEL);
 #define REG04_DEFAULT       0x28
 #define REG04_HFLIP_IMG     0x80
 #define REG04_VFLIP_IMG     0x40
-#define REG04_VREF_EN       0x10
 #define REG04_HREF_EN       0x08
 #define REG04_SET(x)        (REG04_DEFAULT | x)
 
@@ -436,7 +435,6 @@ struct ov2640_config {
 #if DT_INST_NODE_HAS_PROP(0, reset_gpios)
 	struct gpio_dt_spec reset_gpio;
 #endif
-	uint8_t clock_rate_control;
 };
 
 struct ov2640_data {
@@ -458,7 +456,6 @@ static const struct video_format_cap fmts[] = {
 	OV2640_VIDEO_FORMAT_CAP(160, 120, VIDEO_PIX_FMT_RGB565),   /* QQVGA */
 	OV2640_VIDEO_FORMAT_CAP(176, 144, VIDEO_PIX_FMT_RGB565),   /* QCIF  */
 	OV2640_VIDEO_FORMAT_CAP(240, 160, VIDEO_PIX_FMT_RGB565),   /* HQVGA */
-	OV2640_VIDEO_FORMAT_CAP(240, 240, VIDEO_PIX_FMT_RGB565),   /* 240x240 */
 	OV2640_VIDEO_FORMAT_CAP(320, 240, VIDEO_PIX_FMT_RGB565),   /* QVGA  */
 	OV2640_VIDEO_FORMAT_CAP(352, 288, VIDEO_PIX_FMT_RGB565),   /* CIF   */
 	OV2640_VIDEO_FORMAT_CAP(640, 480, VIDEO_PIX_FMT_RGB565),   /* VGA   */
@@ -490,7 +487,7 @@ static int ov2640_write_reg(const struct i2c_dt_spec *spec, uint8_t reg_addr,
 	 * just to be sure that the connection error is not caused by driver
 	 * itself.
 	 */
-	while (tries-- > 0) {
+	while (tries--) {
 		if (!i2c_reg_write_byte_dt(spec, reg_addr, value)) {
 			return 0;
 		}
@@ -513,7 +510,7 @@ static int ov2640_read_reg(const struct i2c_dt_spec *spec, uint8_t reg_addr)
 	 * just to be sure that the connection error is not caused by driver
 	 * itself.
 	 */
-	while (tries-- > 0) {
+	while (tries--) {
 		if (!i2c_reg_read_byte_dt(spec, reg_addr, &value)) {
 			return value;
 		}
@@ -793,9 +790,9 @@ static int ov2640_set_vertical_flip(const struct device *dev, int enable)
 	reg = ov2640_read_reg(&cfg->i2c, REG04);
 
 	if (enable) {
-		reg |= REG04_VFLIP_IMG | REG04_VREF_EN;
+		reg |= REG04_VFLIP_IMG;
 	} else {
-		reg &= ~(REG04_VFLIP_IMG | REG04_VREF_EN);
+		reg &= ~REG04_VFLIP_IMG;
 	}
 
 	ret |= ov2640_write_reg(&cfg->i2c, REG04, reg);
@@ -824,7 +821,7 @@ static int ov2640_set_resolution(const struct device *dev,
 
 	/* Set CLKRC */
 	ret |= ov2640_write_reg(&cfg->i2c, BANK_SEL, BANK_SEL_SENSOR);
-	ret |= ov2640_write_reg(&cfg->i2c, CLKRC, cfg->clock_rate_control);
+	ret |= ov2640_write_reg(&cfg->i2c, CLKRC, 0x87);
 
 	/* Write DSP input registers */
 	ov2640_write_all(dev, uxga_regs, ARRAY_SIZE(uxga_regs));
@@ -910,7 +907,12 @@ static int ov2640_get_fmt(const struct device *dev,
 	return 0;
 }
 
-static int ov2640_set_stream(const struct device *dev, bool enable)
+static int ov2640_stream_start(const struct device *dev)
+{
+	return 0;
+}
+
+static int ov2640_stream_stop(const struct device *dev)
 {
 	return 0;
 }
@@ -935,28 +937,28 @@ static int ov2640_set_ctrl(const struct device *dev,
 	case VIDEO_CID_VFLIP:
 		ret |= ov2640_set_vertical_flip(dev, (int)value);
 		break;
-	case VIDEO_CID_EXPOSURE:
+	case VIDEO_CID_CAMERA_EXPOSURE:
 		ret |= ov2640_set_exposure_ctrl(dev, (int)value);
 		break;
-	case VIDEO_CID_GAIN:
+	case VIDEO_CID_CAMERA_GAIN:
 		ret |= ov2640_set_gain_ctrl(dev, (int)value);
 		break;
-	case VIDEO_CID_BRIGHTNESS:
+	case VIDEO_CID_CAMERA_BRIGHTNESS:
 		ret |= ov2640_set_brightness(dev, (int)value);
 		break;
-	case VIDEO_CID_SATURATION:
+	case VIDEO_CID_CAMERA_SATURATION:
 		ret |= ov2640_set_saturation(dev, (int)value);
 		break;
-	case VIDEO_CID_WHITE_BALANCE_TEMPERATURE:
+	case VIDEO_CID_CAMERA_WHITE_BAL:
 		ret |= ov2640_set_white_bal(dev, (int)value);
 		break;
-	case VIDEO_CID_CONTRAST:
+	case VIDEO_CID_CAMERA_CONTRAST:
 		ret |= ov2640_set_contrast(dev, (int)value);
 		break;
-	case VIDEO_CID_TEST_PATTERN:
+	case VIDEO_CID_CAMERA_COLORBAR:
 		ret |= ov2640_set_colorbar(dev, (int)value);
 		break;
-	case VIDEO_CID_JPEG_COMPRESSION_QUALITY:
+	case VIDEO_CID_CAMERA_QUALITY:
 		ret |= ov2640_set_quality(dev, (int)value);
 		break;
 	default:
@@ -966,11 +968,12 @@ static int ov2640_set_ctrl(const struct device *dev,
 	return ret;
 }
 
-static DEVICE_API(video, ov2640_driver_api) = {
+static const struct video_driver_api ov2640_driver_api = {
 	.set_format = ov2640_set_fmt,
 	.get_format = ov2640_get_fmt,
 	.get_caps = ov2640_get_caps,
-	.set_stream = ov2640_set_stream,
+	.stream_start = ov2640_stream_start,
+	.stream_stop = ov2640_stream_stop,
 	.set_ctrl = ov2640_set_ctrl,
 };
 
@@ -1027,7 +1030,6 @@ static const struct ov2640_config ov2640_cfg_0 = {
 #if DT_INST_NODE_HAS_PROP(0, reset_gpios)
 	.reset_gpio = GPIO_DT_SPEC_INST_GET(0, reset_gpios),
 #endif
-	.clock_rate_control = DT_INST_PROP(0, clock_rate_control),
 };
 static struct ov2640_data ov2640_data_0;
 

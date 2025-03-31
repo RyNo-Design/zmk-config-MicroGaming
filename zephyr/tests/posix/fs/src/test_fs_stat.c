@@ -4,9 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#undef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 200809L
-
 #include <string.h>
 #include <zephyr/posix/fcntl.h>
 #include <zephyr/posix/unistd.h>
@@ -24,7 +21,7 @@ static void create_file(const char *filename, uint32_t size)
 {
 	int fh;
 
-	fh = open(filename, O_CREAT | O_WRONLY, 0440);
+	fh = open(filename, O_CREAT | O_WRONLY);
 	zassert(fh >= 0, "Failed creating test file");
 
 	uint8_t filling[FILL_SIZE];

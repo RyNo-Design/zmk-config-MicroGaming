@@ -18,6 +18,7 @@ setuptools.setup(
     # TBD, just use these for now.
     author='Zephyr Project',
     author_email='devel@lists.zephyrproject.org',
+
     name='devicetree',
     version=version,
     description='Python libraries for devicetree',
@@ -35,7 +36,7 @@ setuptools.setup(
         'Operating System :: Microsoft :: Windows',
     ],
     install_requires=[
-        'PyYAML>=6.0',
+        'PyYAML>=5.1',
     ],
     python_requires='>=3.6',
 )

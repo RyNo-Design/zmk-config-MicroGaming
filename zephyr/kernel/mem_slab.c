@@ -55,7 +55,7 @@ static int k_mem_slab_stats_query(struct k_obj_core *obj_core, void *stats)
 	ptr->max_allocated_bytes = slab->info.max_used * slab->info.block_size;
 #else
 	ptr->max_allocated_bytes = 0;
-#endif /* CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION */
+#endif
 	k_spin_unlock(&slab->lock, key);
 
 	return 0;
@@ -73,7 +73,7 @@ static int k_mem_slab_stats_reset(struct k_obj_core *obj_core)
 
 #ifdef CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION
 	slab->info.max_used = slab->info.num_used;
-#endif /* CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION */
+#endif
 
 	k_spin_unlock(&slab->lock, key);
 
@@ -89,8 +89,8 @@ static struct k_obj_core_stats_desc mem_slab_stats_desc = {
 	.disable = NULL,
 	.enable = NULL,
 };
-#endif /* CONFIG_OBJ_CORE_STATS_MEM_SLAB */
-#endif /* CONFIG_OBJ_CORE_MEM_SLAB */
+#endif
+#endif
 
 /**
  * @brief Initialize kernel memory slab subsystem.
@@ -103,6 +103,7 @@ static struct k_obj_core_stats_desc mem_slab_stats_desc = {
  */
 static int create_free_list(struct k_mem_slab *slab)
 {
+	uint32_t j;
 	char *p;
 
 	/* blocks must be word aligned */
@@ -112,12 +113,12 @@ static int create_free_list(struct k_mem_slab *slab)
 	}
 
 	slab->free_list = NULL;
-	p = slab->buffer + slab->info.block_size * (slab->info.num_blocks - 1);
+	p = slab->buffer;
 
-	while (p >= slab->buffer) {
+	for (j = 0U; j < slab->info.num_blocks; j++) {
 		*(char **)p = slab->free_list;
 		slab->free_list = p;
-		p -= slab->info.block_size;
+		p += slab->info.block_size;
 	}
 	return 0;
 }
@@ -140,8 +141,8 @@ static int init_mem_slab_obj_core_list(void)
 			offsetof(struct k_mem_slab, obj_core));
 #ifdef CONFIG_OBJ_CORE_STATS_MEM_SLAB
 	k_obj_type_stats_init(&obj_type_mem_slab, &mem_slab_stats_desc);
-#endif /* CONFIG_OBJ_CORE_STATS_MEM_SLAB */
-#endif /* CONFIG_OBJ_CORE_MEM_SLAB */
+#endif
+#endif
 
 	/* Initialize statically defined mem_slabs */
 
@@ -150,15 +151,15 @@ static int init_mem_slab_obj_core_list(void)
 		if (rc < 0) {
 			goto out;
 		}
-		k_object_init(slab);
+		z_object_init(slab);
 
 #ifdef CONFIG_OBJ_CORE_MEM_SLAB
 		k_obj_core_init_and_link(K_OBJ_CORE(slab), &obj_type_mem_slab);
 #ifdef CONFIG_OBJ_CORE_STATS_MEM_SLAB
 		k_obj_core_stats_register(K_OBJ_CORE(slab), &slab->info,
 					  sizeof(struct k_mem_slab_info));
-#endif /* CONFIG_OBJ_CORE_STATS_MEM_SLAB */
-#endif /* CONFIG_OBJ_CORE_MEM_SLAB */
+#endif
+#endif
 	}
 
 out:
@@ -171,7 +172,7 @@ SYS_INIT(init_mem_slab_obj_core_list, PRE_KERNEL_1,
 int k_mem_slab_init(struct k_mem_slab *slab, void *buffer,
 		    size_t block_size, uint32_t num_blocks)
 {
-	int rc;
+	int rc = 0;
 
 	slab->info.num_blocks = num_blocks;
 	slab->info.block_size = block_size;
@@ -181,7 +182,7 @@ int k_mem_slab_init(struct k_mem_slab *slab, void *buffer,
 
 #ifdef CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION
 	slab->info.max_used = 0U;
-#endif /* CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION */
+#endif
 
 	rc = create_free_list(slab);
 	if (rc < 0) {
@@ -190,32 +191,18 @@ int k_mem_slab_init(struct k_mem_slab *slab, void *buffer,
 
 #ifdef CONFIG_OBJ_CORE_MEM_SLAB
 	k_obj_core_init_and_link(K_OBJ_CORE(slab), &obj_type_mem_slab);
-#endif /* CONFIG_OBJ_CORE_MEM_SLAB */
+#endif
 #ifdef CONFIG_OBJ_CORE_STATS_MEM_SLAB
 	k_obj_core_stats_register(K_OBJ_CORE(slab), &slab->info,
 				  sizeof(struct k_mem_slab_info));
-#endif /* CONFIG_OBJ_CORE_STATS_MEM_SLAB */
+#endif
 
 	z_waitq_init(&slab->wait_q);
-	k_object_init(slab);
+	z_object_init(slab);
 out:
 	SYS_PORT_TRACING_OBJ_INIT(k_mem_slab, slab, rc);
 
 	return rc;
-}
-
-static bool slab_ptr_is_good(struct k_mem_slab *slab, const void *ptr)
-{
-	if (!IS_ENABLED(CONFIG_MEM_SLAB_POINTER_VALIDATE)) {
-		return true;
-	}
-
-	const char *p = ptr;
-	ptrdiff_t offset = p - slab->buffer;
-
-	return (offset >= 0) &&
-	       (offset < (slab->info.block_size * slab->info.num_blocks)) &&
-	       ((offset % slab->info.block_size) == 0);
 }
 
 int k_mem_slab_alloc(struct k_mem_slab *slab, void **mem, k_timeout_t timeout)
@@ -230,15 +217,11 @@ int k_mem_slab_alloc(struct k_mem_slab *slab, void **mem, k_timeout_t timeout)
 		*mem = slab->free_list;
 		slab->free_list = *(char **)(slab->free_list);
 		slab->info.num_used++;
-		__ASSERT((slab->free_list == NULL &&
-			  slab->info.num_used == slab->info.num_blocks) ||
-			 slab_ptr_is_good(slab, slab->free_list),
-			 "slab corruption detected");
 
 #ifdef CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION
 		slab->info.max_used = MAX(slab->info.num_used,
 					  slab->info.max_used);
-#endif /* CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION */
+#endif
 
 		result = 0;
 	} else if (K_TIMEOUT_EQ(timeout, K_NO_WAIT) ||
@@ -269,19 +252,19 @@ int k_mem_slab_alloc(struct k_mem_slab *slab, void **mem, k_timeout_t timeout)
 
 void k_mem_slab_free(struct k_mem_slab *slab, void *mem)
 {
-	if (!slab_ptr_is_good(slab, mem)) {
-		__ASSERT(false, "Invalid memory pointer provided");
-		k_panic();
-		return;
-	}
-
 	k_spinlock_key_t key = k_spin_lock(&slab->lock);
 
+	__ASSERT(((char *)mem >= slab->buffer) &&
+		 ((((char *)mem - slab->buffer) % slab->info.block_size) == 0) &&
+		 ((char *)mem <= (slab->buffer + (slab->info.block_size *
+						  (slab->info.num_blocks - 1)))),
+		 "Invalid memory pointer provided");
+
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_mem_slab, free, slab);
-	if (unlikely(slab->free_list == NULL) && IS_ENABLED(CONFIG_MULTITHREADING)) {
+	if (slab->free_list == NULL && IS_ENABLED(CONFIG_MULTITHREADING)) {
 		struct k_thread *pending_thread = z_unpend_first_thread(&slab->wait_q);
 
-		if (unlikely(pending_thread != NULL)) {
+		if (pending_thread != NULL) {
 			SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_mem_slab, free, slab);
 
 			z_thread_return_value_set_with_data(pending_thread, 0, mem);
@@ -315,7 +298,7 @@ int k_mem_slab_runtime_stats_get(struct k_mem_slab *slab, struct sys_memory_stat
 				     slab->info.block_size;
 #else
 	stats->max_allocated_bytes = 0;
-#endif /* CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION */
+#endif
 
 	k_spin_unlock(&slab->lock, key);
 
@@ -337,4 +320,4 @@ int k_mem_slab_runtime_stats_reset_max(struct k_mem_slab *slab)
 
 	return 0;
 }
-#endif /* CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION */
+#endif

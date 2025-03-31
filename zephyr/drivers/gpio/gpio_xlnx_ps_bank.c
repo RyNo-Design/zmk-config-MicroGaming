@@ -21,9 +21,6 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #define DT_DRV_COMPAT xlnx_ps_gpio_bank
 
-#define DEV_CFG(_dev) ((const struct gpio_xlnx_ps_bank_dev_cfg *)(_dev)->config)
-#define DEV_DATA(_dev) ((struct gpio_xlnx_ps_bank_dev_data *const)(_dev)->data)
-
 /**
  * @brief GPIO bank pin configuration function
  *
@@ -50,8 +47,7 @@ static int gpio_xlnx_ps_pin_configure(const struct device *dev,
 				      gpio_pin_t pin,
 				      gpio_flags_t flags)
 {
-	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = DEV_CFG(dev);
-	struct gpio_xlnx_ps_bank_dev_data *dev_data = DEV_DATA(dev);
+	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = dev->config;
 	uint32_t pin_mask = BIT(pin);
 	uint32_t bank_data;
 	uint32_t dirm_data;
@@ -131,8 +127,7 @@ static int gpio_xlnx_ps_pin_configure(const struct device *dev,
 static int gpio_xlnx_ps_bank_get(const struct device *dev,
 				 gpio_port_value_t *value)
 {
-	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = DEV_CFG(dev);
-	struct gpio_xlnx_ps_bank_dev_data *dev_data = DEV_DATA(dev);
+	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = dev->config;
 
 	*value = sys_read32(GPIO_XLNX_PS_BANK_DATA_REG);
 	return 0;
@@ -164,8 +159,7 @@ static int gpio_xlnx_ps_bank_set_masked(const struct device *dev,
 					gpio_port_pins_t mask,
 					gpio_port_value_t value)
 {
-	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = DEV_CFG(dev);
-	struct gpio_xlnx_ps_bank_dev_data *dev_data = DEV_DATA(dev);
+	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = dev->config;
 	uint32_t bank_data;
 
 	bank_data = sys_read32(GPIO_XLNX_PS_BANK_DATA_REG);
@@ -193,8 +187,7 @@ static int gpio_xlnx_ps_bank_set_masked(const struct device *dev,
 static int gpio_xlnx_ps_bank_set_bits(const struct device *dev,
 				      gpio_port_pins_t pins)
 {
-	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = DEV_CFG(dev);
-	struct gpio_xlnx_ps_bank_dev_data *dev_data = DEV_DATA(dev);
+	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = dev->config;
 	uint32_t bank_data;
 
 	bank_data = sys_read32(GPIO_XLNX_PS_BANK_DATA_REG);
@@ -222,8 +215,7 @@ static int gpio_xlnx_ps_bank_set_bits(const struct device *dev,
 static int gpio_xlnx_ps_bank_clear_bits(const struct device *dev,
 					gpio_port_pins_t pins)
 {
-	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = DEV_CFG(dev);
-	struct gpio_xlnx_ps_bank_dev_data *dev_data = DEV_DATA(dev);
+	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = dev->config;
 	uint32_t bank_data;
 
 	bank_data = sys_read32(GPIO_XLNX_PS_BANK_DATA_REG);
@@ -251,8 +243,7 @@ static int gpio_xlnx_ps_bank_clear_bits(const struct device *dev,
 static int gpio_xlnx_ps_bank_toggle_bits(const struct device *dev,
 					 gpio_port_pins_t pins)
 {
-	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = DEV_CFG(dev);
-	struct gpio_xlnx_ps_bank_dev_data *dev_data = DEV_DATA(dev);
+	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = dev->config;
 	uint32_t bank_data;
 
 	bank_data = sys_read32(GPIO_XLNX_PS_BANK_DATA_REG);
@@ -291,8 +282,7 @@ static int gpio_xlnx_ps_bank_pin_irq_configure(const struct device *dev,
 					       enum gpio_int_mode mode,
 					       enum gpio_int_trig trig)
 {
-	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = DEV_CFG(dev);
-	struct gpio_xlnx_ps_bank_dev_data *dev_data = DEV_DATA(dev);
+	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = dev->config;
 	uint32_t pin_mask = BIT(pin);
 	uint32_t int_type_data;
 	uint32_t int_polarity_data;
@@ -368,8 +358,7 @@ static int gpio_xlnx_ps_bank_pin_irq_configure(const struct device *dev,
  */
 static uint32_t gpio_xlnx_ps_bank_get_int_status(const struct device *dev)
 {
-	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = DEV_CFG(dev);
-	struct gpio_xlnx_ps_bank_dev_data *dev_data = DEV_DATA(dev);
+	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = dev->config;
 	uint32_t int_status;
 
 	int_status = sys_read32(GPIO_XLNX_PS_BANK_INT_STAT_REG);
@@ -398,13 +387,13 @@ static int gpio_xlnx_ps_bank_manage_callback(const struct device *dev,
 					     struct gpio_callback *callback,
 					     bool set)
 {
-	struct gpio_xlnx_ps_bank_dev_data *dev_data = DEV_DATA(dev);
+	struct gpio_xlnx_ps_bank_dev_data *dev_data = dev->data;
 
 	return gpio_manage_callback(&dev_data->callbacks, callback, set);
 }
 
 /* GPIO bank device driver API */
-static DEVICE_API(gpio, gpio_xlnx_ps_bank_apis) = {
+static const struct gpio_driver_api gpio_xlnx_ps_bank_apis = {
 	.pin_configure = gpio_xlnx_ps_pin_configure,
 	.port_get_raw = gpio_xlnx_ps_bank_get,
 	.port_set_masked_raw = gpio_xlnx_ps_bank_set_masked,
@@ -430,14 +419,7 @@ static DEVICE_API(gpio, gpio_xlnx_ps_bank_apis) = {
  */
 static int gpio_xlnx_ps_bank_init(const struct device *dev)
 {
-	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = DEV_CFG(dev);
-	struct gpio_xlnx_ps_bank_dev_data *dev_data = DEV_DATA(dev);
-
-	__ASSERT(dev_data->base != 0, "%s mapped base address missing", dev->name);
-	if (dev_data->base == 0) {
-		LOG_ERR("%s mapped base address missing", dev->name);
-		return -EIO;
-	}
+	const struct gpio_xlnx_ps_bank_dev_cfg *dev_conf = dev->config;
 
 	sys_write32(~0x0, GPIO_XLNX_PS_BANK_INT_DIS_REG);  /* Disable all interrupts */
 	sys_write32(~0x0, GPIO_XLNX_PS_BANK_INT_STAT_REG); /* Clear all interrupts */
@@ -454,11 +436,10 @@ static const struct gpio_xlnx_ps_bank_dev_cfg gpio_xlnx_ps_bank##idx##_cfg = {\
 	.common = {\
 		.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(idx),\
 	},\
-	.bank_index = DT_INST_REG_ADDR(idx),\
+	.base_addr = DT_REG_ADDR(DT_PARENT(DT_INST(idx, DT_DRV_COMPAT))),\
+	.bank_index = idx,\
 };\
-static struct gpio_xlnx_ps_bank_dev_data gpio_xlnx_ps_bank##idx##_data = {\
-	.base = 0,\
-};\
+static struct gpio_xlnx_ps_bank_dev_data gpio_xlnx_ps_bank##idx##_data;\
 DEVICE_DT_INST_DEFINE(idx, gpio_xlnx_ps_bank_init, NULL,\
 	&gpio_xlnx_ps_bank##idx##_data, &gpio_xlnx_ps_bank##idx##_cfg,\
 	PRE_KERNEL_1, CONFIG_GPIO_INIT_PRIORITY, &gpio_xlnx_ps_bank_apis);

@@ -68,21 +68,19 @@ static void intel_adsp_gpdma_dump_registers(const struct device *dev, uint32_t c
 	llpl = dw_read(dev_cfg->shim, GPDMA_CHLLPL(channel));
 	llpu = dw_read(dev_cfg->shim, GPDMA_CHLLPU(channel));
 
-	LOG_INF("%s: channel: %d cap %x, ctl %x, ipptr %x, llpc %x, llpl %x, llpu %x", dev->name,
+	LOG_INF("channel: %d cap %x, ctl %x, ipptr %x, llpc %x, llpl %x, llpu %x",
 		channel, cap, ctl, ipptr, llpc, llpl, llpu);
 
 	/* Channel Register Dump */
-	for (i = 0; i <= DW_DMA_CHANNEL_REGISTER_OFFSET_END; i += 0x8) {
+	for (i = 0; i <= DW_DMA_CHANNEL_REGISTER_OFFSET_END; i += 0x8)
 		LOG_INF(" channel register offset: %#x value: %#x\n", chan_reg_offs[i],
 			dw_read(dw_cfg->base, DW_CHAN_OFFSET(channel) + chan_reg_offs[i]));
-	}
 
 	/* IP Register Dump */
 	for (i = DW_DMA_CHANNEL_REGISTER_OFFSET_START; i <= DW_DMA_CHANNEL_REGISTER_OFFSET_END;
-	     i += 0x8) {
+	     i += 0x8)
 		LOG_INF(" ip register offset: %#x value: %#x\n", ip_reg_offs[i],
 			dw_read(dw_cfg->base, ip_reg_offs[i]));
-	}
 }
 #endif
 
@@ -131,15 +129,9 @@ static inline void intel_adsp_gpdma_llp_read(const struct device *dev,
 {
 #ifdef CONFIG_DMA_INTEL_ADSP_GPDMA_HAS_LLP
 	const struct intel_adsp_gpdma_cfg *const dev_cfg = dev->config;
-	uint32_t tmp;
 
-	tmp = dw_read(dev_cfg->shim, GPDMA_CHLLPL(channel));
-	*llp_u = dw_read(dev_cfg->shim, GPDMA_CHLLPU(channel));
 	*llp_l = dw_read(dev_cfg->shim, GPDMA_CHLLPL(channel));
-	if (tmp > *llp_l) {
-		/* re-read the LLPU value, as LLPL just wrapped */
-		*llp_u = dw_read(dev_cfg->shim, GPDMA_CHLLPU(channel));
-	}
+	*llp_u = dw_read(dev_cfg->shim, GPDMA_CHLLPU(channel));
 #endif
 }
 
@@ -157,7 +149,8 @@ static int intel_adsp_gpdma_config(const struct device *dev, uint32_t channel,
 	switch (cfg->channel_direction) {
 	case MEMORY_TO_PERIPHERAL:
 	case PERIPHERAL_TO_MEMORY:
-		LOG_DBG("%s: channel %d configuring llp for %x", dev->name, channel, cfg->dma_slot);
+		LOG_DBG("%s: dma %s configuring llp for %x",
+			__func__, dev->name, cfg->dma_slot);
 		intel_adsp_gpdma_llp_config(dev, channel, cfg->dma_slot);
 		break;
 	default:
@@ -170,7 +163,7 @@ static int intel_adsp_gpdma_config(const struct device *dev, uint32_t channel,
 static int intel_adsp_gpdma_start(const struct device *dev, uint32_t channel)
 {
 	int ret = 0;
-#if CONFIG_PM_DEVICE && CONFIG_SOC_SERIES_INTEL_ADSP_ACE
+#if CONFIG_PM_DEVICE && CONFIG_SOC_SERIES_INTEL_ACE
 	bool first_use = false;
 	enum pm_device_state state;
 
@@ -195,7 +188,7 @@ static int intel_adsp_gpdma_start(const struct device *dev, uint32_t channel)
 		intel_adsp_gpdma_llp_disable(dev, channel);
 	}
 
-#if CONFIG_PM_DEVICE && CONFIG_SOC_SERIES_INTEL_ADSP_ACE
+#if CONFIG_PM_DEVICE && CONFIG_SOC_SERIES_INTEL_ACE
 	/* Device usage is counted by the calls of dw_dma_start and dw_dma_stop. For the first use,
 	 * we need to make sure that the pm_device_runtime_get and pm_device_runtime_put functions
 	 * calls are balanced.
@@ -254,7 +247,7 @@ static void intel_adsp_gpdma_clock_enable(const struct device *dev)
 	uint32_t reg = dev_cfg->shim + GPDMA_CTL_OFFSET;
 	uint32_t val;
 
-	if (IS_ENABLED(CONFIG_SOC_SERIES_INTEL_ADSP_ACE)) {
+	if (IS_ENABLED(CONFIG_SOC_SERIES_INTEL_ACE)) {
 		val = sys_read32(reg) | GPDMA_CTL_DCGD;
 	} else {
 		val = GPDMA_CTL_FDCGB;
@@ -266,7 +259,7 @@ static void intel_adsp_gpdma_clock_enable(const struct device *dev)
 #ifdef CONFIG_PM_DEVICE
 static void intel_adsp_gpdma_clock_disable(const struct device *dev)
 {
-#ifdef CONFIG_SOC_SERIES_INTEL_ADSP_ACE
+#ifdef CONFIG_SOC_SERIES_INTEL_ACE
 	const struct intel_adsp_gpdma_cfg *const dev_cfg = dev->config;
 	uint32_t reg = dev_cfg->shim + GPDMA_CTL_OFFSET;
 	uint32_t val = sys_read32(reg) & ~GPDMA_CTL_DCGD;
@@ -279,7 +272,7 @@ static void intel_adsp_gpdma_clock_disable(const struct device *dev)
 static void intel_adsp_gpdma_claim_ownership(const struct device *dev)
 {
 #ifdef CONFIG_DMA_INTEL_ADSP_GPDMA_NEED_CONTROLLER_OWNERSHIP
-#ifdef CONFIG_SOC_SERIES_INTEL_ADSP_ACE
+#ifdef CONFIG_SOC_SERIES_INTEL_ACE
 	const struct intel_adsp_gpdma_cfg *const dev_cfg = dev->config;
 	uint32_t reg = dev_cfg->shim + GPDMA_CTL_OFFSET;
 	uint32_t val = sys_read32(reg) | GPDMA_OSEL(0x3);
@@ -289,7 +282,7 @@ static void intel_adsp_gpdma_claim_ownership(const struct device *dev)
 	sys_write32(LPGPDMA_CHOSEL_FLAG | LPGPDMA_CTLOSEL_FLAG, DSP_INIT_LPGPDMA(0));
 	sys_write32(LPGPDMA_CHOSEL_FLAG | LPGPDMA_CTLOSEL_FLAG, DSP_INIT_LPGPDMA(1));
 	ARG_UNUSED(dev);
-#endif /* CONFIG_SOC_SERIES_INTEL_ADSP_ACE */
+#endif /* CONFIG_SOC_SERIES_INTEL_ACE */
 #endif /* CONFIG_DMA_INTEL_ADSP_GPDMA_NEED_CONTROLLER_OWNERSHIP */
 }
 
@@ -297,7 +290,7 @@ static void intel_adsp_gpdma_claim_ownership(const struct device *dev)
 static void intel_adsp_gpdma_release_ownership(const struct device *dev)
 {
 #ifdef CONFIG_DMA_INTEL_ADSP_GPDMA_NEED_CONTROLLER_OWNERSHIP
-#ifdef CONFIG_SOC_SERIES_INTEL_ADSP_ACE
+#ifdef CONFIG_SOC_SERIES_INTEL_ACE
 	const struct intel_adsp_gpdma_cfg *const dev_cfg = dev->config;
 	uint32_t reg = dev_cfg->shim + GPDMA_CTL_OFFSET;
 	uint32_t val = sys_read32(reg) & ~GPDMA_OSEL(0x3);
@@ -306,12 +299,12 @@ static void intel_adsp_gpdma_release_ownership(const struct device *dev)
 	/* CHECKME: Do CAVS platforms set ownership over DMA,
 	 * if yes, add support for it releasing.
 	 */
-#endif /* CONFIG_SOC_SERIES_INTEL_ADSP_ACE */
+#endif /* CONFIG_SOC_SERIES_INTEL_ACE */
 #endif /* CONFIG_DMA_INTEL_ADSP_GPDMA_NEED_CONTROLLER_OWNERSHIP */
 }
 #endif
 
-#ifdef CONFIG_SOC_SERIES_INTEL_ADSP_ACE
+#ifdef CONFIG_SOC_SERIES_INTEL_ACE
 static int intel_adsp_gpdma_enable(const struct device *dev)
 {
 	const struct intel_adsp_gpdma_cfg *const dev_cfg = dev->config;
@@ -327,7 +320,6 @@ static int intel_adsp_gpdma_enable(const struct device *dev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_DEVICE
 static int intel_adsp_gpdma_disable(const struct device *dev)
 {
 	const struct intel_adsp_gpdma_cfg *const dev_cfg = dev->config;
@@ -336,20 +328,20 @@ static int intel_adsp_gpdma_disable(const struct device *dev)
 	sys_write32(sys_read32(reg) & ~SHIM_CLKCTL_LPGPDMA_SPA, reg);
 	return 0;
 }
-#endif /* CONFIG_PM_DEVICE */
-#endif /* CONFIG_SOC_SERIES_INTEL_ADSP_ACE */
+#endif
 
 static int intel_adsp_gpdma_power_on(const struct device *dev)
 {
 	const struct intel_adsp_gpdma_cfg *const dev_cfg = dev->config;
 	int ret;
 
-#ifdef CONFIG_SOC_SERIES_INTEL_ADSP_ACE
+#ifdef CONFIG_SOC_SERIES_INTEL_ACE
 	/* Power up */
 	ret = intel_adsp_gpdma_enable(dev);
 
 	if (ret != 0) {
-		LOG_ERR("%s: failed to initialize", dev->name);
+		LOG_ERR("%s: dma %s failed to initialize", __func__,
+			dev->name);
 		goto out;
 	}
 #endif
@@ -363,14 +355,16 @@ static int intel_adsp_gpdma_power_on(const struct device *dev)
 	/* Disable all channels and Channel interrupts */
 	ret = dw_dma_setup(dev);
 	if (ret != 0) {
-		LOG_ERR("%s: failed to initialize", dev->name);
+		LOG_ERR("%s: dma %s failed to initialize", __func__,
+			dev->name);
 		goto out;
 	}
 
 	/* Configure interrupts */
 	dev_cfg->dw_cfg.irq_config();
 
-	LOG_INF("%s: initialized", dev->name);
+	LOG_INF("%s: dma %s initialized", __func__,
+		dev->name);
 
 out:
 	return 0;
@@ -379,18 +373,19 @@ out:
 #ifdef CONFIG_PM_DEVICE
 static int intel_adsp_gpdma_power_off(const struct device *dev)
 {
-	LOG_INF("%s: power off", dev->name);
+	LOG_INF("%s: dma %s power off", __func__,
+		dev->name);
 	/* Enabling dynamic clock gating */
 	intel_adsp_gpdma_clock_disable(dev);
 
 	/* Relesing DMA ownership*/
 	intel_adsp_gpdma_release_ownership(dev);
-#ifdef CONFIG_SOC_SERIES_INTEL_ADSP_ACE
+#ifdef CONFIG_SOC_SERIES_INTEL_ACE
 	/* Power down */
 	return intel_adsp_gpdma_disable(dev);
 #else
 	return 0;
-#endif /* CONFIG_SOC_SERIES_INTEL_ADSP_ACE */
+#endif /* CONFIG_SOC_SERIES_INTEL_ACE */
 }
 #endif /* CONFIG_PM_DEVICE */
 
@@ -431,7 +426,7 @@ int intel_adsp_gpdma_get_attribute(const struct device *dev, uint32_t type, uint
 	return 0;
 }
 
-#ifdef CONFIG_SOC_SERIES_INTEL_ADSP_ACE
+#ifdef CONFIG_SOC_SERIES_INTEL_ACE
 static inline void ace_gpdma_intc_unmask(void)
 {
 	ACE_DINT[0].ie[ACE_INTL_GPDMA] = BIT(0);
@@ -440,15 +435,38 @@ static inline void ace_gpdma_intc_unmask(void)
 static inline void ace_gpdma_intc_unmask(void) {}
 #endif
 
+
+int intel_adsp_gpdma_init(const struct device *dev)
+{
+	struct dw_dma_dev_data *const dev_data = dev->data;
+
+	/* Setup context and atomics for channels */
+	dev_data->dma_ctx.magic = DMA_MAGIC;
+	dev_data->dma_ctx.dma_channels = DW_MAX_CHAN;
+	dev_data->dma_ctx.atomic = dev_data->channels_atomic;
+
+	ace_gpdma_intc_unmask();
+
+#if CONFIG_PM_DEVICE && CONFIG_SOC_SERIES_INTEL_ACE
+	if (pm_device_on_power_domain(dev)) {
+		pm_device_init_off(dev);
+	} else {
+		pm_device_init_suspended(dev);
+	}
+
+	return 0;
+#else
+	return intel_adsp_gpdma_power_on(dev);
+#endif
+}
+#ifdef CONFIG_PM_DEVICE
 static int gpdma_pm_action(const struct device *dev, enum pm_device_action action)
 {
 	switch (action) {
 	case PM_DEVICE_ACTION_RESUME:
 		return intel_adsp_gpdma_power_on(dev);
 	case PM_DEVICE_ACTION_SUSPEND:
-#ifdef CONFIG_PM_DEVICE
 		return intel_adsp_gpdma_power_off(dev);
-#endif
 	/* ON and OFF actions are used only by the power domain to change internal power status of
 	 * the device. OFF state mean that device and its power domain are disabled, SUSPEND mean
 	 * that device is power off but domain is already power on.
@@ -462,21 +480,9 @@ static int gpdma_pm_action(const struct device *dev, enum pm_device_action actio
 
 	return 0;
 }
+#endif
 
-int intel_adsp_gpdma_init(const struct device *dev)
-{
-	struct dw_dma_dev_data *const dev_data = dev->data;
-
-	/* Setup context and atomics for channels */
-	dev_data->dma_ctx.magic = DMA_MAGIC;
-	dev_data->dma_ctx.dma_channels = DW_MAX_CHAN;
-	dev_data->dma_ctx.atomic = dev_data->channels_atomic;
-
-	ace_gpdma_intc_unmask();
-	return pm_device_driver_init(dev, gpdma_pm_action);
-}
-
-static DEVICE_API(dma, intel_adsp_gpdma_driver_api) = {
+static const struct dma_driver_api intel_adsp_gpdma_driver_api = {
 	.config = intel_adsp_gpdma_config,
 	.reload = intel_adsp_gpdma_copy,
 	.start = intel_adsp_gpdma_start,

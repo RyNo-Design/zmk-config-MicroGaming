@@ -23,7 +23,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(gpio_mcp23xxx);
 
-#define MCP23XXX_RESET_TIME_US 2
+#define MCP23XXX_RESET_TIME_US 1
 
 /**
  * @brief Reads given register from mcp23xxx.
@@ -171,7 +171,6 @@ static int setup_pin_pull(const struct device *dev, uint32_t pin, int flags)
 static int mcp23xxx_pin_cfg(const struct device *dev, gpio_pin_t pin, gpio_flags_t flags)
 {
 	struct mcp23xxx_drv_data *drv_data = dev->data;
-	const struct mcp23xxx_config *config = dev->config;
 	int ret;
 
 	if (k_is_in_isr()) {
@@ -180,8 +179,7 @@ static int mcp23xxx_pin_cfg(const struct device *dev, gpio_pin_t pin, gpio_flags
 
 	k_sem_take(&drv_data->lock, K_FOREVER);
 
-	if ((bool)(flags & GPIO_SINGLE_ENDED) != config->is_open_drain ||
-	    (bool)(flags & GPIO_LINE_OPEN_DRAIN) != config->is_open_drain) {
+	if ((flags & GPIO_SINGLE_ENDED) != 0U) {
 		ret = -ENOTSUP;
 		goto done;
 	}
@@ -325,9 +323,6 @@ static int mcp23xxx_pin_interrupt_configure(const struct device *dev, gpio_pin_t
 			/* can't happen */
 			ret = -ENOTSUP;
 			goto done;
-		default:
-			ret = -EINVAL;
-			goto done;
 		}
 		break;
 
@@ -348,9 +343,6 @@ static int mcp23xxx_pin_interrupt_configure(const struct device *dev, gpio_pin_t
 			drv_data->rising_edge_ints |= BIT(pin);
 			drv_data->falling_edge_ints |= BIT(pin);
 			break;
-		default:
-			ret = -EINVAL;
-			goto done;
 		}
 		break;
 	}
@@ -420,13 +412,8 @@ static void mcp23xxx_work_handler(struct k_work *work)
 	}
 
 	if (!intf) {
-		/* Probable causes:
-		 * - REG_GPIO was read from somewhere else before the interrupt handler had a chance
-		 *   to run
-		 * - Even though the datasheet says differently, reading INTCAP while a level
-		 *   interrupt is active briefly (~2ns) causes the interrupt line to go high and
-		 *   low again. This causes a second ISR to be scheduled, which then won't
-		 *   find any active interrupts if the callback has disabled the level interrupt.
+		/* Probable cause: REG_GPIO was read from somewhere else before the interrupt
+		 * handler had a chance to run
 		 */
 		LOG_ERR("Spurious interrupt");
 		goto fail;
@@ -464,7 +451,7 @@ static void mcp23xxx_int_gpio_handler(const struct device *port, struct gpio_cal
 	k_work_submit(&drv_data->work);
 }
 
-DEVICE_API(gpio, gpio_mcp23xxx_api_table) = {
+const struct gpio_driver_api gpio_mcp23xxx_api_table = {
 	.pin_configure = mcp23xxx_pin_cfg,
 	.port_get_raw = mcp23xxx_port_get_raw,
 	.port_set_masked_raw = mcp23xxx_port_set_masked_raw,

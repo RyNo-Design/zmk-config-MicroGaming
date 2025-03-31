@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* Please keep in sync with cmake/linker_script/common/kobject-data.cmake */
-
 #ifdef CONFIG_USERSPACE
 
 	z_kobject_data_begin = .;
@@ -32,7 +30,7 @@
 	 */
 
 #if defined(LINKER_ZEPHYR_PREBUILT)
-#include <zephyr/linker-kobject-prebuilt-data.h>
+#include <linker-kobject-prebuilt-data.h>
 
 #ifdef CONFIG_DYNAMIC_OBJECTS
 	/* This is produced by gperf. Put a place holder here
@@ -47,7 +45,7 @@
 #endif /* LINKER_ZEPHYR_PREBUILT */
 
 #if defined(LINKER_ZEPHYR_FINAL)
-#include <zephyr/linker-kobject-prebuilt-data.h>
+#include <linker-kobject-prebuilt-data.h>
 #ifdef KOBJECT_DATA_ALIGN
 	. = ALIGN(KOBJECT_DATA_ALIGN);
 

@@ -1,7 +1,7 @@
-.. zephyr:code-sample:: npm1300_ek
-   :name: nPM1300 EK
+.. _npm1300_ek_sample:
 
-   Interact with the nPM1300 PMIC using the shell interface.
+nPM1300 EK sample
+#################
 
 Overview
 ********
@@ -28,7 +28,7 @@ building for the nRF52 DK, the following command can be used:
 
 .. zephyr-app-commands::
    :zephyr-app: samples/shields/npm1300_ek
-   :board: nrf52dk/nrf52832
+   :board: nrf52dk_nrf52832
    :goals: build
    :compact:
 

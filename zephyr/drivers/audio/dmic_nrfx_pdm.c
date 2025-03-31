@@ -8,28 +8,17 @@
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <soc.h>
-#include <dmm.h>
 #include <nrfx_pdm.h>
 
 #include <zephyr/logging/log.h>
 #include <zephyr/irq.h>
 LOG_MODULE_REGISTER(dmic_nrfx_pdm, CONFIG_AUDIO_DMIC_LOG_LEVEL);
 
-#if CONFIG_SOC_SERIES_NRF54HX
-#define DMIC_NRFX_CLOCK_FREQ MHZ(16)
-#define DMIC_NRFX_CLOCK_FACTOR 8192
-#else
-#define DMIC_NRFX_CLOCK_FREQ MHZ(32)
-#define DMIC_NRFX_CLOCK_FACTOR 4096
-#endif
-
 struct dmic_nrfx_pdm_drv_data {
-	const nrfx_pdm_t *pdm;
 	struct onoff_manager *clk_mgr;
 	struct onoff_client clk_cli;
 	struct k_mem_slab *mem_slab;
 	uint32_t block_size;
-	struct k_msgq mem_slab_queue;
 	struct k_msgq rx_queue;
 	bool request_clock : 1;
 	bool configured    : 1;
@@ -46,7 +35,6 @@ struct dmic_nrfx_pdm_drv_cfg {
 		PCLK32M_HFXO,
 		ACLK
 	} clk_src;
-	void *mem_reg;
 };
 
 static void free_buffer(struct dmic_nrfx_pdm_drv_data *drv_data, void *buffer)
@@ -55,45 +43,23 @@ static void free_buffer(struct dmic_nrfx_pdm_drv_data *drv_data, void *buffer)
 	LOG_DBG("Freed buffer %p", buffer);
 }
 
-static void stop_pdm(struct dmic_nrfx_pdm_drv_data *drv_data)
-{
-	drv_data->stopping = true;
-	nrfx_pdm_stop(drv_data->pdm);
-}
-
 static void event_handler(const struct device *dev, const nrfx_pdm_evt_t *evt)
 {
 	struct dmic_nrfx_pdm_drv_data *drv_data = dev->data;
-	const struct dmic_nrfx_pdm_drv_cfg *drv_cfg = dev->config;
 	int ret;
 	bool stop = false;
-	void *mem_slab_buffer;
 
 	if (evt->buffer_requested) {
 		void *buffer;
 		nrfx_err_t err;
 
-		ret = k_mem_slab_alloc(drv_data->mem_slab, &mem_slab_buffer, K_NO_WAIT);
+		ret = k_mem_slab_alloc(drv_data->mem_slab, &buffer, K_NO_WAIT);
 		if (ret < 0) {
 			LOG_ERR("Failed to allocate buffer: %d", ret);
 			stop = true;
 		} else {
-			ret = dmm_buffer_in_prepare(drv_cfg->mem_reg, mem_slab_buffer,
-						    drv_data->block_size, &buffer);
-			if (ret < 0) {
-				LOG_ERR("Failed to prepare buffer: %d", ret);
-				free_buffer(drv_data, mem_slab_buffer);
-				stop_pdm(drv_data);
-				return;
-			}
-			ret = k_msgq_put(&drv_data->mem_slab_queue, &mem_slab_buffer, K_NO_WAIT);
-			if (ret < 0) {
-				LOG_ERR("Unable to put mem slab in queue");
-				free_buffer(drv_data, mem_slab_buffer);
-				stop_pdm(drv_data);
-				return;
-			}
-			err = nrfx_pdm_buffer_set(drv_data->pdm, buffer, drv_data->block_size / 2);
+			err = nrfx_pdm_buffer_set(buffer,
+						  drv_data->block_size / 2);
 			if (err != NRFX_SUCCESS) {
 				LOG_ERR("Failed to set buffer: 0x%08x", err);
 				stop = true;
@@ -103,18 +69,7 @@ static void event_handler(const struct device *dev, const nrfx_pdm_evt_t *evt)
 
 	if (drv_data->stopping) {
 		if (evt->buffer_released) {
-			ret = k_msgq_get(&drv_data->mem_slab_queue, &mem_slab_buffer, K_NO_WAIT);
-			if (ret < 0) {
-				LOG_ERR("No buffers to free");
-				return;
-			}
-			ret = dmm_buffer_in_release(drv_cfg->mem_reg, mem_slab_buffer,
-						    drv_data->block_size, evt->buffer_released);
-			if (ret < 0) {
-				LOG_ERR("Failed to release buffer: %d", ret);
-				return;
-			}
-			free_buffer(drv_data, mem_slab_buffer);
+			free_buffer(drv_data, evt->buffer_released);
 		}
 
 		if (drv_data->active) {
@@ -124,38 +79,23 @@ static void event_handler(const struct device *dev, const nrfx_pdm_evt_t *evt)
 			}
 		}
 	} else if (evt->buffer_released) {
-		ret = k_msgq_get(&drv_data->mem_slab_queue, &mem_slab_buffer, K_NO_WAIT);
-		if (ret < 0) {
-			LOG_ERR("No buffers to free");
-			stop_pdm(drv_data);
-			return;
-		}
-		ret = dmm_buffer_in_release(drv_cfg->mem_reg, mem_slab_buffer,
-					    drv_data->block_size, evt->buffer_released);
-		if (ret < 0) {
-			LOG_ERR("Failed to release buffer: %d", ret);
-			stop_pdm(drv_data);
-			return;
-		}
 		ret = k_msgq_put(&drv_data->rx_queue,
-				 &mem_slab_buffer,
+				 &evt->buffer_released,
 				 K_NO_WAIT);
 		if (ret < 0) {
 			LOG_ERR("No room in RX queue");
 			stop = true;
-			free_buffer(drv_data, mem_slab_buffer);
+
+			free_buffer(drv_data, evt->buffer_released);
 		} else {
 			LOG_DBG("Queued buffer %p", evt->buffer_released);
 		}
 	}
-	if (stop) {
-		stop_pdm(drv_data);
-	}
-}
 
-static bool is_in_freq_range(uint32_t freq, const struct dmic_cfg *pdm_cfg)
-{
-	return freq >= pdm_cfg->io.min_pdm_clk_freq && freq <= pdm_cfg->io.max_pdm_clk_freq;
+	if (stop) {
+		drv_data->stopping = true;
+		nrfx_pdm_stop();
+	}
 }
 
 static bool is_better(uint32_t freq,
@@ -192,38 +132,7 @@ static bool check_pdm_frequencies(const struct dmic_nrfx_pdm_drv_cfg *drv_cfg,
 	uint32_t req_rate = pdm_cfg->streams[0].pcm_rate;
 	bool better_found = false;
 
-#if NRF_PDM_HAS_PRESCALER
-	uint32_t src_freq = 32 * 1000 * 1000UL;
-	uint32_t req_freq = req_rate * ratio;
-	uint32_t prescaler = src_freq / req_freq;
-	uint32_t act_freq = src_freq / prescaler;
-
-	if (is_in_freq_range(act_freq, pdm_cfg) &&
-	    is_better(act_freq, ratio, req_rate, best_diff, best_rate, best_freq)) {
-		config->prescaler = prescaler;
-
-		better_found = true;
-	}
-
-	/* Stop if an exact rate match is found. */
-	if (*best_diff == 0) {
-		return true;
-	}
-
-	/* Prescaler value is rounded down by default,
-	 * thus value rounded up should be checked as well.
-	 */
-	prescaler += 1;
-	act_freq  = src_freq / prescaler;
-
-	if (is_in_freq_range(act_freq, pdm_cfg) &&
-	    is_better(act_freq, ratio, req_rate, best_diff, best_rate, best_freq)) {
-		config->prescaler = prescaler;
-
-		better_found = true;
-	}
-#else
-	if (IS_ENABLED(CONFIG_SOC_SERIES_NRF53X) || IS_ENABLED(CONFIG_SOC_SERIES_NRF54HX)) {
+	if (IS_ENABLED(CONFIG_SOC_SERIES_NRF53X)) {
 		const uint32_t src_freq =
 			(NRF_PDM_HAS_MCLKCONFIG && drv_cfg->clk_src == ACLK)
 			/* The DMIC_NRFX_PDM_DEVICE() macro contains build
@@ -235,13 +144,9 @@ static bool check_pdm_frequencies(const struct dmic_nrfx_pdm_drv_cfg *drv_cfg,
 			 * not defined (this expression will be eventually
 			 * optimized away then).
 			 */
-			/* TODO : PS does not provide correct formula for nRF54H20 PDM_CLK.
-			 * Assume that master clock source frequency is 8 MHz. Remove once
-			 * correct formula is found.
-			 */
 			? DT_PROP_OR(DT_NODELABEL(clock), hfclkaudio_frequency,
 				     0)
-			: DMIC_NRFX_CLOCK_FREQ;
+			: 32*1000*1000UL;
 		uint32_t req_freq = req_rate * ratio;
 		/* As specified in the nRF5340 PS:
 		 *
@@ -253,9 +158,11 @@ static bool check_pdm_frequencies(const struct dmic_nrfx_pdm_drv_cfg *drv_cfg,
 						 (src_freq + req_freq / 2));
 		uint32_t act_freq = src_freq / (1048576 / clk_factor);
 
-		if (is_in_freq_range(act_freq, pdm_cfg) &&
-		    is_better(act_freq, ratio, req_rate, best_diff, best_rate, best_freq)) {
-			config->clock_freq = clk_factor * DMIC_NRFX_CLOCK_FACTOR;
+		if (act_freq >= pdm_cfg->io.min_pdm_clk_freq &&
+		    act_freq <= pdm_cfg->io.max_pdm_clk_freq &&
+		    is_better(act_freq, ratio, req_rate,
+			      best_diff, best_rate, best_freq)) {
+			config->clock_freq = clk_factor * 4096;
 
 			better_found = true;
 		}
@@ -300,7 +207,7 @@ static bool check_pdm_frequencies(const struct dmic_nrfx_pdm_drv_cfg *drv_cfg,
 				better_found = true;
 			}
 
-			/* Since frequencies are in ascending order, stop
+			/* Since frequencies are are in ascending order, stop
 			 * checking next ones for the current ratio after
 			 * resulting PCM rate goes above the one requested.
 			 */
@@ -309,7 +216,6 @@ static bool check_pdm_frequencies(const struct dmic_nrfx_pdm_drv_cfg *drv_cfg,
 			}
 		}
 	}
-#endif /* NRF_PDM_HAS_PRESCALER */
 
 	return better_found;
 }
@@ -330,26 +236,8 @@ static bool find_suitable_clock(const struct dmic_nrfx_pdm_drv_cfg *drv_cfg,
 		uint8_t         ratio_val;
 		nrf_pdm_ratio_t ratio_enum;
 	} ratios[] = {
-#if defined(PDM_RATIO_RATIO_Ratio32)
-		{ 32, NRF_PDM_RATIO_32X },
-#endif
-#if defined(PDM_RATIO_RATIO_Ratio48)
-		{ 48, NRF_PDM_RATIO_48X },
-#endif
-#if defined(PDM_RATIO_RATIO_Ratio50)
-		{ 50, NRF_PDM_RATIO_50X },
-#endif
-		{ 64, NRF_PDM_RATIO_64X },
-		{ 80, NRF_PDM_RATIO_80X },
-#if defined(PDM_RATIO_RATIO_Ratio96)
-		{ 96, NRF_PDM_RATIO_96X },
-#endif
-#if defined(PDM_RATIO_RATIO_Ratio100)
-		{ 100, NRF_PDM_RATIO_100X },
-#endif
-#if defined(PDM_RATIO_RATIO_Ratio128)
-		{ 128, NRF_PDM_RATIO_128X }
-#endif
+		{  64, NRF_PDM_RATIO_64X },
+		{  80, NRF_PDM_RATIO_80X }
 	};
 
 	for (int r = 0; best_diff != 0 && r < ARRAY_SIZE(ratios); ++r) {
@@ -424,6 +312,7 @@ static int dmic_nrfx_pdm_configure(const struct device *dev,
 
 	channel->act_num_streams = 1;
 	channel->act_chan_map_hi = 0;
+	channel->act_chan_map_lo = def_map;
 
 	if (channel->req_num_streams != 1 ||
 	    channel->req_num_chan > 2 ||
@@ -438,7 +327,7 @@ static int dmic_nrfx_pdm_configure(const struct device *dev,
 	/* If either rate or width is 0, the stream is to be disabled. */
 	if (stream->pcm_rate == 0 || stream->pcm_width == 0) {
 		if (drv_data->configured) {
-			nrfx_pdm_uninit(drv_data->pdm);
+			nrfx_pdm_uninit();
 			drv_data->configured = false;
 		}
 
@@ -454,13 +343,9 @@ static int dmic_nrfx_pdm_configure(const struct device *dev,
 	nrfx_cfg.mode = channel->req_num_chan == 1
 		      ? NRF_PDM_MODE_MONO
 		      : NRF_PDM_MODE_STEREO;
-	if (channel->req_chan_map_lo == def_map) {
-		nrfx_cfg.edge = NRF_PDM_EDGE_LEFTFALLING;
-		channel->act_chan_map_lo = def_map;
-	} else {
-		nrfx_cfg.edge = NRF_PDM_EDGE_LEFTRISING;
-		channel->act_chan_map_lo = alt_map;
-	}
+	nrfx_cfg.edge = channel->req_chan_map_lo == def_map
+		      ? NRF_PDM_EDGE_LEFTFALLING
+		      : NRF_PDM_EDGE_LEFTRISING;
 #if NRF_PDM_HAS_MCLKCONFIG
 	nrfx_cfg.mclksrc = drv_cfg->clk_src == ACLK
 			 ? NRF_PDM_MCLKSRC_ACLK
@@ -472,11 +357,11 @@ static int dmic_nrfx_pdm_configure(const struct device *dev,
 	}
 
 	if (drv_data->configured) {
-		nrfx_pdm_uninit(drv_data->pdm);
+		nrfx_pdm_uninit();
 		drv_data->configured = false;
 	}
 
-	err = nrfx_pdm_init(drv_data->pdm, &nrfx_cfg, drv_cfg->event_handler);
+	err = nrfx_pdm_init(&nrfx_cfg, drv_cfg->event_handler);
 	if (err != NRFX_SUCCESS) {
 		LOG_ERR("Failed to initialize PDM: 0x%08x", err);
 		return -EIO;
@@ -500,7 +385,7 @@ static int start_transfer(struct dmic_nrfx_pdm_drv_data *drv_data)
 	nrfx_err_t err;
 	int ret;
 
-	err = nrfx_pdm_start(drv_data->pdm);
+	err = nrfx_pdm_start();
 	if (err == NRFX_SUCCESS) {
 		return 0;
 	}
@@ -575,7 +460,7 @@ static int dmic_nrfx_pdm_trigger(const struct device *dev,
 	case DMIC_TRIGGER_STOP:
 		if (drv_data->active) {
 			drv_data->stopping = true;
-			nrfx_pdm_stop(drv_data->pdm);
+			nrfx_pdm_stop();
 		}
 		break;
 
@@ -614,7 +499,7 @@ static int dmic_nrfx_pdm_read(const struct device *dev,
 
 	ret = k_msgq_get(&drv_data->rx_queue, buffer, SYS_TIMEOUT_MS(timeout));
 	if (ret != 0) {
-		LOG_DBG("No audio data to be read");
+		LOG_ERR("No audio data to be read");
 	} else {
 		LOG_DBG("Released buffer %p", *buffer);
 
@@ -624,7 +509,6 @@ static int dmic_nrfx_pdm_read(const struct device *dev,
 	return ret;
 }
 
-#if CONFIG_CLOCK_CONTROL_NRF
 static void init_clock_manager(const struct device *dev)
 {
 	struct dmic_nrfx_pdm_drv_data *drv_data = dev->data;
@@ -644,7 +528,6 @@ static void init_clock_manager(const struct device *dev)
 	drv_data->clk_mgr = z_nrf_clock_control_get_onoff(subsys);
 	__ASSERT_NO_MSG(drv_data->clk_mgr != NULL);
 }
-#endif
 
 static const struct _dmic_ops dmic_ops = {
 	.configure = dmic_nrfx_pdm_configure,
@@ -657,28 +540,21 @@ static const struct _dmic_ops dmic_ops = {
 
 #define PDM_NRFX_DEVICE(idx)						     \
 	static void *rx_msgs##idx[DT_PROP(PDM(idx), queue_size)];	     \
-	static void *mem_slab_msgs##idx[DT_PROP(PDM(idx), queue_size)];	     \
 	static struct dmic_nrfx_pdm_drv_data dmic_nrfx_pdm_data##idx;	     \
-	static const nrfx_pdm_t dmic_nrfx_pdm##idx = NRFX_PDM_INSTANCE(idx); \
 	static int pdm_nrfx_init##idx(const struct device *dev)		     \
 	{								     \
 		IRQ_CONNECT(DT_IRQN(PDM(idx)), DT_IRQ(PDM(idx), priority),   \
-			    nrfx_isr, nrfx_pdm_##idx##_irq_handler, 0);      \
+			    nrfx_isr, nrfx_pdm_irq_handler, 0);		     \
 		const struct dmic_nrfx_pdm_drv_cfg *drv_cfg = dev->config;   \
 		int err = pinctrl_apply_state(drv_cfg->pcfg,		     \
 					      PINCTRL_STATE_DEFAULT);	     \
 		if (err < 0) {						     \
 			return err;					     \
 		}							     \
-		dmic_nrfx_pdm_data##idx.pdm = &dmic_nrfx_pdm##idx;	     \
 		k_msgq_init(&dmic_nrfx_pdm_data##idx.rx_queue,		     \
 			    (char *)rx_msgs##idx, sizeof(void *),	     \
 			    ARRAY_SIZE(rx_msgs##idx));			     \
-		k_msgq_init(&dmic_nrfx_pdm_data##idx.mem_slab_queue,	     \
-			    (char *)mem_slab_msgs##idx, sizeof(void *),	     \
-			    ARRAY_SIZE(mem_slab_msgs##idx));		     \
-		IF_ENABLED(CONFIG_CLOCK_CONTROL_NRF,			     \
-			   (init_clock_manager(dev);))			     \
+		init_clock_manager(dev);				     \
 		return 0;						     \
 	}								     \
 	static void event_handler##idx(const nrfx_pdm_evt_t *evt)	     \
@@ -693,7 +569,6 @@ static const struct _dmic_ops dmic_ops = {
 		.nrfx_def_cfg.skip_psel_cfg = true,			     \
 		.pcfg = PINCTRL_DT_DEV_CONFIG_GET(PDM(idx)),		     \
 		.clk_src = PDM_CLK_SRC(idx),				     \
-		.mem_reg = DMM_DEV_TO_REG(PDM(idx)),			     \
 	};								     \
 	BUILD_ASSERT(PDM_CLK_SRC(idx) != ACLK || NRF_PDM_HAS_MCLKCONFIG,     \
 		"Clock source ACLK is not available.");			     \
@@ -707,14 +582,5 @@ static const struct _dmic_ops dmic_ops = {
 			 POST_KERNEL, CONFIG_AUDIO_DMIC_INIT_PRIORITY,	     \
 			 &dmic_ops);
 
-#ifdef CONFIG_HAS_HW_NRF_PDM0
+/* Existing SoCs only have one PDM instance. */
 PDM_NRFX_DEVICE(0);
-#endif
-
-#ifdef CONFIG_HAS_HW_NRF_PDM20
-PDM_NRFX_DEVICE(20);
-#endif
-
-#ifdef CONFIG_HAS_HW_NRF_PDM21
-PDM_NRFX_DEVICE(21);
-#endif

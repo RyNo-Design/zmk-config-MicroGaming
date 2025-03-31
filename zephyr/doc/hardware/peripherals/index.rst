@@ -16,33 +16,29 @@ Peripherals
    bbram.rst
    bc12.rst
    clock_control.rst
-   can/index.rst
+   canbus/index.rst
    charger.rst
-   comparator.rst
    coredump.rst
    counter.rst
    dac.rst
    dma.rst
    display/index.rst
-   eeprom/index.rst
+   eeprom.rst
    espi.rst
    entropy.rst
    edac/index.rst
    flash.rst
    fuel_gauge.rst
-   gnss.rst
    gpio.rst
-   haptics.rst
    hwinfo.rst
    i2c_eeprom_target.rst
    i3c.rst
    i2c.rst
    ipm.rst
+   kscan.rst
    led.rst
    mdio.rst
-   mipi_dbi.rst
    mipi_dsi.rst
-   mspi.rst
    mbox.rst
    pcie.rst
    peci.rst
@@ -53,9 +49,8 @@ Peripherals
    reset.rst
    retained_mem.rst
    sdhc.rst
-   sensor/index.rst
+   sensor.rst
    spi.rst
-   stepper.rst
    smbus.rst
    uart.rst
    usbc_vbus.rst

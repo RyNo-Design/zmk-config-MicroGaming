@@ -8,7 +8,6 @@ config CAN_STM32_BXCAN
 	bool "STM32 bxCAN driver"
 	default y
 	depends on DT_HAS_ST_STM32_BXCAN_ENABLED
-	select PINCTRL
 	help
 	  Enable STM32 bxCAN Driver.
 
@@ -53,7 +52,7 @@ config CAN_STM32_FDCAN
 	default y
 	depends on DT_HAS_ST_STM32_FDCAN_ENABLED
 	select CAN_MCAN
-	select PINCTRL
+	select USE_STM32_LL_RCC
 
 if CAN_STM32_FDCAN
 
@@ -80,4 +79,4 @@ config CAN_STM32H7_FDCAN
 	default y
 	depends on DT_HAS_ST_STM32H7_FDCAN_ENABLED
 	select CAN_MCAN
-	select PINCTRL
+	select USE_STM32_LL_RCC

@@ -68,9 +68,22 @@ static const char *e1000_reg_to_string(enum e1000_reg_t r)
 	return NULL;
 }
 
-static struct net_if *get_iface(struct e1000_dev *ctx)
+static struct net_if *get_iface(struct e1000_dev *ctx, uint16_t vlan_tag)
 {
+#if defined(CONFIG_NET_VLAN)
+	struct net_if *iface;
+
+	iface = net_eth_get_vlan_iface(ctx->iface, vlan_tag);
+	if (!iface) {
+		return ctx->iface;
+	}
+
+	return iface;
+#else
+	ARG_UNUSED(vlan_tag);
+
 	return ctx->iface;
+#endif
 }
 
 static enum ethernet_hw_caps e1000_caps(const struct device *dev)
@@ -174,6 +187,7 @@ static void e1000_isr(const struct device *ddev)
 {
 	struct e1000_dev *dev = ddev->data;
 	uint32_t icr = ior32(dev, ICR); /* Cleared upon read */
+	uint16_t vlan_tag = NET_VLAN_TAG_UNSPEC;
 
 	icr &= ~(ICR_TXDW | ICR_TXQE);
 
@@ -183,9 +197,31 @@ static void e1000_isr(const struct device *ddev)
 		icr &= ~ICR_RXO;
 
 		if (pkt) {
-			net_recv_data(get_iface(dev), pkt);
+#if defined(CONFIG_NET_VLAN)
+			struct net_eth_hdr *hdr = NET_ETH_HDR(pkt);
+
+			if (ntohs(hdr->type) == NET_ETH_PTYPE_VLAN) {
+				struct net_eth_vlan_hdr *hdr_vlan =
+					(struct net_eth_vlan_hdr *)
+					NET_ETH_HDR(pkt);
+
+				net_pkt_set_vlan_tci(
+					pkt, ntohs(hdr_vlan->vlan.tci));
+				vlan_tag = net_pkt_vlan_tag(pkt);
+
+#if CONFIG_NET_TC_RX_COUNT > 1
+				enum net_priority prio;
+
+				prio = net_vlan2priority(
+						net_pkt_vlan_priority(pkt));
+				net_pkt_set_priority(pkt, prio);
+#endif
+			}
+#endif /* CONFIG_NET_VLAN */
+
+			net_recv_data(get_iface(dev, vlan_tag), pkt);
 		} else {
-			eth_stats_update_errors_rx(get_iface(dev));
+			eth_stats_update_errors_rx(get_iface(dev, vlan_tag));
 		}
 	}
 
@@ -255,6 +291,10 @@ static void e1000_iface_init(struct net_if *iface)
 	struct e1000_dev *dev = net_if_get_device(iface)->data;
 	const struct e1000_config *config = net_if_get_device(iface)->config;
 
+	/* For VLAN, this value is only used to get the correct L2 driver.
+	 * The iface pointer in device context should contain the main
+	 * interface if the VLANs are enabled.
+	 */
 	if (dev->iface == NULL) {
 		dev->iface = iface;
 
@@ -371,27 +411,27 @@ static int ptp_clock_e1000_rate_adjust(const struct device *dev, double ratio)
 	float val;
 
 	/* No change needed. */
-	if (ratio == 1.0) {
+	if (ratio == 1.0f) {
 		return 0;
 	}
 
 	ratio *= context->clk_ratio;
 
 	/* Limit possible ratio. */
-	if ((ratio > 1.0 + 1.0/(2.0 * hw_inc)) ||
-			(ratio < 1.0 - 1.0/(2.0 * hw_inc))) {
+	if ((ratio > 1.0f + 1.0f/(2 * hw_inc)) ||
+			(ratio < 1.0f - 1.0f/(2 * hw_inc))) {
 		return -EINVAL;
 	}
 
 	/* Save new ratio. */
 	context->clk_ratio = ratio;
 
-	if (ratio < 1.0) {
+	if (ratio < 1.0f) {
 		corr = hw_inc - 1;
-		val = 1.0 / (hw_inc * (1.0 - ratio));
-	} else if (ratio > 1.0) {
+		val = 1.0f / (hw_inc * (1.0f - ratio));
+	} else if (ratio > 1.0f) {
 		corr = hw_inc + 1;
-		val = 1.0 / (hw_inc * (ratio - 1.0));
+		val = 1.0f / (hw_inc * (ratio - 1.0f));
 	} else {
 		val = 0;
 		corr = hw_inc;
@@ -411,7 +451,7 @@ static int ptp_clock_e1000_rate_adjust(const struct device *dev, double ratio)
 	return 0;
 }
 
-static DEVICE_API(ptp_clock, api) = {
+static const struct ptp_clock_driver_api api = {
 	.set = ptp_clock_e1000_set,
 	.get = ptp_clock_e1000_get,
 	.adjust = ptp_clock_e1000_adjust,

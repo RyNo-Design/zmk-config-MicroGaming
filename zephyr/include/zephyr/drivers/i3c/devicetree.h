@@ -14,10 +14,9 @@
  * @{
  */
 
-#include <stdint.h>
-
 #include <zephyr/device.h>
-#include <zephyr/devicetree.h>
+#include <zephyr/kernel.h>
+#include <zephyr/types.h>
 #include <zephyr/sys/util.h>
 
 #ifdef __cplusplus
@@ -43,9 +42,7 @@ extern "C" {
  * @brief Structure initializer for i3c_device_id from devicetree instance
  *
  * This is equivalent to
- * @code{.c}
- * I3C_DEVICE_ID_DT(DT_DRV_INST(inst))
- * @endcode
+ * <tt>I3C_DEVICE_ID_DT(DT_DRV_INST(inst))</tt>.
  *
  * @param inst Devicetree instance number
  */
@@ -71,17 +68,13 @@ extern "C" {
 		       | DT_PROP_BY_IDX(node_id, reg, 2),		\
 		.init_dynamic_addr =					\
 			DT_PROP_OR(node_id, assigned_address, 0),	\
-		.supports_setaasa = DT_PROP(node_id, supports_setaasa), \
 	},
 
 /**
  * @brief Structure initializer for i3c_device_desc from devicetree instance
  *
  * This is equivalent to
- *
- * @code{.c}
- * I3C_DEVICE_DESC_DT(DT_DRV_INST(inst))
- * @endcode
+ * <tt>I3C_DEVICE_DESC_DT(DT_DRV_INST(inst))</tt>.
  *
  * @param inst Devicetree instance number
  */
@@ -91,7 +84,7 @@ extern "C" {
 /**
  * @brief Structure initializer for i3c_device_desc from devicetree
  *
- * This is mainly used by I3C_DEVICE_ARRAY_DT() to only
+ * This is mainly used by <tt>I3C_DEVICE_ARRAY_DT()</tt> to only
  * create a struct if and only if it is an I3C device.
  */
 #define I3C_DEVICE_DESC_DT_FILTERED(node_id)				\
@@ -117,9 +110,7 @@ extern "C" {
  * @brief Array initializer for a list of i3c_device_desc from devicetree instance
  *
  * This is equivalent to
- * @code{.c}
- * I3C_DEVICE_ARRAY_DT(DT_DRV_INST(inst))
- * @endcode
+ * <tt>I3C_DEVICE_ARRAY_DT(DT_DRV_INST(inst))</tt>.
  *
  * @param inst Devicetree instance number of the I3C controller
  */
@@ -135,7 +126,7 @@ extern "C" {
  *
  * @param init_fn Name of the init function of the driver.
  *
- * @param pm PM device resources reference (`NULL` if device does not use PM).
+ * @param pm PM device resources reference (NULL if device does not use PM).
  *
  * @param data Pointer to the device's private data.
  *
@@ -160,7 +151,7 @@ extern "C" {
  * @brief Like I3C_TARGET_DT_DEFINE() for an instance of a DT_DRV_COMPAT compatible
  *
  * @param inst instance number. This is replaced by
- * `DT_DRV_COMPAT(inst)` in the call to I3C_TARGET_DT_DEFINE().
+ * <tt>DT_DRV_COMPAT(inst)</tt> in the call to I3C_TARGET_DT_DEFINE().
  *
  * @param ... other parameters as expected by I3C_TARGET_DT_DEFINE().
  */
@@ -170,8 +161,9 @@ extern "C" {
 /**
  * @brief Structure initializer for i3c_i2c_device_desc from devicetree
  *
- * This helper macro expands to a static initializer for a i3c_i2c_device_desc
- * by reading the relevant bus and device data from the devicetree.
+ * This helper macro expands to a static initializer for a <tt>struct
+ * i3c_i2c_device_desc</tt> by reading the relevant bus and device data
+ * from the devicetree.
  *
  * @param node_id Devicetree node identifier for the I3C device whose
  *                struct i3c_i2c_device_desc to create an initializer for
@@ -187,9 +179,7 @@ extern "C" {
  * @brief Structure initializer for i3c_i2c_device_desc from devicetree instance
  *
  * This is equivalent to
- * @code{.c}
- * I3C_I2C_DEVICE_DESC_DT(DT_DRV_INST(inst))
- * @endcode
+ * <tt>I3C_I2C_DEVICE_DESC_DT(DT_DRV_INST(inst))</tt>.
  *
  * @param inst Devicetree instance number
  */
@@ -200,7 +190,7 @@ extern "C" {
 /**
  * @brief Structure initializer for i3c_i2c_device_desc from devicetree
  *
- * This is mainly used by I3C_I2C_DEVICE_ARRAY_DT() to only
+ * This is mainly used by <tt>I3C_I2C_DEVICE_ARRAY_DT()</tt> to only
  * create a struct if and only if it is an I2C device.
  */
 #define I3C_I2C_DEVICE_DESC_DT_FILTERED(node_id)			\
@@ -226,9 +216,7 @@ extern "C" {
  * @brief Array initializer for a list of i3c_i2c_device_desc from devicetree instance
  *
  * This is equivalent to
- * @code{.c}
- * I3C_I2C_DEVICE_ARRAY_DT(DT_DRV_INST(inst))
- * @endcode
+ * <tt>I3C_I2C_DEVICE_ARRAY_DT(DT_DRV_INST(inst))</tt>.
  *
  * @param inst Devicetree instance number of the I3C controller
  */

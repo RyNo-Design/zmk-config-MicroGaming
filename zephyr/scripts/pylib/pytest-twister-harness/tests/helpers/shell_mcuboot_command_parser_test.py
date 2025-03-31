@@ -4,7 +4,7 @@
 
 import textwrap
 
-from twister_harness.helpers.shell import ShellMCUbootArea, ShellMCUbootCommandParsed
+from twister_harness.helpers.shell import ShellMCUbootCommandParsed, ShellMCUbootArea
 
 
 def test_if_mcuboot_command_output_is_parsed_two_areas() -> None:

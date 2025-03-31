@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # Copyright (c) 2023 Intel Corporation
-# Copyright (c) 2024 Arm Limited (or its affiliates). All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 """
@@ -64,27 +63,13 @@ TESTDATA_1 = [
             '--device-testing',
             '--device-serial',
             'dummy',
-        ],
-        'When --device-testing is used with --device-serial' \
-        ' or --device-serial-pty, exactly one platform must' \
-        ' be specified'
-    ),
-    (
-        None,
-        None,
-        None,
-        [
-            '--device-testing',
-            '--device-serial',
-            'dummy',
             '--platform',
             'dummy_platform1',
             '--platform',
             'dummy_platform2'
         ],
         'When --device-testing is used with --device-serial' \
-        ' or --device-serial-pty, exactly one platform must' \
-        ' be specified'
+        ' or --device-serial-pty, only one platform is allowed'
     ),
 # Note the underscore.
     (
@@ -139,7 +124,6 @@ TESTDATA_1 = [
         'west runner without west flash',
         'west-flash without device-testing',
         'valgrind without executable',
-        'device serial without platform',
         'device serial with multiple platforms',
         'device flash with test without device testing',
         'shuffle-tests without subset',
@@ -226,7 +210,7 @@ def test_parse_arguments_warnings(caplog):
 
 
 TESTDATA_2 = [
-    (['--enable-size-report']),
+    (['--show-footprint']),
     (['--compare-report', 'dummy']),
 ]
 
@@ -259,14 +243,23 @@ def test_parse_arguments(zephyr_base, additional_args):
 
 TESTDATA_3 = [
     (
+        None,
+        mock.Mock(
+            generator_cmd='make',
+            generator='Unix Makefiles',
+            test_roots=None,
+            board_roots=None,
+            outdir=None,
+        )
+    ),
+    (
         mock.Mock(
             ninja=True,
             board_root=['dummy1', 'dummy2'],
             testsuite_root=[
                 os.path.join('dummy', 'path', "tests"),
                 os.path.join('dummy', 'path', "samples")
-            ],
-            outdir='dummy_abspath',
+            ]
         ),
         mock.Mock(
             generator_cmd='ninja',
@@ -286,8 +279,7 @@ TESTDATA_3 = [
             testsuite_root=[
                 os.path.join('dummy', 'path', "tests"),
                 os.path.join('dummy', 'path', "samples")
-            ],
-            outdir='dummy_abspath',
+            ]
         ),
         mock.Mock(
             generator_cmd='make',
@@ -307,22 +299,15 @@ TESTDATA_3 = [
     'options, expected_env',
     TESTDATA_3,
     ids=[
+        'no options',
         'ninja',
         'make'
     ]
 )
 def test_twisterenv_init(options, expected_env):
-    original_abspath = os.path.abspath
-
-    def mocked_abspath(path):
-        if path == 'dummy_abspath':
-            return 'dummy_abspath'
-        elif isinstance(path, mock.Mock):
-            return None
-        else:
-            return original_abspath(path)
-
-    with mock.patch('os.path.abspath', side_effect=mocked_abspath):
+    with mock.patch(
+            'os.path.abspath',
+            mock.Mock(return_value='dummy_abspath')):
         twister_env = twisterlib.environment.TwisterEnv(options=options)
 
     assert twister_env.generator_cmd == expected_env.generator_cmd
@@ -339,17 +324,9 @@ def test_twisterenv_discover():
         ninja=True
     )
 
-    original_abspath = os.path.abspath
+    abspath_mock = mock.Mock(return_value='dummy_abspath')
 
-    def mocked_abspath(path):
-        if path == 'dummy_abspath':
-            return 'dummy_abspath'
-        elif isinstance(path, mock.Mock):
-            return None
-        else:
-            return original_abspath(path)
-
-    with mock.patch('os.path.abspath', side_effect=mocked_abspath):
+    with mock.patch('os.path.abspath', abspath_mock):
         twister_env = twisterlib.environment.TwisterEnv(options=options)
 
     mock_datetime = mock.Mock(
@@ -443,17 +420,9 @@ def test_twisterenv_check_zephyr_version(
         ninja=True
     )
 
-    original_abspath = os.path.abspath
+    abspath_mock = mock.Mock(return_value='dummy_abspath')
 
-    def mocked_abspath(path):
-        if path == 'dummy_abspath':
-            return 'dummy_abspath'
-        elif isinstance(path, mock.Mock):
-            return None
-        else:
-            return original_abspath(path)
-
-    with mock.patch('os.path.abspath', side_effect=mocked_abspath):
+    with mock.patch('os.path.abspath', abspath_mock):
         twister_env = twisterlib.environment.TwisterEnv(options=options)
 
     with mock.patch('subprocess.run', mock.Mock(side_effect=mock_run)):
@@ -488,7 +457,7 @@ TESTDATA_5 = [
         True,
         1,
         b'another\x1B_dummy',
-        'CMake script failure: dummy/script/path',
+        'Cmake script failure: dummy/script/path',
         {
             'returncode': 1,
             'returnmsg': 'anotherdummy'
@@ -571,17 +540,9 @@ def test_get_toolchain(caplog, script_result, exit_value, expected_log):
         ninja=True
     )
 
-    original_abspath = os.path.abspath
+    abspath_mock = mock.Mock(return_value='dummy_abspath')
 
-    def mocked_abspath(path):
-        if path == 'dummy_abspath':
-            return 'dummy_abspath'
-        elif isinstance(path, mock.Mock):
-            return None
-        else:
-            return original_abspath(path)
-
-    with mock.patch('os.path.abspath', side_effect=mocked_abspath):
+    with mock.patch('os.path.abspath', abspath_mock):
         twister_env = twisterlib.environment.TwisterEnv(options=options)
 
     with mock.patch.object(

@@ -9,9 +9,11 @@
 
 #ifdef CONFIG_IRQ_OFFLOAD
 
+int arc_irq_offload_init(const struct device *unused);
+
 static inline void arc_irq_offload_init_smp(void)
 {
-	arch_irq_offload_init();
+	arc_irq_offload_init(NULL);
 }
 
 #else

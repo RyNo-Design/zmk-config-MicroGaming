@@ -29,25 +29,25 @@ making a system call.
 Declaring and Using Thread Local Variables
 ******************************************
 
-The macro ``Z_THREAD_LOCAL`` can be used to declare thread local variables.
+The keyword ``__thread`` can be used to declare thread local variables.
 
 For example, to declare a thread local variable in header files:
 
 .. code-block:: c
 
-   extern Z_THREAD_LOCAL int i;
+   extern __thread int i;
 
 And to declare the actual variable in source files:
 
 .. code-block:: c
 
-   Z_THREAD_LOCAL int i;
+   __thread int i;
 
 Keyword ``static`` can also be used to limit the variable within a source file:
 
 .. code-block:: c
 
-   static Z_THREAD_LOCAL int j;
+   static __thread int j;
 
 Using the thread local variable is the same as using other variable, for example:
 

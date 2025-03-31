@@ -263,12 +263,12 @@ def test_quarantinedata_get_matched_quarantine(
             scenario=scenario,
             platform=platform,
             architecture=architecture,
-            simulator_name=simulation
+            simulation=simulation
         ) is None
     else:
         assert quarantine_data.get_matched_quarantine(
             scenario=scenario,
             platform=platform,
             architecture=architecture,
-            simulator_name=simulation
+            simulation=simulation
         ) == qlist[expected_idx]

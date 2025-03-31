@@ -339,14 +339,18 @@ static void uart_cc13xx_cc26xx_irq_err_enable(const struct device *dev)
 {
 	const struct uart_cc13xx_cc26xx_config *config = dev->config;
 
-	UARTIntEnable(config->reg, UART_INT_OE | UART_INT_BE | UART_INT_PE | UART_INT_FE);
+	return UARTIntEnable(config->reg,
+			     UART_INT_OE | UART_INT_BE | UART_INT_PE |
+				     UART_INT_FE);
 }
 
 static void uart_cc13xx_cc26xx_irq_err_disable(const struct device *dev)
 {
 	const struct uart_cc13xx_cc26xx_config *config = dev->config;
 
-	UARTIntDisable(config->reg, UART_INT_OE | UART_INT_BE | UART_INT_PE | UART_INT_FE);
+	return UARTIntDisable(config->reg,
+			      UART_INT_OE | UART_INT_BE | UART_INT_PE |
+				      UART_INT_FE);
 }
 
 static int uart_cc13xx_cc26xx_irq_is_pending(const struct device *dev)
@@ -464,7 +468,7 @@ static int uart_cc13xx_cc26xx_pm_action(const struct device *dev,
 }
 #endif /* CONFIG_PM_DEVICE */
 
-static DEVICE_API(uart, uart_cc13xx_cc26xx_driver_api) = {
+static const struct uart_driver_api uart_cc13xx_cc26xx_driver_api = {
 	.poll_in = uart_cc13xx_cc26xx_poll_in,
 	.poll_out = uart_cc13xx_cc26xx_poll_out,
 	.err_check = uart_cc13xx_cc26xx_err_check,
@@ -617,9 +621,9 @@ static DEVICE_API(uart, uart_cc13xx_cc26xx_driver_api) = {
 		uart_cc13xx_cc26xx_data_##n = {			     \
 		.uart_config = {				     \
 			.baudrate = DT_INST_PROP(n, current_speed),  \
-			.parity = DT_INST_ENUM_IDX(n, parity),	     \
-			.stop_bits = DT_INST_ENUM_IDX(n, stop_bits), \
-			.data_bits = DT_INST_ENUM_IDX(n, data_bits), \
+			.parity = UART_CFG_PARITY_NONE,		     \
+			.stop_bits = UART_CFG_STOP_BITS_1,	     \
+			.data_bits = UART_CFG_DATA_BITS_8,	     \
 			.flow_ctrl = UART_CFG_FLOW_CTRL_NONE,	     \
 		},						     \
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n), \

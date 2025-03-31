@@ -3,7 +3,7 @@
 Large Composition Data Client
 #############################
 
-The Large Composition Data Client model is a foundation model defined by the Bluetooth Mesh
+The Large Composition Data Client model is a foundation model defined by the Bluetooth mesh
 specification. The model is optional, and is enabled through the
 :kconfig:option:`CONFIG_BT_MESH_LARGE_COMP_DATA_CLI` option.
 
@@ -22,3 +22,5 @@ API reference
 *************
 
 .. doxygengroup:: bt_mesh_large_comp_data_cli
+   :project: Zephyr
+   :members:

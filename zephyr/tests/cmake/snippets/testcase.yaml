@@ -1,13 +1,12 @@
 common:
   tags: snippets
   platform_allow:
-  - native_sim
+  - native_posix
   - qemu_x86
   - qemu_x86_64
   - qemu_cortex_m3
   integration_platforms:
-  - native_sim
-  sysbuild: false
+  - native_posix
 
 tests:
   # Test the initial state with no snippets applied

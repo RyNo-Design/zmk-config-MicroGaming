@@ -41,10 +41,9 @@
 
 &ftm2 {
 	status = "okay";
-	compatible = "nxp,ftm-pwm";
+	compatible = "nxp,kinetis-ftm-pwm";
 	prescaler = <128>;
 	#pwm-cells = <3>;
 	pinctrl-0 = <&ftm2_default>;
 	pinctrl-names = "default";
-	clock-source = "fixed";
 };

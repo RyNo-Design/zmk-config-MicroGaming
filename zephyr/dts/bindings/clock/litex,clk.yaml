@@ -40,6 +40,11 @@ properties:
     type: int
     description: |
       Number of ms to wait for MMCM to assert DRDY signal
+  litex,sys-clock-frequency:
+    required: true
+    type: int
+    description: |
+      System clock frequency
   litex,divclk-divide-min:
     required: true
     type: int

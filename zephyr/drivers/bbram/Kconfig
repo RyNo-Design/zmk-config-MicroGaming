@@ -42,6 +42,4 @@ source "drivers/bbram/Kconfig.xec"
 
 source "drivers/bbram/Kconfig.stm32"
 
-source "drivers/bbram/Kconfig.rts5912"
-
 endif # BBRAM

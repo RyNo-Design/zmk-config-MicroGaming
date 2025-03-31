@@ -3,9 +3,9 @@
 
 tests:
   drivers.watchdog.reset_none:
-    filter: dt_compat_enabled("nxp,s32-swt") or dt_compat_enabled("renesas,ra-wdt")
-    integration_platforms:
-      - s32z2xxdc2/s32z270/rtu0
+    platform_allow:
+      - s32z270dc2_rtu0_r52
+      - s32z270dc2_rtu1_r52
     tags:
       - drivers
       - watchdog

@@ -9,6 +9,7 @@
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/irq.h>
 #include <zephyr/device.h>
+#include <soc.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/irq.h>
@@ -232,12 +233,9 @@ static int mss_i2c_transfer(const struct device *dev, struct i2c_msg *msgs, uint
 	return 0;
 }
 
-static DEVICE_API(i2c, mss_i2c_driver_api) = {
+static const struct i2c_driver_api mss_i2c_driver_api = {
 	.configure = mss_i2c_configure,
 	.transfer = mss_i2c_transfer,
-#ifdef CONFIG_I2C_RTIO
-	.iodev_submit = i2c_iodev_submit_fallback,
-#endif
 };
 
 static void mss_i2c_reset(const struct device *dev)
@@ -382,8 +380,7 @@ static void mss_i2c_irq_handler(const struct device *dev)
 		.clock_freq = DT_INST_PROP(n, clock_frequency),                                    \
 	};                                                                                         \
                                                                                                    \
-	I2C_DEVICE_DT_INST_DEFINE(n, mss_i2c_init_##n, NULL, &mss_i2c_data_##n,                    \
-			&mss_i2c_config_##n, PRE_KERNEL_1, CONFIG_I2C_INIT_PRIORITY,               \
-			&mss_i2c_driver_api);
+	DEVICE_DT_INST_DEFINE(n, mss_i2c_init_##n, NULL, &mss_i2c_data_##n, &mss_i2c_config_##n,   \
+			      PRE_KERNEL_1, CONFIG_I2C_INIT_PRIORITY, &mss_i2c_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(MSS_I2C_INIT)

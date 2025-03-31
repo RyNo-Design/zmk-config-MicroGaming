@@ -22,7 +22,6 @@
 
 #include <zephyr/toolchain.h>
 #include <zephyr/irq.h>
-#include <zephyr/arch/posix/exception.h>
 #include <zephyr/arch/posix/asm_inline.h>
 #include <zephyr/arch/posix/thread.h>
 #include <board_irq.h> /* Each board must define this */
@@ -38,6 +37,12 @@ extern "C" {
 #else
 #define ARCH_STACK_PTR_ALIGN 4
 #endif
+
+struct __esf {
+	uint32_t dummy; /*maybe we will want to add something someday*/
+};
+
+typedef struct __esf z_arch_esf_t;
 
 extern uint32_t sys_clock_cycle_get_32(void);
 

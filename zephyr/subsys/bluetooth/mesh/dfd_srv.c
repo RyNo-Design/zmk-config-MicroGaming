@@ -35,8 +35,12 @@ BUILD_ASSERT((DFD_UPLOAD_START_MSG_MAXLEN + BT_MESH_MODEL_OP_LEN(BT_MESH_DFD_OP_
 	     "The Firmware Distribution Upload Start message does not fit into the maximum "
 	     "incoming SDU size.");
 
-#define DFD_RECEIVERS_LIST_MSG_MAXLEN (BT_MESH_TX_SDU_MAX - BT_MESH_MIC_SHORT - \
-				       BT_MESH_MODEL_OP_LEN(BT_MESH_DFD_OP_RECEIVERS_LIST))
+#define DFD_RECEIVERS_LIST_MSG_MAXLEN (4 + CONFIG_BT_MESH_DFD_SRV_TARGETS_MAX * 5)
+
+BUILD_ASSERT((DFD_RECEIVERS_LIST_MSG_MAXLEN + BT_MESH_MODEL_OP_LEN(BT_MESH_DFD_OP_RECEIVERS_LIST) +
+	      BT_MESH_MIC_SHORT) <= BT_MESH_TX_SDU_MAX,
+	     "The Firmware Distribution Receivers List message does not fit into the maximum "
+	     "outgoing SDU size.");
 
 #define DFD_RECEIVERS_ADD_MSG_MAXLEN (CONFIG_BT_MESH_DFD_SRV_TARGETS_MAX * 3)
 
@@ -108,11 +112,11 @@ static void receivers_status_rsp(struct bt_mesh_dfd_srv *srv,
 	bt_mesh_model_send(srv->mod, ctx, &buf, NULL, NULL);
 }
 
-static int handle_receivers_add(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_receivers_add(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 				struct net_buf_simple *buf)
 {
 	enum bt_mesh_dfd_status status = BT_MESH_DFD_SUCCESS;
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	if (buf->len % 3) {
 		return -EINVAL;
@@ -139,20 +143,20 @@ static int handle_receivers_add(const struct bt_mesh_model *mod, struct bt_mesh_
 	return 0;
 }
 
-static int handle_receivers_delete_all(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_receivers_delete_all(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 				       struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	receivers_status_rsp(srv, ctx, bt_mesh_dfd_srv_receivers_delete_all(srv));
 
 	return 0;
 }
 
-static int handle_receivers_get(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_receivers_get(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 				struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 	uint16_t first, cnt;
 	uint8_t progress;
 	int i;
@@ -202,7 +206,7 @@ static enum bt_mesh_dfu_iter slot_space_cb(const struct bt_mesh_dfu_slot *slot,
 	return BT_MESH_DFU_ITER_CONTINUE;
 }
 
-static int handle_capabilities_get(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_capabilities_get(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 				   struct net_buf_simple *buf)
 {
 	size_t size = 0;
@@ -222,7 +226,7 @@ static int handle_capabilities_get(const struct bt_mesh_model *mod, struct bt_me
 	net_buf_simple_add_le32(&rsp, CONFIG_BT_MESH_DFD_SRV_SLOT_SPACE - size);
 
 #ifdef CONFIG_BT_MESH_DFD_SRV_OOB_UPLOAD
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	if (srv->oob_schemes.count > 0) {
 		net_buf_simple_add_u8(&rsp, 1);
@@ -264,20 +268,20 @@ static void status_rsp(struct bt_mesh_dfd_srv *srv, struct bt_mesh_msg_ctx *ctx,
 	bt_mesh_model_send(srv->mod, ctx, &rsp, NULL, NULL);
 }
 
-static int handle_get(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_get(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 		      struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	status_rsp(srv, ctx, BT_MESH_DFD_SUCCESS);
 
 	return 0;
 }
 
-static int handle_start(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_start(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 			struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 	struct bt_mesh_dfd_start_params params;
 	uint8_t byte;
 
@@ -306,31 +310,31 @@ static int handle_start(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx 
 	return 0;
 }
 
-static int handle_suspend(const struct bt_mesh_model *mod,
+static int handle_suspend(struct bt_mesh_model *mod,
 			   struct bt_mesh_msg_ctx *ctx,
 			   struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	status_rsp(srv, ctx, bt_mesh_dfd_srv_suspend(srv));
 
 	return 0;
 }
 
-static int handle_cancel(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_cancel(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 			 struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	bt_mesh_dfd_srv_cancel(srv, ctx);
 
 	return 0;
 }
 
-static int handle_apply(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_apply(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 			struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	status_rsp(srv, ctx, bt_mesh_dfd_srv_apply(srv));
 
@@ -389,10 +393,10 @@ static void upload_status_rsp(struct bt_mesh_dfd_srv *srv,
 	upload_status_rsp_with_progress(srv, ctx, status, progress);
 }
 
-static int handle_upload_get(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_upload_get(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 			     struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	upload_status_rsp(srv, ctx, BT_MESH_DFD_SUCCESS);
 
@@ -434,10 +438,10 @@ static inline int set_upload_fwid(struct bt_mesh_dfd_srv *srv, struct bt_mesh_ms
 	return err;
 }
 
-static int handle_upload_start(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_upload_start(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 			       struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 	size_t meta_len, fwid_len, size;
 	const uint8_t *meta, *fwid;
 	uint16_t timeout_base;
@@ -556,10 +560,10 @@ static int handle_upload_start(const struct bt_mesh_model *mod, struct bt_mesh_m
 	return 0;
 }
 
-static int handle_upload_start_oob(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_upload_start_oob(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 				   struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 	uint8_t uri_len;
 	uint8_t *uri;
 	uint16_t fwid_len;
@@ -647,10 +651,10 @@ static int handle_upload_start_oob(const struct bt_mesh_model *mod, struct bt_me
 	return 0;
 }
 
-static int handle_upload_cancel(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_upload_cancel(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 				struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	srv->upload.phase = BT_MESH_DFD_UPLOAD_PHASE_IDLE;
 #ifdef CONFIG_BT_MESH_DFD_SRV_OOB_UPLOAD
@@ -686,10 +690,10 @@ static void fw_status_rsp(struct bt_mesh_dfd_srv *srv,
 	bt_mesh_model_send(srv->mod, ctx, &rsp, NULL, NULL);
 }
 
-static int handle_fw_get(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_fw_get(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 			 struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 	struct bt_mesh_dfu_slot *slot;
 	const uint8_t *fwid;
 	size_t fwid_len;
@@ -710,10 +714,10 @@ static int handle_fw_get(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx
 	return 0;
 }
 
-static int handle_fw_get_by_index(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_fw_get_by_index(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 				  struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 	const struct bt_mesh_dfu_slot *slot;
 	uint16_t idx;
 
@@ -731,10 +735,10 @@ static int handle_fw_get_by_index(const struct bt_mesh_model *mod, struct bt_mes
 	return 0;
 }
 
-static int handle_fw_delete(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_fw_delete(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 			    struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 	const uint8_t *fwid;
 	size_t fwid_len;
 
@@ -760,10 +764,10 @@ static enum bt_mesh_dfu_iter slot_del_cb(const struct bt_mesh_dfu_slot *slot,
 	return BT_MESH_DFU_ITER_CONTINUE;
 }
 
-static int handle_fw_delete_all(const struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
+static int handle_fw_delete_all(struct bt_mesh_model *mod, struct bt_mesh_msg_ctx *ctx,
 				struct net_buf_simple *buf)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	fw_status_rsp(srv, ctx, bt_mesh_dfd_srv_fw_delete_all(srv), 0xffff, NULL, 0);
 
@@ -797,7 +801,7 @@ static void dfu_suspended(struct bt_mesh_dfu_cli *cli)
 	struct bt_mesh_dfd_srv *srv =
 		CONTAINER_OF(cli, struct bt_mesh_dfd_srv, dfu);
 
-	dfd_phase_set(srv, BT_MESH_DFD_PHASE_TRANSFER_SUSPENDED);
+	srv->phase = BT_MESH_DFD_PHASE_TRANSFER_SUSPENDED;
 }
 
 static void dfu_ended(struct bt_mesh_dfu_cli *cli,
@@ -919,44 +923,22 @@ const struct bt_mesh_blob_srv_cb _bt_mesh_dfd_srv_blob_cb = {
 	.suspended = upload_timeout,
 };
 
-static int dfd_srv_init(const struct bt_mesh_model *mod)
+static int dfd_srv_init(struct bt_mesh_model *mod)
 {
-	int err;
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	srv->mod = mod;
 
-	const struct bt_mesh_model *blob_srv =
-		bt_mesh_model_find(bt_mesh_model_elem(mod), BT_MESH_MODEL_ID_BLOB_SRV);
-
-	if (blob_srv == NULL) {
-		LOG_ERR("Missing BLOB Srv.");
-		return -EINVAL;
-	}
-
-	/** BLOB client also shall be present on the same element, but it is already checked by
-	 * initiation of dfu client which we check here.
-	 */
-	const struct bt_mesh_model *dfu_cli =
-		bt_mesh_model_find(bt_mesh_model_elem(mod), BT_MESH_MODEL_ID_DFU_CLI);
-
-	if (dfu_cli == NULL) {
-		LOG_ERR("Missing FU Cli.");
-		return -EINVAL;
-	}
-
-	err = bt_mesh_model_extend(mod, srv->upload.blob.mod);
-
-	if (err) {
-		return err;
+	if (IS_ENABLED(CONFIG_BT_MESH_MODEL_EXTENSIONS)) {
+		bt_mesh_model_extend(mod, srv->upload.blob.mod);
 	}
 
 	return 0;
 }
 
-static void dfd_srv_reset(const struct bt_mesh_model *mod)
+static void dfd_srv_reset(struct bt_mesh_model *mod)
 {
-	struct bt_mesh_dfd_srv *srv = mod->rt->user_data;
+	struct bt_mesh_dfd_srv *srv = mod->user_data;
 
 	dfd_phase_set(srv, BT_MESH_DFD_PHASE_IDLE);
 	srv->upload.phase = BT_MESH_DFD_UPLOAD_PHASE_IDLE;
@@ -1164,14 +1146,6 @@ enum bt_mesh_dfd_status bt_mesh_dfd_srv_cancel(struct bt_mesh_dfd_srv *srv,
 			status_rsp(srv, ctx, BT_MESH_DFD_ERR_INTERNAL);
 		}
 		return BT_MESH_DFD_ERR_INTERNAL;
-	}
-
-	if (prev_phase == BT_MESH_DFD_PHASE_APPLYING_UPDATE && ctx) {
-		/* Disable randomization for the Firmware Distribution State message to avoid
-		 * reordering when Firmware Distribution Server sends 2 messages in a row when
-		 * cancelling the update (see section 6.2.3.10 of MshDFUv1.0).
-		 */
-		ctx->rnd_delay = false;
 	}
 
 	if (ctx != NULL) {

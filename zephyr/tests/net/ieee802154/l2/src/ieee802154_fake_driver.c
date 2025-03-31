@@ -36,14 +36,14 @@ static int fake_cca(const struct device *dev)
 
 static int fake_set_channel(const struct device *dev, uint16_t channel)
 {
-	NET_INFO("Channel %u", channel);
+	NET_INFO("Channel %u\n", channel);
 
 	return 0;
 }
 
 static int fake_set_txpower(const struct device *dev, int16_t dbm)
 {
-	NET_INFO("TX power %d dbm", dbm);
+	NET_INFO("TX power %d dbm\n", dbm);
 
 	return 0;
 }
@@ -68,7 +68,7 @@ static int fake_tx(const struct device *dev,
 		   struct net_pkt *pkt,
 		   struct net_buf *frag)
 {
-	NET_INFO("Sending packet %p - length %zu",
+	NET_INFO("Sending packet %p - length %zu\n",
 		 pkt, net_pkt_get_len(pkt));
 
 	if (!current_pkt) {
@@ -86,12 +86,12 @@ static int fake_tx(const struct device *dev,
 		ack_pkt = net_pkt_rx_alloc_with_buffer(iface, IEEE802154_ACK_PKT_LENGTH, AF_UNSPEC,
 						       0, K_FOREVER);
 		if (!ack_pkt) {
-			NET_ERR("*** Could not allocate ack pkt.");
+			NET_ERR("*** Could not allocate ack pkt.\n");
 			return -ENOMEM;
 		}
 
 		if (!ieee802154_create_ack_frame(iface, ack_pkt, ctx->ack_seq)) {
-			NET_ERR("*** Could not create ack frame.");
+			NET_ERR("*** Could not create ack frame.\n");
 			net_pkt_unref(ack_pkt);
 			return -EFAULT;
 		}
@@ -107,14 +107,14 @@ static int fake_tx(const struct device *dev,
 
 static int fake_start(const struct device *dev)
 {
-	NET_INFO("FAKE ieee802154 driver started");
+	NET_INFO("FAKE ieee802154 driver started\n");
 
 	return 0;
 }
 
 static int fake_stop(const struct device *dev)
 {
-	NET_INFO("FAKE ieee802154 driver stopped");
+	NET_INFO("FAKE ieee802154 driver stopped\n");
 
 	return 0;
 }
@@ -146,7 +146,7 @@ static void fake_iface_init(struct net_if *iface)
 	ctx->channel = 26U;
 	ctx->sequence = 62U;
 
-	NET_INFO("FAKE ieee802154 iface initialized");
+	NET_INFO("FAKE ieee802154 iface initialized\n");
 }
 
 static int fake_init(const struct device *dev)

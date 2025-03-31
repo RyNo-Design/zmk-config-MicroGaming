@@ -4,17 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <stdbool.h>
-#include <stddef.h>
-
-#include <zephyr/bluetooth/audio/csip.h>
 #include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
-#include <zephyr/bluetooth/hci_types.h>
-#include <zephyr/sys/printk.h>
+#include <zephyr/bluetooth/audio/csip.h>
 
-#include "bstests.h"
 #include "common.h"
 #include "common/bt_str.h"
 
@@ -28,7 +21,7 @@ static void csip_discover_cb(struct bt_conn *conn,
 			     int err, size_t set_count)
 {
 	if (err != 0) {
-		FAIL("CSIP Lock Discover failed (err = %d)\n", err);
+		printk("CSIP Lock Discover failed (err = %d)\n", err);
 		return;
 	}
 
@@ -127,7 +120,7 @@ static void test_main(void)
 static const struct bst_test_instance test_csip_notify_client[] = {
 	{
 		.test_id = "csip_notify_client",
-		.test_pre_init_f = test_init,
+		.test_post_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_main,
 	},

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 description: |
-  STM32WBA PLL.
+  PLL node binding for STM32WBA devices
 
   It can be used to describe PLL1
 

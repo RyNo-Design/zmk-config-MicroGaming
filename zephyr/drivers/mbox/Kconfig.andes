@@ -8,8 +8,7 @@
 config MBOX_ANDES_PLIC_SW
 	bool "MBOX Andes PLIC-SW driver"
 	default y
-	depends on DT_HAS_ANDESTECH_MBOX_PLIC_SW_ENABLED
-	depends on PLIC_SUPPORTS_SOFT_INTERRUPT
-	select DYNAMIC_INTERRUPTS
+	depends on DT_HAS_ANDESTECH_PLIC_SW_ENABLED
 	help
-	  Enable the driver for the Andes PLIC-SW based MBOX controller.
+	  Enable driver for the Andes IPM mailbox controller.
+	  Says n if not sure.

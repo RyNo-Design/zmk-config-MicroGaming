@@ -43,10 +43,6 @@ extern "C"
 {
 #endif
 
-#ifdef CONFIG_FS_LITTLEFS_DISK_VERSION
-#define LFS_MULTIVERSION
-#endif
-
 /* Logging functions when using LittleFS with Zephyr. */
 #ifndef LFS_TRACE
 #ifdef LFS_YES_TRACE

@@ -5,8 +5,7 @@
  */
 
 #include <arm/armv8-m.dtsi>
-#include <nordic/nrf_common.dtsi>
-#include <zephyr/dt-bindings/adc/nrf-saadc-v3.h>
+#include "nrf_common.dtsi"
 
 / {
 	cpus {
@@ -42,7 +41,6 @@
 		ficr: ficr@ff0000 {
 			compatible = "nordic,nrf-ficr";
 			reg = <0xff0000 0x1000>;
-			#nordic,ficr-cells = <1>;
 			status = "okay";
 		};
 
@@ -86,16 +84,6 @@
 			reg = <0x5000d000 0x1000>;
 			interrupts = <13 5>;
 			status = "disabled";
-			instance = <0>;
-		};
-
-		/* Additional Non-Secure GPIOTE instance */
-		gpiote1: gpiote@4002f000 {
-			compatible = "nordic,nrf-gpiote";
-			reg = <0x4002f000 0x1000>;
-			interrupts = <47 5>;
-			status = "disabled";
-			instance = <1>;
 		};
 
 		cryptocell: crypto@50844000 {
@@ -117,7 +105,9 @@
 	arm,num-irq-priority-bits = <3>;
 };
 
-&systick {
-	/* Use RTC for system clock, instead of SysTick. */
-	status = "disabled";
-};
+/*
+ * Include the non-secure peripherals file here since
+ * it expects to be at the root level. This provides
+ * a node for GPIOTE1.
+ */
+#include "nrf5340_cpuapp_peripherals_ns.dtsi"

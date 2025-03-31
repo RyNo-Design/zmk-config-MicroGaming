@@ -8,4 +8,3 @@ Language Support
 
    c/index.rst
    cpp/index.rst
-   rust/index.rst

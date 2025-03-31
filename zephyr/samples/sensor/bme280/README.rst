@@ -1,13 +1,12 @@
-.. zephyr:code-sample:: bme280
-   :name: BME280 humidity and pressure sensor
-   :relevant-api: sensor_interface
+.. _bme280:
 
-   Get temperature, pressure, and humidity data from a BME280 sensor.
+BME280 Humidity and Pressure Sensor
+###################################
 
 Overview
 ********
 
-This sample shows how to use the Zephyr :ref:`sensor` API driver for the
+This sample shows how to use the Zephyr :ref:`sensor_api` API driver for the
 `Bosch BME280`_ environmental sensor.
 
 .. _Bosch BME280:
@@ -77,7 +76,7 @@ peripheral.
 BME280 via Raspberry Pi Pico
 ============================
 
-The default assignment of the built-in spi0 device on the :zephyr:board:`rpi_pico` is
+The default assignment of the built-in spi0 device on the :ref:`rpi_pico` is
 to GPIO16 through GPIO19.  With the sensor wired to those lines, build and
 flash with:
 
@@ -112,7 +111,7 @@ See existing overlays for examples.
 The build system uses these overlays by default when targeting those boards, so
 no ``DTC_OVERLAY_FILE`` setting is needed when building and running.
 
-For example, to build for the :zephyr:board:`adafruit_feather_m0_basic_proto` using the
+For example, to build for the :ref:`adafruit_feather_m0_basic_proto` using the
 :zephyr_file:`samples/sensor/bme280/boards/adafruit_feather_m0_basic_proto.overlay`
 overlay provided with this sample:
 

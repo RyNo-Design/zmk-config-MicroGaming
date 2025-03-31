@@ -14,7 +14,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(dma_intel_adsp_hda_dma_host_out);
 
-static DEVICE_API(dma, intel_adsp_hda_dma_host_out_api) = {
+static const struct dma_driver_api intel_adsp_hda_dma_host_out_api = {
 	.config = intel_adsp_hda_dma_host_out_config,
 	.reload = intel_adsp_hda_dma_host_reload,
 	.start = intel_adsp_hda_dma_start,
@@ -53,8 +53,7 @@ static DEVICE_API(dma, intel_adsp_hda_dma_host_out_api) = {
 			    DEVICE_DT_INST_GET(inst),			\
 			    DT_INST_IRQ(inst, sense));			\
 		irq_enable(DT_INST_IRQN(inst));			\
-		IF_ENABLED(CONFIG_SOC_SERIES_INTEL_ADSP_ACE,	\
-			    (ACE_DINT[0].ie[ACE_INTL_HDAHODMA] = 1;))	\
+		IF_ENABLED(CONFIG_SOC_SERIES_INTEL_ACE, (ACE_DINT[0].ie[ACE_INTL_HDAHODMA] = 1;)) \
 	}
 
 DT_INST_FOREACH_STATUS_OKAY(INTEL_ADSP_HDA_DMA_HOST_OUT_INIT)

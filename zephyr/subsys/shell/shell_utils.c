@@ -428,7 +428,7 @@ void z_shell_spaces_trim(char *str)
 	uint16_t len = z_shell_strlen(str);
 	uint16_t shift = 0U;
 
-	if (len == 0U) {
+	if (!str) {
 		return;
 	}
 
@@ -496,9 +496,8 @@ void z_shell_cmd_trim(const struct shell *sh)
 	sh->ctx->cmd_buff_pos = sh->ctx->cmd_buff_len;
 }
 
-static const struct device *shell_device_internal(size_t idx,
-						  const char *prefix,
-						  shell_device_filter_t filter)
+const struct device *shell_device_lookup(size_t idx,
+				   const char *prefix)
 {
 	size_t match_idx = 0;
 	const struct device *dev;
@@ -511,8 +510,7 @@ static const struct device *shell_device_internal(size_t idx,
 		    && (strlen(dev->name) != 0)
 		    && ((prefix == NULL)
 			|| (strncmp(prefix, dev->name,
-				    strlen(prefix)) == 0))
-		    && (filter == NULL || filter(dev))) {
+				    strlen(prefix)) == 0))) {
 			if (match_idx == idx) {
 				return dev;
 			}
@@ -524,33 +522,10 @@ static const struct device *shell_device_internal(size_t idx,
 	return NULL;
 }
 
-const struct device *shell_device_filter(size_t idx,
-					 shell_device_filter_t filter)
-{
-	return shell_device_internal(idx, NULL, filter);
-}
-
-const struct device *shell_device_lookup(size_t idx,
-					 const char *prefix)
-{
-	return shell_device_internal(idx, prefix, NULL);
-}
-
-const struct device *shell_device_get_binding(const char *name)
-{
-	const struct device *dev = device_get_binding(name);
-
-	if (IS_ENABLED(CONFIG_DEVICE_DT_METADATA) && dev == NULL) {
-		dev = device_get_by_dt_nodelabel(name);
-	}
-
-	return dev;
-}
-
 long shell_strtol(const char *str, int base, int *err)
 {
 	long val;
-	char *endptr;
+	char *endptr = NULL;
 
 	errno = 0;
 	val = strtol(str, &endptr, base);
@@ -568,7 +543,7 @@ long shell_strtol(const char *str, int base, int *err)
 unsigned long shell_strtoul(const char *str, int base, int *err)
 {
 	unsigned long val;
-	char *endptr;
+	char *endptr = NULL;
 
 	if (*str == '-') {
 		*err = -EINVAL;
@@ -591,7 +566,7 @@ unsigned long shell_strtoul(const char *str, int base, int *err)
 unsigned long long shell_strtoull(const char *str, int base, int *err)
 {
 	unsigned long long val;
-	char *endptr;
+	char *endptr = NULL;
 
 	if (*str == '-') {
 		*err = -EINVAL;

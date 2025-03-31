@@ -12,9 +12,6 @@ endif()
 find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
 project(bsim_test_ccc_update)
 
-add_subdirectory(${ZEPHYR_BASE}/tests/bsim/babblekit babblekit)
-target_link_libraries(app PRIVATE babblekit)
-
 target_sources(app PRIVATE
   src/main.c
   src/common.c
@@ -27,5 +24,5 @@ zephyr_include_directories(
         $ENV{BSIM_COMPONENTS_PATH}/libUtilv1/src/
         $ENV{BSIM_COMPONENTS_PATH}/libPhyComv1/src/
 
-        ${ZEPHYR_BASE}/subsys/bluetooth/host/
+        $ENV{ZEPHYR_BASE}/subsys/bluetooth/host/
 )

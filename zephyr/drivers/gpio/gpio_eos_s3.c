@@ -311,8 +311,6 @@ static int gpio_eos_s3_pin_interrupt_configure(const struct device *dev,
 				break;
 			case GPIO_INT_TRIG_BOTH:
 				return -ENOTSUP;
-			default:
-				return -EINVAL;
 			}
 		}
 
@@ -394,7 +392,7 @@ static int gpio_eos_s3_port_get_direction(const struct device *port, gpio_port_p
 }
 #endif /* CONFIG_GPIO_GET_DIRECTION */
 
-static DEVICE_API(gpio, gpio_eos_s3_driver_api) = {
+static const struct gpio_driver_api gpio_eos_s3_driver_api = {
 	.pin_configure = gpio_eos_s3_configure,
 	.port_get_raw = gpio_eos_s3_port_get_raw,
 	.port_set_masked_raw = gpio_eos_s3_port_set_masked_raw,

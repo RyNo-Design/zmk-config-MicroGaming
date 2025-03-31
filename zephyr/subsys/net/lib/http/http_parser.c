@@ -72,7 +72,7 @@ do {                                                                       \
 	if (!FOR##_mark) {                                                 \
 		FOR##_mark = p;                                            \
 	}                                                                  \
-} while (false)
+} while (0)
 
 /* Don't allow the total size of the HTTP headers (including the status
  * line) to exceed HTTP_MAX_HEADER_SIZE.  This check is here to protect
@@ -100,9 +100,7 @@ int count_header_size(struct http_parser *parser, int bytes)
 
 #define PROXY_CONNECTION "proxy-connection"
 #define CONNECTION "connection"
-#define CONTENT "content-"
 #define CONTENT_LENGTH "content-length"
-#define CONTENT_RANGE "content-range"
 #define TRANSFER_ENCODING "transfer-encoding"
 #define UPGRADE "upgrade"
 #define CHUNKED "chunked"
@@ -185,17 +183,11 @@ enum header_states {
 	h_CON,
 	h_matching_connection,
 	h_matching_proxy_connection,
-	h_matching_content,
-	h_CONTENT_,
 	h_matching_content_length,
-	h_matching_content_range,
 	h_matching_transfer_encoding,
 	h_matching_upgrade,
 	h_connection,
 	h_content_length,
-	h_content_range_start,
-	h_content_range_end,
-	h_content_range_total,
 	h_transfer_encoding,
 	h_upgrade,
 	h_matching_transfer_encoding_chunked,
@@ -364,8 +356,6 @@ static struct {
 	{"HPE_INVALID_CONTENT_LENGTH", "invalid character in content-length "
 				       "header"},
 	{"HPE_UNEXPECTED_CONTENT_LENGTH", "unexpected content-length header"},
-	{"HPE_INVALID_CONTENT_RANGE", "invalid character in content-range header"},
-	{"HPE_UNEXPECTED_CONTENT_RANGE", "unexpected content-range header"},
 	{"HPE_INVALID_CHUNK_SIZE", "invalid character in chunk size header"},
 	{"HPE_INVALID_CONSTANT", "invalid constant string"},
 	{"HPE_INVALID_INTERNAL_STATE", "encountered unexpected internal state"},
@@ -402,7 +392,7 @@ int parser_header_state(struct http_parser *parser, char ch, char c)
 			parser->header_state = h_matching_connection;
 			break;
 		case 't':
-			parser->header_state = h_matching_content;
+			parser->header_state = h_matching_content_length;
 			break;
 		default:
 			parser->header_state = h_general;
@@ -434,29 +424,7 @@ int parser_header_state(struct http_parser *parser, char ch, char c)
 		}
 		break;
 
-	/*content-length or content-range*/
-
-	case h_matching_content:
-		parser->index++;
-		cond1 = parser->index > sizeof(CONTENT) - 1;
-		if (cond1 || c != CONTENT[parser->index]) {
-			parser->header_state = h_general;
-		} else if (parser->index == sizeof(CONTENT) - 2) {
-			parser->header_state = h_CONTENT_;
-		}
-		break;
-
-	case h_CONTENT_:
-		parser->index++;
-		if (c == 'l') {
-			parser->header_state = h_matching_content_length;
-		} else if (c == 'r') {
-			parser->header_state = h_matching_content_range;
-		} else {
-			parser->header_state = h_general;
-		}
-		break;
-
+	/* content-length */
 
 	case h_matching_content_length:
 		parser->index++;
@@ -465,16 +433,6 @@ int parser_header_state(struct http_parser *parser, char ch, char c)
 			parser->header_state = h_general;
 		} else if (parser->index == sizeof(CONTENT_LENGTH) - 2) {
 			parser->header_state = h_content_length;
-		}
-		break;
-
-	case h_matching_content_range:
-		parser->index++;
-		cond1 = parser->index > sizeof(CONTENT_RANGE) - 1;
-		if (cond1 || c != CONTENT_RANGE[parser->index]) {
-			parser->header_state = h_general;
-		} else if (parser->index == sizeof(CONTENT_RANGE) - 2) {
-			parser->header_state = h_content_range_start;
 		}
 		break;
 
@@ -504,9 +462,6 @@ int parser_header_state(struct http_parser *parser, char ch, char c)
 
 	case h_connection:
 	case h_content_length:
-	case h_content_range_start:
-	case h_content_range_end:
-	case h_content_range_total:
 	case h_transfer_encoding:
 	case h_upgrade:
 		if (ch != ' ') {
@@ -588,117 +543,6 @@ int header_states(struct http_parser *parser, const char *data, size_t len,
 		}
 
 		parser->content_length = t;
-		break;
-	}
-
-	case h_content_range_start: {
-		uint64_t t;
-		uint64_t value;
-
-		if (IS_ALPHA(ch)) {
-			break;
-		}
-
-		if (ch == ' ') {
-			break;
-		}
-
-		if (ch == '-' || ch == '*') {
-			h_state = h_content_range_end;
-			break;
-		}
-
-		if (UNLIKELY(!IS_NUM(ch))) {
-			SET_ERRNO(HPE_INVALID_CONTENT_RANGE);
-			parser->header_state = h_state;
-			return -1;
-		}
-
-		t = parser->content_range.start;
-		t *= 10U;
-		t += ch - '0';
-
-		/* Overflow? Test against a conservative limit for simplicity */
-		value = (ULLONG_MAX - 10) / 10;
-
-		if (UNLIKELY(value < parser->content_range.start)) {
-			SET_ERRNO(HPE_INVALID_CONTENT_RANGE);
-			parser->header_state = h_state;
-			return -1;
-		}
-
-		parser->content_range.start = t;
-		break;
-	}
-
-	case h_content_range_end: {
-		uint64_t t;
-		uint64_t value;
-
-		if (ch == ' ') {
-			break;
-		}
-
-		if (ch == '/') {
-			h_state = h_content_range_total;
-			break;
-		}
-
-		if (UNLIKELY(!IS_NUM(ch))) {
-			SET_ERRNO(HPE_INVALID_CONTENT_RANGE);
-			parser->header_state = h_state;
-			return -1;
-		}
-
-		t = parser->content_range.end;
-		t *= 10U;
-		t += ch - '0';
-
-		/* Overflow? Test against a conservative limit for simplicity */
-		value = (ULLONG_MAX - 10) / 10;
-
-		if (UNLIKELY(value < parser->content_range.end)) {
-			SET_ERRNO(HPE_INVALID_CONTENT_RANGE);
-			parser->header_state = h_state;
-			return -1;
-		}
-
-		parser->content_range.end = t;
-		break;
-	}
-
-	case h_content_range_total: {
-		uint64_t t;
-		uint64_t value;
-
-		if (ch == ' ') {
-			break;
-		}
-
-		if (ch == '*') {
-			break;
-		}
-
-		if (UNLIKELY(!IS_NUM(ch))) {
-			SET_ERRNO(HPE_INVALID_CONTENT_RANGE);
-			parser->header_state = h_state;
-			return -1;
-		}
-
-		t = parser->content_range.total;
-		t *= 10U;
-		t += ch - '0';
-
-		/* Overflow? Test against a conservative limit for simplicity */
-		value = (ULLONG_MAX - 10) / 10;
-
-		if (UNLIKELY(value < parser->content_range.total)) {
-			SET_ERRNO(HPE_INVALID_CONTENT_RANGE);
-			parser->header_state = h_state;
-			return -1;
-		}
-
-		parser->content_range.total = t;
 		break;
 	}
 
@@ -967,10 +811,6 @@ reexecute:
 			}
 			parser->flags = 0U;
 			parser->content_length = ULLONG_MAX;
-			parser->content_range.start = 0U;
-			parser->content_range.end = 0U;
-			parser->content_range.total = 0U;
-			parser->content_range_present = false;
 
 			if (ch == 'H') {
 				UPDATE_STATE(s_res_or_resp_H);
@@ -1264,10 +1104,6 @@ reexecute:
 			}
 			parser->flags = 0U;
 			parser->content_length = ULLONG_MAX;
-			parser->content_range.start = 0U;
-			parser->content_range.end = 0U;
-			parser->content_range.total = 0U;
-			parser->content_range_present = false;
 
 			if (UNLIKELY(!IS_ALPHA(ch))) {
 				SET_ERRNO(HPE_INVALID_METHOD);
@@ -1801,16 +1637,6 @@ reexecute:
 
 				parser->flags |= F_CONTENTLENGTH;
 				parser->content_length = ch - '0';
-				break;
-
-			case h_content_range_start:
-				if (parser->content_range_present) {
-					SET_ERRNO(HPE_UNEXPECTED_CONTENT_RANGE);
-					goto error;
-				}
-
-				parser->content_range_present = true;
-				parser->content_range.start = 0;
 				break;
 
 			case h_connection:

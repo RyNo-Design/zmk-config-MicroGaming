@@ -4,7 +4,6 @@
 
 import re
 
-
 def getSPDXIDSafeCharacter(c):
     """
     Converts a character to an SPDX-ID-safe character.
@@ -18,7 +17,6 @@ def getSPDXIDSafeCharacter(c):
         return c
     return "-"
 
-
 def convertToSPDXIDSafe(s):
     """
     Converts a filename or other string to only SPDX-ID-safe characters.
@@ -31,7 +29,6 @@ def convertToSPDXIDSafe(s):
     Returns: string with all non-safe characters replaced with dashes.
     """
     return "".join([getSPDXIDSafeCharacter(c) for c in s])
-
 
 def getUniqueFileID(filenameOnly, timesSeen):
     """

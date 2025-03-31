@@ -44,7 +44,7 @@ do {                                                                       \
 	if (!FOR##_mark) {                                                 \
 		FOR##_mark = p;                                            \
 	}                                                                  \
-} while (false)
+} while (0)
 
 
 #ifdef HTTP_PARSER_STRICT

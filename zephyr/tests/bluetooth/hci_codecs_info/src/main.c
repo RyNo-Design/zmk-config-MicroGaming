@@ -52,6 +52,7 @@ ZTEST_SUITE(test_hci_codecs_info, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(test_hci_codecs_info, test_read_codecs)
 {
+	struct net_buf *rsp;
 	int err;
 
 	/* Initialize bluetooth subsystem */
@@ -65,7 +66,7 @@ ZTEST(test_hci_codecs_info, test_read_codecs)
 
 
 	/* Read Local Supported Codecs */
-	err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_CODECS, NULL, NULL);
+	err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_CODECS, NULL, &rsp);
 	zassert_not_equal(err, 0, "Reading local supported codecs failed");
 
 }
@@ -208,8 +209,6 @@ ZTEST(test_hci_codecs_info, test_read_codec_capabilities)
 	ptr = &rp->capabilities[0];
 	zassert_mem_equal(ptr, codec_capabilities, sizeof(codec_capabilities),
 			  0, "Reading codec capabilities content failed");
-
-	net_buf_unref(rsp);
 }
 
 #define READ_DELAY_CODING_FMT 0xff
@@ -292,6 +291,4 @@ ZTEST(test_hci_codecs_info, test_read_ctlr_delay)
 		      "Reading controller min delay failed");
 	zassert_equal(sys_get_le24(rp->max_ctlr_delay), MAX_CTLR_DELAY,
 		      "Reading controller max delay failed");
-
-	net_buf_unref(rsp);
 }

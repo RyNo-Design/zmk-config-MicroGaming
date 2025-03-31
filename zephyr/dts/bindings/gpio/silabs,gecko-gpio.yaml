@@ -1,4 +1,4 @@
-description: SiLabs Gecko GPIO
+description: SiLabs Gecko GPIO node
 
 compatible: "silabs,gecko-gpio"
 

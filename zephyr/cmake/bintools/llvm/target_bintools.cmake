@@ -7,8 +7,6 @@
 #   elfconvert_flag_final         : empty
 #   elfconvert_flag_strip_all     : -S
 #   elfconvert_flag_strip_debug   : -g
-#   elfconvert_flag_strip_unneeded: --strip-unneeded
-#   elfconvert_flag_compress_debug_sections: --compress-debug-sections
 #   elfconvert_flag_intarget      : --input-target=
 #   elfconvert_flag_outtarget     : --output-target=
 #   elfconvert_flag_section_remove: --remove-section=
@@ -35,9 +33,6 @@ set_property(TARGET bintools PROPERTY elfconvert_flag_final "")
 
 set_property(TARGET bintools PROPERTY elfconvert_flag_strip_all "-S")
 set_property(TARGET bintools PROPERTY elfconvert_flag_strip_debug "-g")
-set_property(TARGET bintools PROPERTY elfconvert_flag_strip_unneeded "--strip-unneeded")
-
-set_property(TARGET bintools PROPERTY elfconvert_flag_compress_debug_sections "--compress-debug-sections")
 
 set_property(TARGET bintools PROPERTY elfconvert_flag_intarget "--input-target=")
 set_property(TARGET bintools PROPERTY elfconvert_flag_outtarget "--output-target=")
@@ -46,10 +41,11 @@ set_property(TARGET bintools PROPERTY elfconvert_flag_section_remove "--remove-s
 set_property(TARGET bintools PROPERTY elfconvert_flag_section_only "--only-section=")
 set_property(TARGET bintools PROPERTY elfconvert_flag_section_rename "--rename-section;")
 
-set_property(TARGET bintools PROPERTY elfconvert_flag_lma_adjust "--change-section-lma;")
-
-# llvm-objcopy doesn't support gap fill argument.
-set_property(TARGET bintools PROPERTY elfconvert_flag_gapfill "")
+# Note, placing a ';' at the end results in the following param  to be a list,
+# and hence space separated.
+# Thus the command line argument becomes:
+# `--gap-file <value>` instead of `--gap-fill<value>` (The latter would result in an error)
+set_property(TARGET bintools PROPERTY elfconvert_flag_gapfill "--gap-fill;")
 set_property(TARGET bintools PROPERTY elfconvert_flag_srec_len "--srec-len=")
 
 set_property(TARGET bintools PROPERTY elfconvert_flag_infile "")

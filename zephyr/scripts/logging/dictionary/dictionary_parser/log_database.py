@@ -46,12 +46,6 @@ ARCHS = {
         # for explanation.
         "extra_string_section": ['datas'],
     },
-    "posix" : {
-        "kconfig": "CONFIG_ARCH_POSIX",
-    },
-    "riscv32e" : {
-        "kconfig": "CONFIG_RISCV_ISA_RV32E",
-    },
     "riscv" : {
         "kconfig": "CONFIG_RISCV",
     },
@@ -65,7 +59,7 @@ class LogDatabase():
     """Class of log database"""
     # Update this if database format of dictionary based logging
     # has changed
-    ZEPHYR_DICT_LOG_VER = 3
+    ZEPHYR_DICT_LOG_VER = 2
 
     LITTLE_ENDIAN = True
     BIG_ENDIAN = False

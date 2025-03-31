@@ -12,7 +12,6 @@ LOG_MODULE_REGISTER(spi_bitbang);
 
 #include <zephyr/sys/sys_io.h>
 #include <zephyr/drivers/spi.h>
-#include <zephyr/drivers/spi/rtio.h>
 #include "spi_context.h"
 
 struct spi_bitbang_data {
@@ -37,7 +36,8 @@ static int spi_bitbang_configure(const struct spi_bitbang_config *info,
 		return -ENOTSUP;
 	}
 
-	if (config->operation & (SPI_LINES_DUAL | SPI_LINES_QUAD | SPI_LINES_OCTAL)) {
+	if (config->operation & (SPI_TRANSFER_LSB | SPI_LINES_DUAL
+			| SPI_LINES_QUAD)) {
 		LOG_ERR("Unsupported configuration");
 		return -ENOTSUP;
 	}
@@ -124,7 +124,6 @@ static int spi_bitbang_transceive(const struct device *dev,
 	int clock_state = 0;
 	int cpha = 0;
 	bool loop = false;
-	bool lsb = false;
 
 	if (SPI_MODE_GET(spi_cfg->operation) & SPI_MODE_CPOL) {
 		clock_state = 1;
@@ -134,9 +133,6 @@ static int spi_bitbang_transceive(const struct device *dev,
 	}
 	if (SPI_MODE_GET(spi_cfg->operation) & SPI_MODE_LOOP) {
 		loop = true;
-	}
-	if (spi_cfg->operation & SPI_TRANSFER_LSB) {
-		lsb = true;
 	}
 
 	/* set the initial clock state before CS */
@@ -160,8 +156,8 @@ static int spi_bitbang_transceive(const struct device *dev,
 			}
 		}
 
+		int shift = data->bits - 1;
 		uint16_t r = 0;
-		uint8_t i = 0;
 		int b = 0;
 		bool do_read = false;
 
@@ -169,8 +165,7 @@ static int spi_bitbang_transceive(const struct device *dev,
 			do_read = true;
 		}
 
-		while (i < data->bits) {
-			const int shift = lsb ? i : (data->bits - 1 - i);
+		while (shift >= 0) {
 			const int d = (w >> shift) & 0x1;
 
 			b = 0;
@@ -182,29 +177,29 @@ static int spi_bitbang_transceive(const struct device *dev,
 
 			k_busy_wait(wait_us);
 
+			/* first clock edge */
+			gpio_pin_set_dt(&info->clk_gpio, !clock_state);
+
 			if (!loop && do_read && !cpha) {
 				b = gpio_pin_get_dt(miso);
 			}
 
-			/* first (leading) clock edge */
-			gpio_pin_set_dt(&info->clk_gpio, !clock_state);
-
 			k_busy_wait(wait_us);
+
+			/* second clock edge */
+			gpio_pin_set_dt(&info->clk_gpio, clock_state);
 
 			if (!loop && do_read && cpha) {
 				b = gpio_pin_get_dt(miso);
 			}
 
-			/* second (trailing) clock edge */
-			gpio_pin_set_dt(&info->clk_gpio, clock_state);
-
 			if (loop) {
 				b = d;
 			}
 
-			r |= (b ? 0x1 : 0x0) << shift;
+			r = (r << 1) | (b ? 0x1 : 0x0);
 
-			++i;
+			--shift;
 		}
 
 		if (spi_context_rx_buf_on(ctx)) {
@@ -236,8 +231,7 @@ static int spi_bitbang_transceive_async(const struct device *dev,
 				    const struct spi_config *spi_cfg,
 				    const struct spi_buf_set *tx_bufs,
 				    const struct spi_buf_set *rx_bufs,
-				    spi_callback_t cb,
-				    void *userdata)
+				    struct k_poll_signal *async)
 {
 	return -ENOTSUP;
 }
@@ -253,15 +247,12 @@ int spi_bitbang_release(const struct device *dev,
 	return 0;
 }
 
-static DEVICE_API(spi, spi_bitbang_api) = {
+static struct spi_driver_api spi_bitbang_api = {
 	.transceive = spi_bitbang_transceive,
 	.release = spi_bitbang_release,
 #ifdef CONFIG_SPI_ASYNC
 	.transceive_async = spi_bitbang_transceive_async,
 #endif /* CONFIG_SPI_ASYNC */
-#ifdef CONFIG_SPI_RTIO
-	.iodev_submit = spi_rtio_iodev_default_submit,
-#endif
 };
 
 int spi_bitbang_init(const struct device *dev)
@@ -329,7 +320,7 @@ int spi_bitbang_init(const struct device *dev)
 		SPI_CONTEXT_CS_GPIOS_INITIALIZE(DT_DRV_INST(inst), ctx)	\
 	};								\
 									\
-	SPI_DEVICE_DT_INST_DEFINE(inst,					\
+	DEVICE_DT_INST_DEFINE(inst,					\
 			    spi_bitbang_init,				\
 			    NULL,					\
 			    &spi_bitbang_data_##inst,			\

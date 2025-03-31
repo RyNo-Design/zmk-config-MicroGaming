@@ -24,14 +24,10 @@ extern "C" {
 
 /**
  * @brief Socket NET_MGMT library
- * @defgroup socket_net_mgmt Socket NET_MGMT library
- * @since 2.0
- * @version 0.1.0
+ * @defgroup socket_net_mgmt Network Core Library
  * @ingroup networking
  * @{
  */
-
-/** @cond INTERNAL_HIDDEN */
 
 /* Protocols of the protocol family PF_NET_MGMT */
 #define NET_MGMT_EVENT_PROTO 0x01
@@ -39,8 +35,6 @@ extern "C" {
 /* Socket NET_MGMT options */
 #define SOL_NET_MGMT_BASE 100
 #define SOL_NET_MGMT_RAW (SOL_NET_MGMT_BASE + 1)
-
-/** @endcond */
 
 /**
  * struct sockaddr_nm - The sockaddr structure for NET_MGMT sockets

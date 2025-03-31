@@ -13,7 +13,6 @@ LOG_MODULE_REGISTER(spi_xec, CONFIG_SPI_LOG_LEVEL);
 #include <errno.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/spi.h>
-#include <zephyr/drivers/spi/rtio.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <soc.h>
 
@@ -657,13 +656,10 @@ static int qmspi_init(const struct device *dev)
 	return 0;
 }
 
-static DEVICE_API(spi, spi_qmspi_driver_api) = {
+static const struct spi_driver_api spi_qmspi_driver_api = {
 	.transceive = qmspi_transceive_sync,
 #ifdef CONFIG_SPI_ASYNC
 	.transceive_async = qmspi_transceive_async,
-#endif
-#ifdef CONFIG_SPI_RTIO
-	.iodev_submit = spi_rtio_iodev_default_submit,
 #endif
 	.release = qmspi_release,
 };
@@ -681,7 +677,7 @@ static DEVICE_API(spi, spi_qmspi_driver_api) = {
 				DT_INST_PROP(0, dldh),			\
 				DT_INST_PROP(0, dcsda))
 
-#if DT_NODE_HAS_STATUS_OKAY(DT_INST(0, microchip_xec_qmspi))
+#if DT_NODE_HAS_STATUS(DT_INST(0, microchip_xec_qmspi), okay)
 
 PINCTRL_DT_INST_DEFINE(0);
 
@@ -703,9 +699,9 @@ static struct spi_qmspi_data spi_qmspi_0_dev_data = {
 	SPI_CONTEXT_CS_GPIOS_INITIALIZE(DT_DRV_INST(0), ctx)
 };
 
-SPI_DEVICE_DT_INST_DEFINE(0,
-		    qmspi_init, NULL, &spi_qmspi_0_dev_data,
+DEVICE_DT_INST_DEFINE(0,
+		    &qmspi_init, NULL, &spi_qmspi_0_dev_data,
 		    &spi_qmspi_0_config, POST_KERNEL,
 		    CONFIG_SPI_INIT_PRIORITY, &spi_qmspi_driver_api);
 
-#endif /* DT_NODE_HAS_STATUS_OKAY(DT_INST(0, microchip_xec_qmspi)) */
+#endif /* DT_NODE_HAS_STATUS(DT_INST(0, microchip_xec_qmspi), okay) */

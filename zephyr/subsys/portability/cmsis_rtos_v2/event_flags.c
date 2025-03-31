@@ -5,10 +5,10 @@
  */
 
 #include <zephyr/kernel.h>
-#include <zephyr/portability/cmsis_types.h>
 #include <string.h>
+#include "wrapper.h"
 
-K_MEM_SLAB_DEFINE(cmsis_rtos_event_cb_slab, sizeof(struct cmsis_rtos_event_cb),
+K_MEM_SLAB_DEFINE(cv2_event_flags_slab, sizeof(struct cv2_event_flags),
 		  CONFIG_CMSIS_V2_EVT_FLAGS_MAX_COUNT, 4);
 
 static const osEventFlagsAttr_t init_event_flags_attrs = {
@@ -18,14 +18,14 @@ static const osEventFlagsAttr_t init_event_flags_attrs = {
 	.cb_size = 0,
 };
 
-#define DONT_CARE (0)
+#define DONT_CARE        (0)
 
 /**
  * @brief Create and Initialize an Event Flags object.
  */
 osEventFlagsId_t osEventFlagsNew(const osEventFlagsAttr_t *attr)
 {
-	struct cmsis_rtos_event_cb *events;
+	struct cv2_event_flags *events;
 
 	if (k_is_in_isr()) {
 		return NULL;
@@ -35,23 +35,21 @@ osEventFlagsId_t osEventFlagsNew(const osEventFlagsAttr_t *attr)
 		attr = &init_event_flags_attrs;
 	}
 
-	if (attr->cb_mem != NULL) {
-		__ASSERT(attr->cb_size == sizeof(struct cmsis_rtos_event_cb), "Invalid cb_size\n");
-		events = (struct cmsis_rtos_event_cb *)attr->cb_mem;
-	} else if (k_mem_slab_alloc(&cmsis_rtos_event_cb_slab, (void **)&events, K_MSEC(100)) !=
-		   0) {
+	if (k_mem_slab_alloc(&cv2_event_flags_slab, (void **)&events, K_MSEC(100))
+		== 0) {
+		memset(events, 0, sizeof(struct cv2_event_flags));
+	} else {
 		return NULL;
 	}
-	memset(events, 0, sizeof(struct cmsis_rtos_event_cb));
-	events->is_cb_dynamic_allocation = attr->cb_mem == NULL;
 
 	k_poll_signal_init(&events->poll_signal);
-	k_poll_event_init(&events->poll_event, K_POLL_TYPE_SIGNAL, K_POLL_MODE_NOTIFY_ONLY,
-			  &events->poll_signal);
+	k_poll_event_init(&events->poll_event, K_POLL_TYPE_SIGNAL,
+			  K_POLL_MODE_NOTIFY_ONLY, &events->poll_signal);
 	events->signal_results = 0U;
 
 	if (attr->name == NULL) {
-		strncpy(events->name, init_event_flags_attrs.name, sizeof(events->name) - 1);
+		strncpy(events->name, init_event_flags_attrs.name,
+			sizeof(events->name) - 1);
 	} else {
 		strncpy(events->name, attr->name, sizeof(events->name) - 1);
 	}
@@ -64,7 +62,7 @@ osEventFlagsId_t osEventFlagsNew(const osEventFlagsAttr_t *attr)
  */
 uint32_t osEventFlagsSet(osEventFlagsId_t ef_id, uint32_t flags)
 {
-	struct cmsis_rtos_event_cb *events = (struct cmsis_rtos_event_cb *)ef_id;
+	struct cv2_event_flags *events = (struct cv2_event_flags *)ef_id;
 	unsigned int key;
 
 	if ((ef_id == NULL) || (flags & osFlagsError)) {
@@ -85,7 +83,7 @@ uint32_t osEventFlagsSet(osEventFlagsId_t ef_id, uint32_t flags)
  */
 uint32_t osEventFlagsClear(osEventFlagsId_t ef_id, uint32_t flags)
 {
-	struct cmsis_rtos_event_cb *events = (struct cmsis_rtos_event_cb *)ef_id;
+	struct cv2_event_flags *events = (struct cv2_event_flags *)ef_id;
 	unsigned int key;
 	uint32_t sig;
 
@@ -104,10 +102,10 @@ uint32_t osEventFlagsClear(osEventFlagsId_t ef_id, uint32_t flags)
 /**
  * @brief Wait for one or more Event Flags to become signaled.
  */
-uint32_t osEventFlagsWait(osEventFlagsId_t ef_id, uint32_t flags, uint32_t options,
-			  uint32_t timeout)
+uint32_t osEventFlagsWait(osEventFlagsId_t ef_id, uint32_t flags,
+			  uint32_t options, uint32_t timeout)
 {
-	struct cmsis_rtos_event_cb *events = (struct cmsis_rtos_event_cb *)ef_id;
+	struct cv2_event_flags *events = (struct cv2_event_flags *)ef_id;
 	int retval, key;
 	uint32_t sig;
 	k_timeout_t poll_timeout;
@@ -175,11 +173,12 @@ uint32_t osEventFlagsWait(osEventFlagsId_t ef_id, uint32_t flags, uint32_t optio
 			 * adjust the timeout value accordingly based on
 			 * the time that has already elapsed.
 			 */
-			ticks_elapsed = (uint64_t)k_uptime_ticks() - time_stamp_start;
+			ticks_elapsed =
+				(uint64_t)k_uptime_ticks() - time_stamp_start;
 
 			if (ticks_elapsed < (uint64_t)timeout) {
-				poll_timeout = Z_TIMEOUT_TICKS(
-					(k_ticks_t)(timeout - (uint32_t)ticks_elapsed));
+				poll_timeout = Z_TIMEOUT_TICKS((k_ticks_t)(
+					timeout - (uint32_t)ticks_elapsed));
 			} else {
 				return osFlagsErrorTimeout;
 			}
@@ -199,7 +198,8 @@ uint32_t osEventFlagsWait(osEventFlagsId_t ef_id, uint32_t flags, uint32_t optio
 		 */
 		__ASSERT(events->poll_event.state == K_POLL_STATE_SIGNALED,
 			 "event state not signalled!");
-		__ASSERT(events->poll_event.signal->signaled == 1U, "event signaled is not 1");
+		__ASSERT(events->poll_event.signal->signaled == 1U,
+			 "event signaled is not 1");
 	}
 
 	return sig;
@@ -210,7 +210,7 @@ uint32_t osEventFlagsWait(osEventFlagsId_t ef_id, uint32_t flags, uint32_t optio
  */
 const char *osEventFlagsGetName(osEventFlagsId_t ef_id)
 {
-	struct cmsis_rtos_event_cb *events = (struct cmsis_rtos_event_cb *)ef_id;
+	struct cv2_event_flags *events = (struct cv2_event_flags *)ef_id;
 
 	if (!k_is_in_isr() && (ef_id != NULL)) {
 		return events->name;
@@ -224,7 +224,7 @@ const char *osEventFlagsGetName(osEventFlagsId_t ef_id)
  */
 uint32_t osEventFlagsGet(osEventFlagsId_t ef_id)
 {
-	struct cmsis_rtos_event_cb *events = (struct cmsis_rtos_event_cb *)ef_id;
+	struct cv2_event_flags *events = (struct cv2_event_flags *)ef_id;
 
 	if (ef_id == NULL) {
 		return 0;
@@ -238,7 +238,7 @@ uint32_t osEventFlagsGet(osEventFlagsId_t ef_id)
  */
 osStatus_t osEventFlagsDelete(osEventFlagsId_t ef_id)
 {
-	struct cmsis_rtos_event_cb *events = (struct cmsis_rtos_event_cb *)ef_id;
+	struct cv2_event_flags *events = (struct cv2_event_flags *)ef_id;
 
 	if (ef_id == NULL) {
 		return osErrorResource;
@@ -251,8 +251,8 @@ osStatus_t osEventFlagsDelete(osEventFlagsId_t ef_id)
 	/* The status code "osErrorParameter" (the value of the parameter
 	 * ef_id is incorrect) is not supported in Zephyr.
 	 */
-	if (events->is_cb_dynamic_allocation) {
-		k_mem_slab_free(&cmsis_rtos_event_cb_slab, (void *)events);
-	}
+
+	k_mem_slab_free(&cv2_event_flags_slab, (void *)events);
+
 	return osOK;
 }

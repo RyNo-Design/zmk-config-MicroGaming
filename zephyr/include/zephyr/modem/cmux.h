@@ -25,7 +25,6 @@
 #include <zephyr/sys/atomic.h>
 
 #include <zephyr/modem/pipe.h>
-#include <zephyr/modem/stats.h>
 
 #ifndef ZEPHYR_MODEM_CMUX_
 #define ZEPHYR_MODEM_CMUX_
@@ -64,7 +63,10 @@ enum modem_cmux_state {
 
 enum modem_cmux_receive_state {
 	MODEM_CMUX_RECEIVE_STATE_SOF = 0,
-	MODEM_CMUX_RECEIVE_STATE_RESYNC,
+	MODEM_CMUX_RECEIVE_STATE_RESYNC_0,
+	MODEM_CMUX_RECEIVE_STATE_RESYNC_1,
+	MODEM_CMUX_RECEIVE_STATE_RESYNC_2,
+	MODEM_CMUX_RECEIVE_STATE_RESYNC_3,
 	MODEM_CMUX_RECEIVE_STATE_ADDRESS,
 	MODEM_CMUX_RECEIVE_STATE_ADDRESS_CONT,
 	MODEM_CMUX_RECEIVE_STATE_CONTROL,
@@ -103,15 +105,10 @@ struct modem_cmux_dlci {
 
 	/* State */
 	enum modem_cmux_dlci_state state;
-
-	/* Statistics */
-#if CONFIG_MODEM_STATS
-	struct modem_stats_buffer receive_buf_stats;
-#endif
 };
 
 struct modem_cmux_frame {
-	uint8_t dlci_address;
+	uint16_t dlci_address;
 	bool cr;
 	bool pf;
 	uint8_t type;
@@ -139,10 +136,6 @@ struct modem_cmux {
 	enum modem_cmux_state state;
 	bool flow_control_on;
 
-	/* Work lock */
-	bool attached;
-	struct k_spinlock work_lock;
-
 	/* Receive state*/
 	enum modem_cmux_receive_state receive_state;
 
@@ -150,8 +143,6 @@ struct modem_cmux {
 	uint8_t *receive_buf;
 	uint16_t receive_buf_size;
 	uint16_t receive_buf_len;
-
-	uint8_t work_buf[CONFIG_MODEM_CMUX_WORK_BUFFER_SIZE];
 
 	/* Transmit buffer */
 	struct ring_buf transmit_rb;
@@ -170,12 +161,6 @@ struct modem_cmux {
 
 	/* Synchronize actions */
 	struct k_event event;
-
-	/* Statistics */
-#if CONFIG_MODEM_STATS
-	struct modem_stats_buffer receive_buf_stats;
-	struct modem_stats_buffer transmit_buf_stats;
-#endif
 };
 
 /**

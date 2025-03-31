@@ -44,7 +44,7 @@
 #define STM32_LINE_SHIFT 5U
 #define STM32_LINE_MASK  0xFU
 #define STM32_PORT_SHIFT 9U
-#define STM32_PORT_MASK  0x1FU
+#define STM32_PORT_MASK  0xFU
 
 /**
  * @brief Pin configuration configuration bit field.
@@ -53,9 +53,9 @@
  *
  * - mode [ 0 : 4 ]
  * - line [ 5 : 8 ]
- * - port [ 9 : 13 ]
+ * - port [ 9 : 12 ]
  *
- * @param port Port ('A'..'Q')
+ * @param port Port ('A'..'K')
  * @param line Pin (0..15)
  * @param mode Mode (ANALOG, GPIO_IN, ALTERNATE).
  */

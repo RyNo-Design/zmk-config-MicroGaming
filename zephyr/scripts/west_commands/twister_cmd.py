@@ -6,7 +6,8 @@ import argparse
 import os
 import sys
 
-from west.commands import Verbosity, WestCommand
+from west import log
+from west.commands import WestCommand
 
 from zephyr_ext_common import ZEPHYR_SCRIPTS
 
@@ -17,7 +18,7 @@ os.environ["ZEPHYR_BASE"] = str(twister_path.parent)
 sys.path.insert(0, str(twister_path))
 sys.path.insert(0, str(twister_path / "pylib" / "twister"))
 
-from twisterlib.environment import add_parse_arguments, parse_arguments, python_version_guard
+from twisterlib.environment import add_parse_arguments, parse_arguments
 from twisterlib.twister_main import main
 
 TWISTER_DESCRIPTION = """\
@@ -36,7 +37,6 @@ class Twister(WestCommand):
             TWISTER_DESCRIPTION,
             accepts_unknown_args=True,
         )
-        python_version_guard()
 
     def do_add_parser(self, parser_adder):
         parser = parser_adder.add_parser(
@@ -52,13 +52,12 @@ class Twister(WestCommand):
         return parser
 
     def do_run(self, args, remainder):
-        self.dbg(
-            "args: {} remainder: {}".format(args, remainder), level=Verbosity.DBG_EXTREME
+        log.dbg(
+            "args: {} remainder: {}".format(args, remainder), level=log.VERBOSE_EXTREME
         )
 
-        options = parse_arguments(self.parser, args=remainder, options=args)
-        default_options = parse_arguments(self.parser, args=[], on_init=False)
-        ret = main(options, default_options)
+        options = self._parse_arguments(args=remainder, options=args)
+        ret = main(options)
         sys.exit(ret)
 
     def _parse_arguments(self, args, options):

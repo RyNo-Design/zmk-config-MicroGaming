@@ -1,8 +1,7 @@
-.. zephyr:code-sample:: lps22hh
-   :name: LPSS22HH Temperature and Pressure Sensor
-   :relevant-api: sensor_interface
+.. _lps22hh:
 
-   Get pressure and temperature data from an LPS22HH sensor (polling & trigger mode).
+LPS22HH: Temperature and Pressure Monitor
+#########################################
 
 Overview
 ********
@@ -28,7 +27,7 @@ sensor, which is present on the X-NUCLEO-IKS01A3 shield.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/sensor/lps22hh
-   :board: nrf52dk/nrf52832
+   :board: nrf52dk_nrf52832
    :shield: x_nucleo_iks01a3
    :goals: build
    :compact:

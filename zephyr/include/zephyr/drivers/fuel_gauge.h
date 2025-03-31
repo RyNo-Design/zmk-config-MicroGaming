@@ -11,8 +11,6 @@
 /**
  * @brief Fuel Gauge Interface
  * @defgroup fuel_gauge_interface Fuel Gauge Interface
- * @since 3.3
- * @version 0.1.0
  * @ingroup io_interfaces
  * @{
  */
@@ -274,7 +272,7 @@ static inline int z_impl_fuel_gauge_get_prop(const struct device *dev, fuel_gaug
 }
 
 /**
- * @brief Fetch multiple battery fuel-gauge properties. The default implementation is the same as
+ * @brief Fetch multiple battery fuel-gauge properies. The default implementation is the same as
  * calling fuel_gauge_get_prop() multiple times. A driver may implement the `get_properties` field
  * of the fuel gauge driver APIs struct to override this implementation.
  *
@@ -288,15 +286,15 @@ static inline int z_impl_fuel_gauge_get_prop(const struct device *dev, fuel_gaug
  * @return 0 if successful, negative errno code of first failing property
  */
 
-__syscall int fuel_gauge_get_props(const struct device *dev, const fuel_gauge_prop_t *props,
+__syscall int fuel_gauge_get_props(const struct device *dev, fuel_gauge_prop_t *props,
 				   union fuel_gauge_prop_val *vals, size_t len);
 static inline int z_impl_fuel_gauge_get_props(const struct device *dev,
-					      const fuel_gauge_prop_t *props,
+					      fuel_gauge_prop_t *props,
 					      union fuel_gauge_prop_val *vals, size_t len)
 {
-	const struct fuel_gauge_driver_api *api = (const struct fuel_gauge_driver_api *)dev->api;
+	const struct fuel_gauge_driver_api *api = dev->api;
 
-	for (size_t i = 0; i < len; i++) {
+	for (int i = 0; i < len; i++) {
 		int ret = api->get_property(dev, props[i], vals + i);
 
 		if (ret) {
@@ -322,7 +320,7 @@ __syscall int fuel_gauge_set_prop(const struct device *dev, fuel_gauge_prop_t pr
 static inline int z_impl_fuel_gauge_set_prop(const struct device *dev, fuel_gauge_prop_t prop,
 					     union fuel_gauge_prop_val val)
 {
-	const struct fuel_gauge_driver_api *api = (const struct fuel_gauge_driver_api *)dev->api;
+	const struct fuel_gauge_driver_api *api = dev->api;
 
 	if (api->set_property == NULL) {
 		return -ENOSYS;
@@ -342,14 +340,14 @@ static inline int z_impl_fuel_gauge_set_prop(const struct device *dev, fuel_gaug
  *
  * @return return=0 if successful. Otherwise, return array index of failing property.
  */
-__syscall int fuel_gauge_set_props(const struct device *dev, const fuel_gauge_prop_t *props,
-				   const union fuel_gauge_prop_val *vals, size_t len);
+__syscall int fuel_gauge_set_props(const struct device *dev, fuel_gauge_prop_t *props,
+				   union fuel_gauge_prop_val *vals, size_t len);
 
 static inline int z_impl_fuel_gauge_set_props(const struct device *dev,
-					      const fuel_gauge_prop_t *props,
-					      const union fuel_gauge_prop_val *vals, size_t len)
+					      fuel_gauge_prop_t *props,
+					      union fuel_gauge_prop_val *vals, size_t len)
 {
-	for (size_t i = 0; i < len; i++) {
+	for (int i = 0; i < len; i++) {
 		int ret = fuel_gauge_set_prop(dev, props[i], vals[i]);
 
 		if (ret) {
@@ -416,6 +414,6 @@ static inline int z_impl_fuel_gauge_battery_cutoff(const struct device *dev)
 }
 #endif /* __cplusplus */
 
-#include <zephyr/syscalls/fuel_gauge.h>
+#include <syscalls/fuel_gauge.h>
 
 #endif /* ZEPHYR_INCLUDE_DRIVERS_BATTERY_H_ */

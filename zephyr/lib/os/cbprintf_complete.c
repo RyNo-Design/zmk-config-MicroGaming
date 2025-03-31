@@ -515,8 +515,7 @@ static inline const char *extract_specifier(struct conversion *conv,
 {
 	bool unsupported = false;
 
-	conv->specifier = *sp;
-	++sp;
+	conv->specifier = *sp++;
 
 	switch (conv->specifier) {
 	case SINT_CONV_CASES:
@@ -653,8 +652,7 @@ static inline const char *extract_conversion(struct conversion *conv,
 	 */
 	++sp;
 	if (*sp == '%') {
-		conv->specifier = *sp;
-		++sp;
+		conv->specifier = *sp++;
 		return sp;
 	}
 
@@ -799,8 +797,7 @@ static char *encode_uint(uint_value_type value,
 	do {
 		unsigned int lsv = (unsigned int)(value % radix);
 
-		--bp;
-		*bp = (lsv <= 9) ? ('0' + lsv)
+		*--bp = (lsv <= 9) ? ('0' + lsv)
 			: upcase ? ('A' + lsv - 10) : ('a' + lsv - 10);
 		value /= radix;
 	} while ((value != 0) && (bps < bp));
@@ -909,27 +906,23 @@ static char *encode_float(double value,
 	if (expo == BIT_MASK(EXPONENT_BITS)) {
 		if (fract == 0) {
 			if (isupper((unsigned char)c) != 0) {
-				buf[0] = 'I';
-				buf[1] = 'N';
-				buf[2] = 'F';
-				buf += 3;
+				*buf++ = 'I';
+				*buf++ = 'N';
+				*buf++ = 'F';
 			} else {
-				buf[0] = 'i';
-				buf[1] = 'n';
-				buf[2] = 'f';
-				buf += 3;
+				*buf++ = 'i';
+				*buf++ = 'n';
+				*buf++ = 'f';
 			}
 		} else {
 			if (isupper((unsigned char)c) != 0) {
-				buf[0] = 'N';
-				buf[1] = 'A';
-				buf[2] = 'N';
-				buf += 3;
+				*buf++ = 'N';
+				*buf++ = 'A';
+				*buf++ = 'N';
 			} else {
-				buf[0] = 'n';
-				buf[1] = 'a';
-				buf[2] = 'n';
-				buf += 3;
+				*buf++ = 'n';
+				*buf++ = 'a';
+				*buf++ = 'n';
 			}
 		}
 
@@ -949,9 +942,8 @@ static char *encode_float(double value,
 	if (IS_ENABLED(CONFIG_CBPRINTF_FP_A_SUPPORT)
 	    && (IS_ENABLED(CONFIG_CBPRINTF_FP_ALWAYS_A)
 		|| conv->specifier_a)) {
-		buf[0] = '0';
-		buf[1] = 'x';
-		buf += 2;
+		*buf++ = '0';
+		*buf++ = 'x';
 
 		/* Remove the offset from the exponent, and store the
 		 * non-fractional value.  Subnormals require increasing the
@@ -959,12 +951,10 @@ static char *encode_float(double value,
 		 */
 		expo -= 1023;
 		if (is_subnormal) {
-			*buf = '0';
-			++buf;
+			*buf++ = '0';
 			++expo;
 		} else {
-			*buf = '1';
-			++buf;
+			*buf++ = '1';
 		}
 
 		/* If we didn't get precision from a %a specification then we
@@ -989,7 +979,7 @@ static char *encode_float(double value,
 			/* Round only if the bit that would round is
 			 * set.
 			 */
-			if ((fract & mask) != 0ULL) {
+			if (fract & mask) {
 				fract += mask;
 			}
 		}
@@ -1000,8 +990,7 @@ static char *encode_float(double value,
 		bool require_dp = ((fract != 0) || conv->flag_hash);
 
 		if (require_dp || (precision != 0)) {
-			*buf = '.';
-			++buf;
+			*buf++ = '.';
 		}
 
 		/* Get the fractional value as a hexadecimal string, using x
@@ -1021,15 +1010,12 @@ static char *encode_float(double value,
 		 * point.
 		 */
 		while ((spe - sp) < FRACTION_HEX) {
-			--sp;
-			*sp = '0';
+			*--sp = '0';
 		}
 
 		/* Append the leading significant "digits". */
 		while ((sp < spe) && (precision > 0)) {
-			*buf = *sp;
-			++buf;
-			++sp;
+			*buf++ = *sp++;
 			--precision;
 		}
 
@@ -1042,14 +1028,11 @@ static char *encode_float(double value,
 			}
 		}
 
-		*buf = 'p';
-		++buf;
+		*buf++ = 'p';
 		if (expo >= 0) {
-			*buf = '+';
-			++buf;
+			*buf++ = '+';
 		} else {
-			*buf = '-';
-			++buf;
+			*buf++ = '-';
 			expo = -expo;
 		}
 
@@ -1057,9 +1040,7 @@ static char *encode_float(double value,
 		sp = encode_uint(expo, &aconv, buf, spe);
 
 		while (sp < spe) {
-			*buf = *sp;
-			++buf;
-			++sp;
+			*buf++ = *sp++;
 		}
 
 		*bpe = buf;
@@ -1079,7 +1060,7 @@ static char *encode_float(double value,
 			/* Fraction is subnormal.  Normalize it and correct
 			 * the exponent.
 			 */
-			for (fract <<= 1; (fract & BIT_63) == 0; fract <<= 1) {
+			while (((fract <<= 1) & BIT_63) == 0) {
 				expo--;
 			}
 		}
@@ -1147,7 +1128,7 @@ static char *encode_float(double value,
 		 * representation and correct the precision and zero-pruning
 		 * in accordance with the ISO C rule.
 		 */
-		if ((decexp < (-4 + 1)) || (decexp > precision)) {
+		if (decexp < (-4 + 1) || decexp > precision) {
 			c += 'e' - 'g';  /* e or E */
 			if (precision > 0) {
 				precision--;
@@ -1179,7 +1160,7 @@ static char *encode_float(double value,
 
 	/* Round the value to the last digit being printed. */
 	uint64_t round = BIT64(59); /* 0.5 */
-	while (decimals-- != 0) {
+	while (decimals--) {
 		_ldiv10(&round);
 	}
 	fract += round;
@@ -1192,9 +1173,8 @@ static char *encode_float(double value,
 	if (c == 'f') {
 		if (decexp > 0) {
 			/* Emit the digits above the decimal point. */
-			while ((decexp > 0) && (digit_count > 0)) {
-				*buf = _get_digit(&fract, &digit_count);
-				++buf;
+			while (decexp > 0 && digit_count > 0) {
+				*buf++ = _get_digit(&fract, &digit_count);
 				decexp--;
 			}
 
@@ -1202,19 +1182,17 @@ static char *encode_float(double value,
 
 			decexp = 0;
 		} else {
-			*buf = '0';
-			++buf;
+			*buf++ = '0';
 		}
 
 		/* Emit the decimal point only if required by the alternative
 		 * format, or if more digits are to follow.
 		 */
 		if (conv->flag_hash || (precision > 0)) {
-			*buf = '.';
-			++buf;
+			*buf++ = '.';
 		}
 
-		if ((decexp < 0) && (precision > 0)) {
+		if (decexp < 0 && precision > 0) {
 			conv->pad0_value = -decexp;
 			if (conv->pad0_value > precision) {
 				conv->pad0_value = precision;
@@ -1236,14 +1214,12 @@ static char *encode_float(double value,
 		 * format, or if more digits are to follow.
 		 */
 		if (conv->flag_hash || (precision > 0)) {
-			*buf = '.';
-			++buf;
+			*buf++ = '.';
 		}
 	}
 
-	while ((precision > 0) && (digit_count > 0)) {
-		*buf = _get_digit(&fract, &digit_count);
-		++buf;
+	while (precision > 0 && digit_count > 0) {
+		*buf++ = _get_digit(&fract, &digit_count);
 		precision--;
 	}
 
@@ -1251,37 +1227,32 @@ static char *encode_float(double value,
 
 	if (prune_zero) {
 		conv->pad0_pre_exp = 0;
-		do {
-			--buf;
-		} while (*buf == '0');
+		while (*--buf == '0') {
+			;
+		}
 		if (*buf != '.') {
-			++buf;
+			buf++;
 		}
 	}
 
 	/* Emit the explicit exponent, if format requires it. */
 	if ((c == 'e') || (c == 'E')) {
-		*buf = c;
-		++buf;
+		*buf++ = c;
 		if (decexp < 0) {
 			decexp = -decexp;
-			*buf = '-';
-			++buf;
+			*buf++ = '-';
 		} else {
-			*buf = '+';
-			++buf;
+			*buf++ = '+';
 		}
 
 		/* At most 3 digits to the decimal.  Spit them out. */
 		if (decexp >= 100) {
-			*buf = (decexp / 100) + '0';
-			++buf;
+			*buf++ = (decexp / 100) + '0';
 			decexp %= 100;
 		}
 
-		buf[0] = (decexp / 10) + '0';
-		buf[1] = (decexp % 10) + '0';
-		buf += 2;
+		*buf++ = (decexp / 10) + '0';
+		*buf++ = (decexp % 10) + '0';
 	}
 
 	/* Cache whether there's padding required */
@@ -1345,17 +1316,15 @@ static inline void store_count(const struct conversion *conv,
 }
 
 /* Outline function to emit all characters in [sp, ep). */
-static int outs(cbprintf_cb __out,
+static int outs(cbprintf_cb out,
 		void *ctx,
 		const char *sp,
 		const char *ep)
 {
 	size_t count = 0;
-	cbprintf_cb_local out = __out;
 
 	while ((sp < ep) || ((ep == NULL) && *sp)) {
-		int rc = out((int)*sp, ctx);
-		++sp;
+		int rc = out((int)*sp++, ctx);
 
 		if (rc < 0) {
 			return rc;
@@ -1366,13 +1335,12 @@ static int outs(cbprintf_cb __out,
 	return (int)count;
 }
 
-int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
+int z_cbvprintf_impl(cbprintf_cb out, void *ctx, const char *fp,
 		     va_list ap, uint32_t flags)
 {
 	char buf[CONVERTED_BUFLEN];
 	size_t count = 0;
 	sint_value_type sint;
-	cbprintf_cb_local out = __out;
 
 	const bool tagged_ap = (flags & Z_CBVPRINTF_PROCESS_FLAG_TAGGED_ARGS)
 			       == Z_CBVPRINTF_PROCESS_FLAG_TAGGED_ARGS;
@@ -1396,7 +1364,7 @@ int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
  */
 
 #define OUTS(_sp, _ep) do { \
-	int rc = outs(out, ctx, (_sp), (_ep)); \
+	int rc = outs(out, ctx, _sp, _ep); \
 	\
 	if (rc < 0) {	    \
 		return rc; \
@@ -1406,9 +1374,16 @@ int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
 
 	while (*fp != 0) {
 		if (*fp != '%') {
-			OUTC(*fp);
-			++fp;
+			OUTC(*fp++);
 			continue;
+		}
+
+		if (IS_ENABLED(CONFIG_CBPRINTF_PACKAGE_SUPPORT_TAGGED_ARGUMENTS)
+		    && tagged_ap) {
+			/* Skip over the argument tag as it is not being
+			 * used here.
+			 */
+			(void)va_arg(ap, int);
 		}
 
 		/* Force union into RAM with conversion state to
@@ -1432,16 +1407,6 @@ int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
 		char sign = 0;
 
 		fp = extract_conversion(conv, sp);
-
-		if (conv->specifier_cat != SPECIFIER_INVALID) {
-			if (IS_ENABLED(CONFIG_CBPRINTF_PACKAGE_SUPPORT_TAGGED_ARGUMENTS)
-			    && tagged_ap) {
-				/* Skip over the argument tag as it is not being
-				 * used here.
-				 */
-				(void)va_arg(ap, int);
-			}
-		}
 
 		/* If dynamic width is specified, process it,
 		 * otherwise set width if present.
@@ -1634,26 +1599,6 @@ int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
 
 			break;
 		}
-		case 'p':
-			/* Implementation-defined: null is "(nil)", non-null
-			 * has 0x prefix followed by significant address hex
-			 * digits, no leading zeros.
-			 */
-			if (value->ptr != NULL) {
-				bps = encode_uint((uintptr_t)value->ptr, conv,
-						  buf, bpe);
-
-				/* Use 0x prefix */
-				conv->altform_0c = true;
-				conv->specifier = 'x';
-
-				goto prec_int_pad0;
-			}
-
-			bps = "(nil)";
-			bpe = bps + 5;
-
-			break;
 		case 'c':
 			bps = buf;
 			buf[0] = CHAR_IS_SIGNED ? value->sint : value->uint;
@@ -1705,6 +1650,26 @@ int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
 					conv->pad0_value = precision - (int)len;
 				}
 			}
+
+			break;
+		case 'p':
+			/* Implementation-defined: null is "(nil)", non-null
+			 * has 0x prefix followed by significant address hex
+			 * digits, no leading zeros.
+			 */
+			if (value->ptr != NULL) {
+				bps = encode_uint((uintptr_t)value->ptr, conv,
+						  buf, bpe);
+
+				/* Use 0x prefix */
+				conv->altform_0c = true;
+				conv->specifier = 'x';
+
+				goto prec_int_pad0;
+			}
+
+			bps = "(nil)";
+			bpe = bps + 5;
 
 			break;
 		case 'n':
@@ -1815,13 +1780,11 @@ int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
 			if (conv->specifier_a) {
 				/* Only padding is pre_exp */
 				while (*cp != 'p') {
-					OUTC(*cp);
-					++cp;
+					OUTC(*cp++);
 				}
 			} else {
 				while (isdigit((unsigned char)*cp) != 0) {
-					OUTC(*cp);
-					++cp;
+					OUTC(*cp++);
 				}
 
 				pad_len = conv->pad0_value;
@@ -1832,8 +1795,7 @@ int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
 				}
 
 				if (*cp == '.') {
-					OUTC(*cp);
-					++cp;
+					OUTC(*cp++);
 					/* Remaining padding is
 					 * post-dp.
 					 */
@@ -1842,8 +1804,7 @@ int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
 					}
 				}
 				while (isdigit((unsigned char)*cp) != 0) {
-					OUTC(*cp);
-					++cp;
+					OUTC(*cp++);
 				}
 			}
 
@@ -1854,7 +1815,7 @@ int z_cbvprintf_impl(cbprintf_cb __out, void *ctx, const char *fp,
 
 			OUTS(cp, bpe);
 		} else {
-			if ((conv->altform_0c | conv->altform_0) != 0) {
+			if (conv->altform_0c | conv->altform_0) {
 				OUTC('0');
 			}
 

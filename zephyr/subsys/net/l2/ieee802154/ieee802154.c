@@ -251,33 +251,31 @@ static inline void swap_and_set_pkt_ll_addr(struct net_linkaddr *addr, bool has_
 					    enum ieee802154_addressing_mode mode,
 					    struct ieee802154_address_field *ll)
 {
+	addr->type = NET_LINK_IEEE802154;
+
 	switch (mode) {
 	case IEEE802154_ADDR_MODE_EXTENDED:
-		(void)net_linkaddr_create(
-			addr,
-			has_pan_id ? ll->plain.addr.ext_addr : ll->comp.addr.ext_addr,
-			IEEE802154_EXT_ADDR_LENGTH,
-			NET_LINK_IEEE802154);
+		addr->len = IEEE802154_EXT_ADDR_LENGTH;
+		addr->addr = has_pan_id ? ll->plain.addr.ext_addr : ll->comp.addr.ext_addr;
 		break;
 
 	case IEEE802154_ADDR_MODE_SHORT:
-		(void)net_linkaddr_create(
-			addr,
-			(const uint8_t *)(has_pan_id ?
-					  &ll->plain.addr.short_addr : &ll->comp.addr.short_addr),
-			IEEE802154_SHORT_ADDR_LENGTH,
-			NET_LINK_IEEE802154);
+		addr->len = IEEE802154_SHORT_ADDR_LENGTH;
+		addr->addr = (uint8_t *)(has_pan_id ? &ll->plain.addr.short_addr
+						    : &ll->comp.addr.short_addr);
 		break;
 
 	case IEEE802154_ADDR_MODE_NONE:
 	default:
-		(void)net_linkaddr_clear(addr);
+		addr->len = 0U;
+		addr->addr = NULL;
 	}
 
-	/* The net stack expects big endian link layer addresses for POSIX compliance
-	 * so we must swap it. This is ok as the L2 address field points into the L2
-	 * header of the frame buffer which will no longer be accessible once the
-	 * packet reaches upper layers.
+	/* The net stack expects link layer addresses to be in
+	 * big endian format for posix compliance so we must swap it.
+	 * This is ok as the L2 address field comes from the header
+	 * part of the packet buffer which will not be directly accessible
+	 * once the packet reaches the upper layers.
 	 */
 	if (addr->len > 0) {
 		sys_mem_swap(addr->addr, addr->len);
@@ -289,7 +287,7 @@ static inline void swap_and_set_pkt_ll_addr(struct net_linkaddr *addr, bool has_
  *
  * This is done before deciphering and authenticating encrypted frames.
  */
-static bool ieee802154_check_dst_addr(struct net_if *iface, struct ieee802154_mhr *mhr)
+static bool ieeee802154_check_dst_addr(struct net_if *iface, struct ieee802154_mhr *mhr)
 {
 	struct ieee802154_address_field_plain *dst_plain = &mhr->dst_addr->plain;
 	struct ieee802154_context *ctx = net_if_l2_data(iface);
@@ -319,7 +317,7 @@ static bool ieee802154_check_dst_addr(struct net_if *iface, struct ieee802154_mh
 	if (!(dst_plain->pan_id == IEEE802154_BROADCAST_PAN_ID ||
 	      dst_plain->pan_id == sys_cpu_to_le16(ctx->pan_id))) {
 		LOG_DBG("Frame PAN ID does not match!");
-		goto out;
+		return false;
 	}
 
 	if (mhr->fs->fc.dst_addr_mode == IEEE802154_ADDR_MODE_SHORT) {
@@ -377,7 +375,7 @@ static enum net_verdict ieee802154_recv(struct net_if *iface, struct net_pkt *pk
 
 	/* validate LL destination address (when IEEE802154_HW_FILTER not available) */
 	if (!(radio->get_capabilities(net_if_get_device(iface)) & IEEE802154_HW_FILTER) &&
-	    !ieee802154_check_dst_addr(iface, &mpdu.mhr)) {
+	    !ieeee802154_check_dst_addr(iface, &mpdu.mhr)) {
 		return NET_DROP;
 	}
 
@@ -437,9 +435,9 @@ static enum net_verdict ieee802154_recv(struct net_if *iface, struct net_pkt *pk
 		return NET_DROP;
 	}
 
-	/* Setting LL addresses for upper layers must be done after L2 packet
-	 * handling as it will mangle the L2 frame header to comply with upper
-	 * layers' (POSIX) requirement to represent network addresses in big endian.
+	/* Setting L2 addresses must be done after packet authentication and internal
+	 * packet handling as it will mangle the package header to comply with upper
+	 * network layers' (POSIX) requirement to represent network addresses in big endian.
 	 */
 	swap_and_set_pkt_ll_addr(net_pkt_lladdr_src(pkt), !fs->fc.pan_id_comp,
 				 fs->fc.src_addr_mode, mpdu.mhr.src_addr);
@@ -507,13 +505,10 @@ static int ieee802154_send(struct net_if *iface, struct net_pkt *pkt)
 			struct sockaddr_ll_ptr *src_addr =
 				(struct sockaddr_ll_ptr *)&context->local;
 
-			(void)net_linkaddr_set(net_pkt_lladdr_dst(pkt),
-					       dst_addr->sll_addr,
-					       dst_addr->sll_halen);
-
-			(void)net_linkaddr_set(net_pkt_lladdr_src(pkt),
-					       src_addr->sll_addr,
-					       src_addr->sll_halen);
+			net_pkt_lladdr_dst(pkt)->addr = dst_addr->sll_addr;
+			net_pkt_lladdr_dst(pkt)->len = dst_addr->sll_halen;
+			net_pkt_lladdr_src(pkt)->addr = src_addr->sll_addr;
+			net_pkt_lladdr_src(pkt)->len = src_addr->sll_halen;
 		} else {
 			return -EINVAL;
 		}

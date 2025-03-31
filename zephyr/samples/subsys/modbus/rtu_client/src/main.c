@@ -6,6 +6,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/modbus/modbus.h>
 
 #include <zephyr/logging/log.h>

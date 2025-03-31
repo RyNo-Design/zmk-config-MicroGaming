@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 description: |
-  STM32H7 RCC (Reset and Clock controller).
-
+  STM32 Reset and Clock controller node for STM32H7 devices
   This node is in charge of system clock ('SYSCLK') source selection and
   System Clock Generation.
 

@@ -11,11 +11,12 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
-#include <zephyr/sys/printk-hooks.h>
-#include <zephyr/sys/libc-hooks.h>
 #include <zephyr/device.h>
 #include <zephyr/init.h>
 #include <SEGGER_RTT.h>
+
+extern void __printk_hook_install(int (*fn)(int));
+extern void __stdout_hook_install(int (*fn)(int));
 
 static bool host_present;
 
@@ -40,7 +41,9 @@ static int rtt_console_out(int character)
 	int max_cnt = CONFIG_RTT_TX_RETRY_CNT;
 
 	do {
-		cnt = SEGGER_RTT_Write(0, &c, 1);
+		SEGGER_RTT_LOCK();
+		cnt = SEGGER_RTT_WriteNoLock(0, &c, 1);
+		SEGGER_RTT_UNLOCK();
 
 		/* There are two possible reasons for not writing any data to
 		 * RTT:

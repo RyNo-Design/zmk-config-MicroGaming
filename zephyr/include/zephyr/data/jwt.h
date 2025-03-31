@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 /**
- * @brief JSON Web Token (JWT) - RFC 7519
+ * @brief JSON Web Token (JWT)
  * @defgroup jwt JSON Web Token (JWT)
  * @ingroup json
  * @{
@@ -24,10 +24,10 @@ extern "C" {
 /**
  * @brief JWT data tracking.
  *
- * JSON Web Tokens contain several sections, each encoded in Base64URL.
+ * JSON Web Tokens contain several sections, each encoded in base-64.
  * This structure tracks the token as it is being built, including
  * limits on the amount of available space.  It should be initialized
- * with jwt_init_builder().
+ * with jwt_init().
  */
 struct jwt_builder {
 	/** The base of the buffer we are writing to. */
@@ -37,7 +37,7 @@ struct jwt_builder {
 	 */
 	char *buf;
 
-	/** The remaining free space in @p buf. */
+	/** The length remaining to write. */
 	size_t len;
 
 	/**
@@ -57,37 +57,23 @@ struct jwt_builder {
  * @brief Initialize the JWT builder.
  *
  * Initialize the given JWT builder for the creation of a fresh token.
- * The buffer size should be long enough to store the entire token.
+ * The buffer size should at least be as long as JWT_BUILDER_MAX_SIZE
+ * returns.
  *
  * @param builder The builder to initialize.
  * @param buffer The buffer to write the token to.
  * @param buffer_size The size of this buffer.  The token will be NULL
  * terminated, which needs to be allowed for in this size.
  *
- * @retval 0 Success.
- * @retval -ENOSPC Buffer is insufficient to initialize.
+ * @retval 0 Success
+ * @retval -ENOSPC Buffer is insufficient to initialize
  */
 int jwt_init_builder(struct jwt_builder *builder,
 		     char *buffer,
 		     size_t buffer_size);
 
 /**
- * @brief Add JWT payload.
- *
- * Add JWT payload to a previously initialized builder with the following fields:
- * - Expiration Time
- * - Issued At
- * - Audience
- *
- * See RFC 7519 section 4.1 to get more information about these fields.
- *
- * @param builder A previously initialized builder.
- * @param exp Expiration Time (epoch format).
- * @param iat Issued At (epoch format).
- * @param aud Audience.
- *
- * @retval 0 Success.
- * @retval <0 Failure.
+ * @brief add JWT primary payload.
  */
 int jwt_add_payload(struct jwt_builder *builder,
 		    int32_t exp,
@@ -95,20 +81,17 @@ int jwt_add_payload(struct jwt_builder *builder,
 		    const char *aud);
 
 /**
- * @brief Sign the JWT.
- *
- * Sign a previously initialized with payload JWT.
- *
- * @param builder A previously initialized builder with payload.
- * @param der_key Private key to use in DER format.
- * @param der_key_len Size of the private key in bytes.
- *
- * @retval 0 Success.
- * @retval <0 Failure.
+ * @brief Sign the JWT token.
  */
 int jwt_sign(struct jwt_builder *builder,
 	     const char *der_key,
 	     size_t der_key_len);
+
+
+static inline size_t jwt_payload_len(struct jwt_builder *builder)
+{
+	return (builder->buf - builder->base);
+}
 
 #ifdef __cplusplus
 }

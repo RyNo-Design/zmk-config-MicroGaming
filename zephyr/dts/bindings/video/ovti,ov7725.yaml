@@ -13,7 +13,3 @@ properties:
       reset.  The sensor receives this as an active-low signal.
 
 include: i2c-device.yaml
-
-child-binding:
-  child-binding:
-    include: video-interfaces.yaml

@@ -1,25 +1,26 @@
-.. zephyr:code-sample:: ble_central
-   :name: Central
-   :relevant-api: bluetooth
+.. _bluetooth_central:
 
-   Implement basic Bluetooth LE Central role functionality (scanning and connecting).
+Bluetooth: Central
+##################
 
 Overview
 ********
 
-Application demonstrating very basic Bluetooth LE Central role functionality by scanning
-for other Bluetooth LE devices and establishing a connection to the first one with a
+Application demonstrating very basic BLE Central role functionality by scanning
+for other BLE devices and establishing a connection to the first one with a
 strong enough signal.
+
+
 
 Requirements
 ************
 
 * BlueZ running on the host, or
-* A board with Bluetooth LE support
+* A board with BLE support
 
 Building and Running
 ********************
 This sample can be found under :zephyr_file:`samples/bluetooth/central` in the
 Zephyr tree.
 
-See :zephyr:code-sample-category:`bluetooth` samples for details.
+See :ref:`bluetooth samples section <bluetooth-samples>` for details.

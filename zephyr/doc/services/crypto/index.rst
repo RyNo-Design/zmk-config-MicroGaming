@@ -13,6 +13,6 @@ The following crypto libraries have been included:
 .. toctree::
    :maxdepth: 1
 
-   psa_crypto.rst
+   tinycrypt.rst
    random/index.rst
    api/index.rst

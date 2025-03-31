@@ -10,7 +10,6 @@
 #include <stdbool.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/spi.h>
-#include <zephyr/drivers/spi/rtio.h>
 
 #if DT_ANY_INST_ON_BUS_STATUS_OKAY(pcie)
 BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "DT need CONFIG_PCIE");
@@ -31,7 +30,7 @@ static void spi_pw_reg_write(const struct device *dev,
 			     uint32_t offset,
 			     uint32_t val)
 {
-	sys_write32(val, DEVICE_MMIO_GET(dev) + offset);
+	return sys_write32(val, DEVICE_MMIO_GET(dev) + offset);
 }
 
 static void spi_pw_ssp_reset(const struct device *dev)
@@ -209,8 +208,8 @@ static void spi_pw_rx_thld_set(const struct device *dev,
 
 	/* Rx threshold */
 	reg_data = spi_pw_reg_read(dev, PW_SPI_REG_SIRF);
-	reg_data &= (uint32_t) ~(PW_SPI_WM_MASK);
-	reg_data |= PW_SPI_SIRF_WM_DFLT;
+	reg_data = (uint32_t) ~(PW_SPI_WM_MASK);
+	reg_data = PW_SPI_SIRF_WM_DFLT;
 	if (spi->ctx.rx_len && spi->ctx.rx_len < spi->fifo_depth) {
 		reg_data = spi->ctx.rx_len - 1;
 	}
@@ -734,15 +733,12 @@ static void spi_pw_isr(const void *arg)
 }
 #endif
 
-static DEVICE_API(spi, pw_spi_api) = {
+static const struct spi_driver_api pw_spi_api = {
 	.transceive = spi_pw_transceive,
 	.release = spi_pw_release,
 #ifdef CONFIG_SPI_ASYNC
 	.transceive_async = spi_pw_transceive_async,
 #endif  /* CONFIG_SPI_ASYNC */
-#ifdef CONFIG_SPI_RTIO
-	.iodev_submit = spi_rtio_iodev_default_submit,
-#endif
 };
 
 static int spi_pw_init(const struct device *dev)
@@ -871,7 +867,7 @@ static int spi_pw_init(const struct device *dev)
 		.clock_freq = DT_INST_PROP(n, clock_frequency),	     \
 		INIT_PCIE(n)					     \
 	};							     \
-	SPI_DEVICE_DT_INST_DEFINE(n, spi_pw_init, NULL,		     \
+	DEVICE_DT_INST_DEFINE(n, spi_pw_init, NULL,		     \
 			      &spi_##n##_data, &spi_##n##_config,    \
 			      POST_KERNEL, CONFIG_SPI_INIT_PRIORITY, \
 			      &pw_spi_api);
@@ -891,7 +887,7 @@ static int spi_pw_init(const struct device *dev)
 		.clock_freq = DT_INST_PROP(n, clock_frequency),	     \
 		INIT_PCIE(n)					     \
 	};							     \
-	SPI_DEVICE_DT_INST_DEFINE(n, spi_pw_init, NULL,		     \
+	DEVICE_DT_INST_DEFINE(n, spi_pw_init, NULL,		     \
 			      &spi_##n##_data, &spi_##n##_config,    \
 			      POST_KERNEL, CONFIG_SPI_INIT_PRIORITY, \
 			      &pw_spi_api);

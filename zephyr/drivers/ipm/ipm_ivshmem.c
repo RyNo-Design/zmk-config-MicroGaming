@@ -60,9 +60,8 @@ static void ivshmem_ipm_event_loop_thread(void *arg, void *p2, void *p3)
 		/* get ready for next signal */
 		k_poll_signal_reset(&sig);
 
-		if (dev_data->cb) {
+		if (dev_data->cb)
 			dev_data->cb(dev, dev_data->user_data, 0, NULL);
-		}
 	}
 }
 
@@ -103,7 +102,7 @@ static int ivshmem_ipm_init(const struct device *dev)
 	k_thread_create(&ivshmem_ev_loop_thread,
 		ivshmem_ev_loop_stack,
 		CONFIG_IPM_IVSHMEM_EVENT_LOOP_STACK_SIZE,
-		ivshmem_ipm_event_loop_thread,
+		(k_thread_entry_t)ivshmem_ipm_event_loop_thread,
 		(void *)dev, NULL, NULL,
 		CONFIG_IPM_IVSHMEM_EVENT_LOOP_PRIO,
 		0, K_NO_WAIT);
@@ -111,7 +110,7 @@ static int ivshmem_ipm_init(const struct device *dev)
 	return 0;
 }
 
-static DEVICE_API(ipm, ivshmem_ipm_driver_api) = {
+static const struct ipm_driver_api ivshmem_ipm_driver_api = {
 	.send = ivshmem_ipm_send,
 	.register_callback = ivshmem_ipm_register_callback,
 	.set_enabled = ivshmem_ipm_set_enabled

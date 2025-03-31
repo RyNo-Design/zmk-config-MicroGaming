@@ -10,7 +10,6 @@
 #include <stdbool.h>
 #include <zephyr/types.h>
 #include <zephyr/sys/mem_stats.h>
-#include <zephyr/toolchain.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,7 +42,7 @@ extern "C" {
  * are constant time (though there is a search of the smallest bucket
  * that has a compile-time-configurable upper bound, setting this to
  * extreme values results in an effectively linear search of the
- * list), objectively fast (~hundred instructions) and amenable to
+ * list), objectively fast (~hundred instructions) and and amenable to
  * locked operation.
  */
 
@@ -67,17 +66,13 @@ struct z_heap_stress_result {
 	uint64_t accumulated_in_use_bytes;
 };
 
-/**
- * @defgroup low_level_heap_allocator Low Level Heap Allocator
- * @ingroup heaps
- * @{
- */
+#ifdef CONFIG_SYS_HEAP_RUNTIME_STATS
 
 /**
  * @brief Get the runtime statistics of a sys_heap
  *
  * @param heap Pointer to specified sys_heap
- * @param stats Pointer to struct to copy statistics into
+ * @param stats_t Pointer to struct to copy statistics into
  * @return -EINVAL if null pointers, otherwise 0
  */
 int sys_heap_runtime_stats_get(struct sys_heap *heap,
@@ -93,6 +88,8 @@ int sys_heap_runtime_stats_get(struct sys_heap *heap,
  * @return -EINVAL if null pointer was passed, otherwise 0
  */
 int sys_heap_runtime_stats_reset_max(struct sys_heap *heap);
+
+#endif
 
 /** @brief Initialize sys_heap
  *
@@ -165,6 +162,11 @@ void sys_heap_free(struct sys_heap *heap, void *mem);
  * new block fails, then NULL will be returned and the old block will
  * not be freed or modified.
  *
+ * @note The return of a NULL on failure is a different behavior than
+ * POSIX realloc(), which specifies that the original pointer will be
+ * returned (i.e. it is not possible to safely detect realloc()
+ * failure in POSIX, but it is here).
+ *
  * @param heap Heap from which to allocate
  * @param ptr Original pointer returned from a previous allocation
  * @param align Alignment in bytes, must be a power of two
@@ -206,15 +208,7 @@ size_t sys_heap_usable_size(struct sys_heap *heap, void *mem);
  * @param heap Heap to validate
  * @return true, if the heap is valid, otherwise false
  */
-#ifdef CONFIG_SYS_HEAP_VALIDATE
 bool sys_heap_validate(struct sys_heap *heap);
-#else
-static inline bool sys_heap_validate(struct sys_heap *heap)
-{
-	ARG_UNUSED(heap);
-	return true;
-}
-#endif
 
 /** @brief sys_heap stress test rig
  *
@@ -263,27 +257,6 @@ void sys_heap_stress(void *(*alloc_fn)(void *arg, size_t bytes),
  */
 void sys_heap_print_info(struct sys_heap *heap, bool dump_chunks);
 
-/** @brief Save the heap pointer
- *
- * The heap pointer is saved into an internal array, if there is space.
- *
- * @param heap Heap to save
- * @return -EINVAL if null pointer or array is full, otherwise 0
- */
-int sys_heap_array_save(struct sys_heap *heap);
-
-/** @brief Get the array of saved heap pointers
- *
- * Returns the pointer to the array of heap pointers.
- *
- * @param heap Heap array
- * @return -EINVAL if null pointer, otherwise number of saved pointers
- */
-int sys_heap_array_get(struct sys_heap ***heap);
-
-/**
- * @}
- */
 
 #ifdef __cplusplus
 }

@@ -5,7 +5,7 @@
 import importlib
 import logging
 
-from runners.core import MissingProgram, ZephyrBinaryRunner
+from runners.core import ZephyrBinaryRunner, MissingProgram
 
 _logger = logging.getLogger('runners')
 
@@ -25,13 +25,11 @@ def _import_runner_module(runner_name):
 # defined; otherwise, ZephyrBinaryRunner.get_runners() won't work.
 
 _names = [
-    # zephyr-keep-sorted-start
     'blackmagicprobe',
     'bossac',
     'canopen_program',
     'dediprog',
     'dfu',
-    'ecpprog',
     'esp32',
     'ezflashcli',
     'gd32isp',
@@ -41,30 +39,23 @@ _names = [
     'jlink',
     'linkserver',
     'mdb',
-    'minichlink',
     'misc',
-    'native',
+    'native_gdb',
     'nios2',
     'nrfjprog',
     'nrfutil',
     'nsim',
-    'nxp_s32dbg',
     'openocd',
-    'probe_rs',
     'pyocd',
     'qemu',
-    'renode',
-    'renode-robot',
     'silabs_commander',
     'spi_burn',
     'stm32cubeprogrammer',
     'stm32flash',
-    'teensy',
     'trace32',
     'uf2',
-    'xsdb',
     'xtensa',
-    # zephyr-keep-sorted-stop
+    # Keep this list sorted by runner name; don't add to the end.
 ]
 
 for _name in _names:
@@ -75,6 +66,6 @@ def get_runner_cls(runner):
     for cls in ZephyrBinaryRunner.get_runners():
         if cls.name() == runner:
             return cls
-    raise ValueError(f'unknown runner "{runner}"')
+    raise ValueError('unknown runner "{}"'.format(runner))
 
-__all__ = ['ZephyrBinaryRunner', 'MissingProgram', 'get_runner_cls']
+__all__ = ['ZephyrBinaryRunner', 'get_runner_cls']

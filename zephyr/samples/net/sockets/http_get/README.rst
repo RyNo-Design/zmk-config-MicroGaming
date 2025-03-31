@@ -69,12 +69,6 @@ Note, that TLS support in the sample depends on non-posix, TLS socket
 functionality. Therefore, it is only possible to run TLS in this sample
 on Zephyr.
 
-Wi-Fi
-=====
-
-The IPv4 Wi-Fi support can be enabled in the sample with
-:ref:`Wi-Fi snippet <snippet-wifi-ipv4>`.
-
 Running application on POSIX Host
 =================================
 
@@ -82,11 +76,11 @@ The same application source code can be built for a POSIX system, e.g.
 Linux. (Note: if you look at the source, you will see that the code is
 the same except the header files are different for Zephyr vs POSIX.)
 
-To build:
+To build for a host POSIX OS:
 
 .. code-block:: console
 
-    $ make -f Makefile.host
+    $ make -f Makefile.posix
 
 To run:
 

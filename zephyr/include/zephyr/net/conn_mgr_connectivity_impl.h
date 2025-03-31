@@ -26,9 +26,7 @@ extern "C" {
 /**
  * @brief Connection Manager Connectivity Implementation API
  * @defgroup conn_mgr_connectivity_impl Connection Manager Connectivity Implementation API
- * @since 3.4
- * @version 0.1.0
- * @ingroup conn_mgr_connectivity
+ * @ingroup networking
  * @{
  */
 
@@ -53,7 +51,7 @@ struct conn_mgr_conn_api {
 	int (*connect)(struct conn_mgr_conn_binding *const binding);
 
 	/**
-	 * @brief When called, the connectivity implementation should disconnect (disassociate), or
+	 * @brief When called, the connectivity implementation should disconnect (dissasociate), or
 	 * stop any in-progress attempts to associate to a network, the bound iface pointed to by
 	 * if_conn->iface.
 	 *

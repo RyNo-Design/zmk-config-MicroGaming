@@ -10,11 +10,7 @@
 #include <zephyr/drivers/reset.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/irq.h>
-#if defined(CONFIG_SOC_SERIES_RP2040)
-#include <zephyr/dt-bindings/dma/rpi-pico-dma-rp2040.h>
-#elif defined(CONFIG_SOC_SERIES_RP2350)
-#include <zephyr/dt-bindings/dma/rpi-pico-dma-rp2350.h>
-#endif
+#include <zephyr/dt-bindings/dma/rpi_pico_dma.h>
 
 #include <hardware/dma.h>
 
@@ -292,7 +288,8 @@ static bool dma_rpi_pico_api_chan_filter(const struct device *dev, int ch, void 
 	uint32_t filter;
 
 	if (!filter_param) {
-		return true;
+		LOG_ERR("filter_param must not be NULL");
+		return false;
 	}
 
 	filter = *((uint32_t *)filter_param);
@@ -336,7 +333,7 @@ static void dma_rpi_pico_isr(const struct device *dev)
 	}
 }
 
-static DEVICE_API(dma, dma_rpi_pico_driver_api) = {
+static const struct dma_driver_api dma_rpi_pico_driver_api = {
 	.config = dma_rpi_pico_config,
 	.reload = dma_rpi_pico_reload,
 	.start = dma_rpi_pico_start,

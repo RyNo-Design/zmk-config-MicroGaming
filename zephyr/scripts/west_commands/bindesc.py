@@ -6,6 +6,7 @@ from textwrap import dedent
 import struct
 
 from west.commands import WestCommand
+from west import log
 
 
 try:
@@ -17,7 +18,7 @@ except ImportError:
 
 
 # Based on scripts/build/uf2conv.py
-def convert_from_uf2(cmd, buf):
+def convert_from_uf2(buf):
     UF2_MAGIC_START0 = 0x0A324655 # First magic number ('UF2\n')
     UF2_MAGIC_START1 = 0x9E5D5157 # Second magic number
     numblocks = len(buf) // 512
@@ -28,24 +29,24 @@ def convert_from_uf2(cmd, buf):
         block = buf[ptr:ptr + 512]
         hd = struct.unpack(b'<IIIIIIII', block[0:32])
         if hd[0] != UF2_MAGIC_START0 or hd[1] != UF2_MAGIC_START1:
-            cmd.inf('Skipping block at ' + ptr + '; bad magic')
+            log.inf('Skipping block at ' + ptr + '; bad magic')
             continue
         if hd[2] & 1:
             # NO-flash flag set; skip block
             continue
         datalen = hd[4]
         if datalen > 476:
-            cmd.die(f'Invalid UF2 data size at {ptr}')
+            log.die(f'Invalid UF2 data size at {ptr}')
         newaddr = hd[3]
         if curraddr is None:
             curraddr = newaddr
         padding = newaddr - curraddr
         if padding < 0:
-            cmd.die(f'Block out of order at {ptr}')
+            log.die(f'Block out of order at {ptr}')
         if padding > 10*1024*1024:
-            cmd.die(f'More than 10M of padding needed at {ptr}')
+            log.die(f'More than 10M of padding needed at {ptr}')
         if padding % 4 != 0:
-            cmd.die(f'Non-word padding size at {ptr}')
+            log.die(f'Non-word padding size at {ptr}')
         while padding > 0:
             padding -= 4
             outp += b'\x00\x00\x00\x00'
@@ -74,13 +75,11 @@ class Bindesc(WestCommand):
             self.bindesc_gen_tag(self.TYPE_UINT, 0x802): 'APP_VERSION_MINOR',
             self.bindesc_gen_tag(self.TYPE_UINT, 0x803): 'APP_VERSION_PATCHLEVEL',
             self.bindesc_gen_tag(self.TYPE_UINT, 0x804): 'APP_VERSION_NUMBER',
-            self.bindesc_gen_tag(self.TYPE_STR, 0x805): 'APP_BUILD_VERSION',
             self.bindesc_gen_tag(self.TYPE_STR, 0x900): 'KERNEL_VERSION_STRING',
             self.bindesc_gen_tag(self.TYPE_UINT, 0x901): 'KERNEL_VERSION_MAJOR',
             self.bindesc_gen_tag(self.TYPE_UINT, 0x902): 'KERNEL_VERSION_MINOR',
             self.bindesc_gen_tag(self.TYPE_UINT, 0x903): 'KERNEL_VERSION_PATCHLEVEL',
             self.bindesc_gen_tag(self.TYPE_UINT, 0x904): 'KERNEL_VERSION_NUMBER',
-            self.bindesc_gen_tag(self.TYPE_STR, 0x905): 'KERNEL_BUILD_VERSION',
             self.bindesc_gen_tag(self.TYPE_UINT, 0xa00): 'BUILD_TIME_YEAR',
             self.bindesc_gen_tag(self.TYPE_UINT, 0xa01): 'BUILD_TIME_MONTH',
             self.bindesc_gen_tag(self.TYPE_UINT, 0xa02): 'BUILD_TIME_DAY',
@@ -144,13 +143,6 @@ class Bindesc(WestCommand):
         list_parser = subparsers.add_parser('list', help='List all known descriptors')
         list_parser.set_defaults(subcmd='list', big_endian=False)
 
-        get_offset_parser = subparsers.add_parser('get_offset', help='Get the offset of the descriptors')
-        get_offset_parser.add_argument('file', type=str, help='Executable file')
-        get_offset_parser.add_argument('--file-type', type=str, choices=self.EXTENSIONS,
-                                          help='File type')
-        get_offset_parser.add_argument('-b', '--big-endian', action='store_true',
-                                       help='Target CPU is big endian')
-        get_offset_parser.set_defaults(subcmd='get_offset', big_endian=False)
         return parser
 
     def dump(self, args):
@@ -160,11 +152,11 @@ class Bindesc(WestCommand):
         for tag, value in descriptors.items():
             if tag in self.TAG_TO_NAME:
                 tag = self.TAG_TO_NAME[tag]
-            self.inf(f'{tag}', self.bindesc_repr(value))
+            log.inf(f'{tag}', self.bindesc_repr(value))
 
     def list(self, args):
         for tag in self.TAG_TO_NAME.values():
-            self.inf(f'{tag}')
+            log.inf(f'{tag}')
 
     def common_search(self, args, search_term):
         image = self.get_image_data(args.file)
@@ -173,15 +165,15 @@ class Bindesc(WestCommand):
 
         if search_term in descriptors:
             value = descriptors[search_term]
-            self.inf(self.bindesc_repr(value))
+            log.inf(self.bindesc_repr(value))
         else:
-            self.die('Descriptor not found')
+            log.die('Descriptor not found')
 
     def search(self, args):
         try:
             search_term = self.NAME_TO_TAG[args.descriptor]
         except KeyError:
-            self.die(f'Descriptor {args.descriptor} is invalid')
+            log.die(f'Descriptor {args.descriptor} is invalid')
 
         self.common_search(args, search_term)
 
@@ -193,15 +185,6 @@ class Bindesc(WestCommand):
         }[args.type]
         custom_tag = self.bindesc_gen_tag(custom_type, int(args.id, 16))
         self.common_search(args, custom_tag)
-
-    def get_offset(self, args):
-        image = self.get_image_data(args.file)
-
-        magic = struct.pack('>Q' if self.is_big_endian else 'Q', self.MAGIC)
-        index = image.find(magic)
-        if index == -1:
-            self.die('Could not find binary descriptor magic')
-        self.inf(f'{index} {hex(index)}')
 
     def do_run(self, args, _):
         if MISSING_REQUIREMENTS:
@@ -223,7 +206,7 @@ class Bindesc(WestCommand):
 
         if self.file_type == 'uf2':
             with open(file_name, 'rb') as uf2_file:
-                return convert_from_uf2(self, uf2_file.read())
+                return convert_from_uf2(uf2_file.read())
 
         if self.file_type == 'elf':
             with open(file_name, 'rb') as f:
@@ -237,15 +220,15 @@ class Bindesc(WestCommand):
                 if section:
                     return section.data()
 
-            self.die('No "rom_start" or "text" section found')
+            log.die('No "rom_start" or "text" section found')
 
-        self.die('Unknown file type')
+        log.die('Unknown file type')
 
     def parse_descriptors(self, image):
         magic = struct.pack('>Q' if self.is_big_endian else 'Q', self.MAGIC)
         index = image.find(magic)
         if index == -1:
-            self.die('Could not find binary descriptor magic')
+            log.die('Could not find binary descriptor magic')
 
         descriptors = {}
 
@@ -265,7 +248,7 @@ class Bindesc(WestCommand):
             elif tag_type == self.TYPE_BYTES:
                 decoded_data = data
             else:
-                self.die(f'Unknown type for tag 0x{current_tag:04x}')
+                log.die(f'Unknown type for tag 0x{current_tag:04x}')
 
             key = f'0x{current_tag:04x}'
             descriptors[key] = decoded_data

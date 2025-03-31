@@ -1,7 +1,7 @@
-.. zephyr:code-sample:: userspace_protected_memory
-   :name: Userspace Protected Memory
+.. _userspace_protected_memory:
 
-   Use memory partitioning to protect memory between threads.
+Userspace Protected Memory
+##########################
 
 Overview
 ********
@@ -17,7 +17,7 @@ Requirements
 
 The sample is dependent on the subsystem app_memory, and it will
 not run on boards that do not support the subsystem.  The sample
-was tested on the following boards qemu_x86,frdm_k64, and ``96b_carbon/stm32f401xe``.
+was tested on the following boards qemu_x86,frdm_k64, an 96b_carbon.
 
 Building and Running
 ********************

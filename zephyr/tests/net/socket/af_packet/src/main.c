@@ -11,7 +11,7 @@ LOG_MODULE_REGISTER(net_test, CONFIG_NET_SOCKETS_LOG_LEVEL);
 #include <zephyr/sys/mutex.h>
 #include <zephyr/ztest_assert.h>
 
-#include <zephyr/posix/fcntl.h>
+#include <fcntl.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/ethernet.h>
 
@@ -107,7 +107,7 @@ static int setup_socket(struct net_if *iface, int type, int proto)
 {
 	int sock;
 
-	sock = zsock_socket(AF_PACKET, type, proto);
+	sock = socket(AF_PACKET, type, proto);
 	zassert_true(sock >= 0, "Cannot create packet socket (%d)", -errno);
 
 	return sock;
@@ -122,7 +122,7 @@ static int bind_socket(int sock, struct net_if *iface)
 	addr.sll_ifindex = net_if_get_by_iface(iface);
 	addr.sll_family = AF_PACKET;
 
-	return zsock_bind(sock, (struct sockaddr *)&addr, sizeof(addr));
+	return bind(sock, (struct sockaddr *)&addr, sizeof(addr));
 }
 
 struct user_data {
@@ -157,7 +157,7 @@ static void setblocking(int fd, bool val)
 {
 	int fl, res;
 
-	fl = zsock_fcntl(fd, F_GETFL, 0);
+	fl = fcntl(fd, F_GETFL, 0);
 	zassert_not_equal(fl, -1, "Fail to set fcntl");
 
 	if (val) {
@@ -166,7 +166,7 @@ static void setblocking(int fd, bool val)
 		fl |= O_NONBLOCK;
 	}
 
-	res = zsock_fcntl(fd, F_SETFL, fl);
+	res = fcntl(fd, F_SETFL, fl);
 	zassert_not_equal(res, -1, "Fail to set fcntl");
 }
 
@@ -176,16 +176,16 @@ static int prepare_udp_socket(struct sockaddr_in *sockaddr, uint16_t local_port)
 {
 	int sock, ret;
 
-	sock = zsock_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	zassert_true(sock >= 0, "Cannot create DGRAM (UDP) socket (%d)", sock);
 
 	sockaddr->sin_family = AF_INET;
 	sockaddr->sin_port = htons(local_port);
-	ret = zsock_inet_pton(AF_INET, IPV4_ADDR, &sockaddr->sin_addr);
+	ret = inet_pton(AF_INET, IPV4_ADDR, &sockaddr->sin_addr);
 	zassert_equal(ret, 1, "inet_pton failed");
 
 	/* Bind UDP socket to local port */
-	ret = zsock_bind(sock, (struct sockaddr *) sockaddr, sizeof(*sockaddr));
+	ret = bind(sock, (struct sockaddr *) sockaddr, sizeof(*sockaddr));
 	zassert_equal(ret, 0, "Cannot bind DGRAM (UDP) socket (%d)", -errno);
 
 	return sock;
@@ -201,10 +201,10 @@ static void __test_packet_sockets(int *sock1, int *sock2)
 	zassert_not_null(ud.first, "1st Ethernet interface not found");
 	zassert_not_null(ud.second, "2nd Ethernet interface not found");
 
-	*sock1 = setup_socket(ud.first, SOCK_RAW, htons(ETH_P_ALL));
+	*sock1 = setup_socket(ud.first, SOCK_RAW, ETH_P_ALL);
 	zassert_true(*sock1 >= 0, "Cannot create 1st socket (%d)", *sock1);
 
-	*sock2 = setup_socket(ud.second, SOCK_RAW, htons(ETH_P_ALL));
+	*sock2 = setup_socket(ud.second, SOCK_RAW, ETH_P_ALL);
 	zassert_true(*sock2 >= 0, "Cannot create 2nd socket (%d)", *sock2);
 
 	ret = bind_socket(*sock1, ud.first);
@@ -241,8 +241,8 @@ ZTEST(socket_packet, test_raw_packet_sockets)
 	 * Send UDP datagram to us - as check_ip_addr() in net_send_data()
 	 * returns 1 - the packet is processed immediately in the net stack
 	 */
-	sent = zsock_sendto(sock4, data_to_send, sizeof(data_to_send),
-			    0, (struct sockaddr *)&sockaddr, sizeof(sockaddr));
+	sent = sendto(sock4, data_to_send, sizeof(data_to_send),
+		      0, (struct sockaddr *)&sockaddr, sizeof(sockaddr));
 	zassert_equal(sent, sizeof(data_to_send), "sendto failed");
 
 	k_msleep(10); /* Let the packet enter the system */
@@ -253,8 +253,8 @@ ZTEST(socket_packet, test_raw_packet_sockets)
 
 	/* Check if UDP packets can be read after being sent */
 	addrlen = sizeof(sockaddr);
-	ret = zsock_recvfrom(sock3, data_to_receive, sizeof(data_to_receive),
-			     0, (struct sockaddr *)&sockaddr, &addrlen);
+	ret = recvfrom(sock3, data_to_receive, sizeof(data_to_receive),
+		       0, (struct sockaddr *)&sockaddr, &addrlen);
 	zassert_equal(ret, sizeof(data_to_send), "Cannot receive all data (%d)",
 		      -errno);
 	zassert_mem_equal(data_to_receive, data_to_send, sizeof(data_to_send),
@@ -267,12 +267,12 @@ ZTEST(socket_packet, test_raw_packet_sockets)
 	addrlen = sizeof(src);
 	errno = 0;
 
-	/* The recvfrom reads the whole received packet - including its
+	/* The recvfrom reads the the whole received packet - including its
 	 * IP (20B) and UDP (8) headers. After those we can expect payload,
 	 * which have been sent.
 	 */
-	ret = zsock_recvfrom(sock1, data_to_receive, sizeof(data_to_receive), 0,
-			     (struct sockaddr *)&src, &addrlen);
+	ret = recvfrom(sock1, data_to_receive, sizeof(data_to_receive), 0,
+		       (struct sockaddr *)&src, &addrlen);
 	zassert_equal(ret, sizeof(data_to_send) + HDR_SIZE,
 		      "Cannot receive all data (%d vs %zd) (%d)",
 		      ret, sizeof(data_to_send), -errno);
@@ -280,10 +280,10 @@ ZTEST(socket_packet, test_raw_packet_sockets)
 			  sizeof(data_to_send),
 			  "Sent and received buffers do not match");
 
-	zsock_close(sock1);
-	zsock_close(sock2);
-	zsock_close(sock3);
-	zsock_close(sock4);
+	close(sock1);
+	close(sock2);
+	close(sock3);
+	close(sock4);
 }
 
 ZTEST(socket_packet, test_packet_sockets)
@@ -292,8 +292,8 @@ ZTEST(socket_packet, test_packet_sockets)
 
 	__test_packet_sockets(&sock1, &sock2);
 
-	zsock_close(sock1);
-	zsock_close(sock2);
+	close(sock1);
+	close(sock2);
 }
 
 ZTEST(socket_packet, test_packet_sockets_dgram)
@@ -311,10 +311,10 @@ ZTEST(socket_packet, test_packet_sockets_dgram)
 	zassert_not_null(ud.first, "1st Ethernet interface not found");
 	zassert_not_null(ud.second, "2nd Ethernet interface not found");
 
-	sock1 = setup_socket(ud.first, SOCK_DGRAM, htons(ETH_P_TSN));
+	sock1 = setup_socket(ud.first, SOCK_DGRAM, ETH_P_TSN);
 	zassert_true(sock1 >= 0, "Cannot create 1st socket (%d)", sock1);
 
-	sock2 = setup_socket(ud.second, SOCK_DGRAM, htons(ETH_P_TSN));
+	sock2 = setup_socket(ud.second, SOCK_DGRAM, ETH_P_TSN);
 	zassert_true(sock2 >= 0, "Cannot create 2nd socket (%d)", sock2);
 
 	ret = bind_socket(sock1, ud.first);
@@ -328,27 +328,22 @@ ZTEST(socket_packet, test_packet_sockets_dgram)
 
 	memset(&dst, 0, sizeof(dst));
 	dst.sll_family = AF_PACKET;
-	dst.sll_protocol = htons(ETH_P_TSN);
+	dst.sll_protocol = htons(ETH_P_IP);
 	memcpy(dst.sll_addr, lladdr1, sizeof(lladdr1));
 
-	ret = zsock_sendto(sock2, data_to_send, sizeof(data_to_send), 0,
-			   (const struct sockaddr *)&dst, sizeof(struct sockaddr_ll));
+	ret = sendto(sock2, data_to_send, sizeof(data_to_send), 0,
+		     (const struct sockaddr *)&dst, sizeof(struct sockaddr_ll));
 	zassert_equal(ret, sizeof(data_to_send), "Cannot send all data (%d)",
 		      -errno);
 
 	k_msleep(10); /* Let the packet enter the system */
-
-	ret = zsock_recvfrom(sock2, data_to_receive, sizeof(data_to_receive), 0,
-	(struct sockaddr *)&src, &addrlen);
-	zassert_equal(ret, -1, "Received something (%d)", ret);
-	zassert_equal(errno, EAGAIN, "Wrong errno (%d)", errno);
-
 	memset(&src, 0, sizeof(src));
+
 	errno = 0;
 	iter = 0;
 	do {
-		ret = zsock_recvfrom(sock1, data_to_receive, sizeof(data_to_receive),
-				     0, (struct sockaddr *)&src, &addrlen);
+		ret = recvfrom(sock1, data_to_receive, sizeof(data_to_receive),
+			       0, (struct sockaddr *)&src, &addrlen);
 		k_msleep(10);
 		iter++;
 	} while (ret < 0 && errno == EAGAIN && iter < max_iter);
@@ -356,21 +351,6 @@ ZTEST(socket_packet, test_packet_sockets_dgram)
 	zassert_equal(ret, sizeof(data_to_send),
 		      "Cannot receive all data (%d vs %zd) (%d)",
 		      ret, sizeof(data_to_send), -errno);
-
-	zassert_equal(addrlen, sizeof(struct sockaddr_ll),
-		      "Invalid address length (%d)", addrlen);
-
-	struct sockaddr_ll src_expected = {
-		.sll_family = AF_PACKET,
-		.sll_protocol = dst.sll_protocol,
-		.sll_ifindex = net_if_get_by_iface(ud.first),
-		.sll_pkttype = PACKET_OTHERHOST,
-		.sll_hatype = ARPHRD_ETHER,
-		.sll_halen = sizeof(lladdr2),
-		.sll_addr = {0},
-	};
-	memcpy(&src_expected.sll_addr, lladdr2, ARRAY_SIZE(lladdr2));
-	zassert_mem_equal(&src, &src_expected, addrlen, "Invalid source address");
 
 	zassert_mem_equal(data_to_send, data_to_receive, sizeof(data_to_send),
 			  "Data mismatch");
@@ -380,16 +360,16 @@ ZTEST(socket_packet, test_packet_sockets_dgram)
 	/* Send to socket 2 but read from socket 1. There should not be any
 	 * data in socket 1
 	 */
-	ret = zsock_sendto(sock2, data_to_send, sizeof(data_to_send), 0,
-			   (const struct sockaddr *)&dst, sizeof(struct sockaddr_ll));
+	ret = sendto(sock2, data_to_send, sizeof(data_to_send), 0,
+		     (const struct sockaddr *)&dst, sizeof(struct sockaddr_ll));
 	zassert_equal(ret, sizeof(data_to_send), "Cannot send all data (%d)",
 		      -errno);
 
 	k_msleep(10);
 	memset(&src, 0, sizeof(src));
 
-	ret = zsock_recvfrom(sock1, data_to_receive, sizeof(data_to_receive), 0,
-			     (struct sockaddr *)&src, &addrlen);
+	ret = recvfrom(sock1, data_to_receive, sizeof(data_to_receive), 0,
+		       (struct sockaddr *)&src, &addrlen);
 	zassert_equal(ret, -1, "Received something (%d)", ret);
 	zassert_equal(errno, EAGAIN, "Wrong errno (%d)", errno);
 
@@ -398,66 +378,19 @@ ZTEST(socket_packet, test_packet_sockets_dgram)
 	errno = 0;
 	iter = 0;
 	do {
-		ret = zsock_recvfrom(sock2, data_to_receive, sizeof(data_to_receive),
-				     0, (struct sockaddr *)&src, &addrlen);
+		ret = recvfrom(sock2, data_to_receive, sizeof(data_to_receive),
+			       0, (struct sockaddr *)&src, &addrlen);
 		k_msleep(10);
 		iter++;
 	} while (ret < 0 && errno == EAGAIN && iter < max_iter);
 
 	zassert_equal(ret, sizeof(data_to_send), "Cannot receive all data (%d)",
 		      -errno);
-	zassert_equal(addrlen, sizeof(struct sockaddr_ll),
-		      "Invalid address length (%d)", addrlen);
-
-	src_expected = (struct sockaddr_ll){
-		.sll_family = AF_PACKET,
-		.sll_protocol = dst.sll_protocol,
-		.sll_ifindex = net_if_get_by_iface(ud.second),
-		.sll_pkttype = PACKET_OTHERHOST,
-		.sll_hatype = ARPHRD_ETHER,
-		.sll_halen = ARRAY_SIZE(lladdr2),
-		.sll_addr = {0},
-	};
-	memcpy(&src_expected.sll_addr, lladdr2, ARRAY_SIZE(lladdr2));
-	zassert_mem_equal(&src, &src_expected, addrlen, "Invalid source address");
-
 	zassert_mem_equal(data_to_send, data_to_receive, sizeof(data_to_send),
 			  "Data mismatch");
 
-	/* Send specially crafted payload to mimic IPv4 and IPv6 length field,
-	 * to ckeck correct length returned.
-	 */
-	uint8_t payload_ip_length[64], receive_ip_length[64];
-
-	memset(payload_ip_length, 0, sizeof(payload_ip_length));
-	/* Set ipv4 and ipv6 length fields to represent IP payload with the
-	 * length of 1 byte.
-	 */
-	payload_ip_length[3] = 21;
-	payload_ip_length[5] = 1;
-
-	ret = zsock_sendto(sock2, payload_ip_length, sizeof(payload_ip_length), 0,
-			   (const struct sockaddr *)&dst, sizeof(struct sockaddr_ll));
-	zassert_equal(ret, sizeof(payload_ip_length), "Cannot send all data (%d)", -errno);
-
-	k_msleep(10);
-
-	memset(&src, 0, sizeof(src));
-	errno = 0;
-	iter = 0;
-	do {
-		ret = zsock_recvfrom(sock2, receive_ip_length, sizeof(receive_ip_length), 0,
-				     (struct sockaddr *)&src, &addrlen);
-		k_msleep(10);
-		iter++;
-	} while (ret < 0 && errno == EAGAIN && iter < max_iter);
-
-	zassert_equal(ret, ARRAY_SIZE(payload_ip_length), "Cannot receive all data (%d)", -errno);
-	zassert_mem_equal(payload_ip_length, receive_ip_length, sizeof(payload_ip_length),
-			  "Data mismatch");
-
-	zsock_close(sock1);
-	zsock_close(sock2);
+	close(sock1);
+	close(sock2);
 }
 
 ZTEST(socket_packet, test_raw_and_dgram_socket_exchange)
@@ -488,10 +421,10 @@ ZTEST(socket_packet, test_raw_and_dgram_socket_exchange)
 	zassert_not_null(ud.first, "1st Ethernet interface not found");
 	zassert_not_null(ud.second, "2nd Ethernet interface not found");
 
-	sock1 = setup_socket(ud.first, SOCK_DGRAM, htons(ETH_P_ALL));
+	sock1 = setup_socket(ud.first, SOCK_DGRAM, ETH_P_ALL);
 	zassert_true(sock1 >= 0, "Cannot create 1st socket (%d)", sock1);
 
-	sock2 = setup_socket(ud.second, SOCK_RAW, htons(ETH_P_ALL));
+	sock2 = setup_socket(ud.second, SOCK_RAW, ETH_P_ALL);
 	zassert_true(sock2 >= 0, "Cannot create 2nd socket (%d)", sock2);
 
 	ret = bind_socket(sock1, ud.first);
@@ -510,8 +443,8 @@ ZTEST(socket_packet, test_raw_and_dgram_socket_exchange)
 
 	/* SOCK_DGRAM to SOCK_RAW */
 
-	ret = zsock_sendto(sock1, data_to_send, sizeof(data_to_send), 0,
-			   (const struct sockaddr *)&dst, sizeof(struct sockaddr_ll));
+	ret = sendto(sock1, data_to_send, sizeof(data_to_send), 0,
+		     (const struct sockaddr *)&dst, sizeof(struct sockaddr_ll));
 	zassert_equal(ret, sizeof(data_to_send), "Cannot send all data (%d)",
 		      -errno);
 
@@ -521,8 +454,8 @@ ZTEST(socket_packet, test_raw_and_dgram_socket_exchange)
 	errno = 0;
 	iter = 0;
 	do {
-		ret = zsock_recvfrom(sock2, data_to_receive, sizeof(data_to_receive),
-				     0, (struct sockaddr *)&src, &addrlen);
+		ret = recvfrom(sock2, data_to_receive, sizeof(data_to_receive),
+			       0, (struct sockaddr *)&src, &addrlen);
 		k_msleep(10);
 		iter++;
 	} while (ret < 0 && errno == EAGAIN && iter < max_iter);
@@ -540,8 +473,8 @@ ZTEST(socket_packet, test_raw_and_dgram_socket_exchange)
 
 	/* SOCK_RAW to SOCK_DGRAM */
 
-	ret = zsock_sendto(sock2, send_payload_raw, sizeof(send_payload_raw), 0,
-			   (const struct sockaddr *)&dst, sizeof(struct sockaddr_ll));
+	ret = sendto(sock2, send_payload_raw, sizeof(send_payload_raw), 0,
+		     (const struct sockaddr *)&dst, sizeof(struct sockaddr_ll));
 	zassert_equal(ret, sizeof(send_payload_raw), "Cannot send all data (%d)",
 		      -errno);
 
@@ -551,8 +484,8 @@ ZTEST(socket_packet, test_raw_and_dgram_socket_exchange)
 	errno = 0;
 	iter = 0;
 	do {
-		ret = zsock_recvfrom(sock1, data_to_receive, sizeof(data_to_receive),
-				     0, (struct sockaddr *)&src, &addrlen);
+		ret = recvfrom(sock1, data_to_receive, sizeof(data_to_receive),
+			       0, (struct sockaddr *)&src, &addrlen);
 		k_msleep(10);
 		iter++;
 	} while (ret < 0 && errno == EAGAIN && iter < max_iter);
@@ -562,8 +495,8 @@ ZTEST(socket_packet, test_raw_and_dgram_socket_exchange)
 	zassert_mem_equal(data_to_send, data_to_receive, sizeof(data_to_send),
 			  "Data mismatch");
 
-	zsock_close(sock1);
-	zsock_close(sock2);
+	close(sock1);
+	close(sock2);
 }
 
 ZTEST(socket_packet, test_raw_and_dgram_socket_recv)
@@ -587,13 +520,13 @@ ZTEST(socket_packet, test_raw_and_dgram_socket_recv)
 	zassert_not_null(ud.first, "1st Ethernet interface not found");
 	zassert_not_null(ud.second, "2nd Ethernet interface not found");
 
-	sock1 = setup_socket(ud.first, SOCK_DGRAM, htons(ETH_P_ALL));
+	sock1 = setup_socket(ud.first, SOCK_DGRAM, ETH_P_ALL);
 	zassert_true(sock1 >= 0, "Cannot create 1st socket (%d)", sock1);
 
-	sock2 = setup_socket(ud.second, SOCK_RAW, htons(ETH_P_ALL));
+	sock2 = setup_socket(ud.second, SOCK_RAW, ETH_P_ALL);
 	zassert_true(sock2 >= 0, "Cannot create 2nd socket (%d)", sock2);
 
-	sock3 = setup_socket(ud.second, SOCK_RAW, htons(ETH_P_ALL));
+	sock3 = setup_socket(ud.second, SOCK_RAW, ETH_P_ALL);
 	zassert_true(sock3 >= 0, "Cannot create 2nd socket (%d)", sock3);
 
 	ret = bind_socket(sock1, ud.first);
@@ -614,8 +547,8 @@ ZTEST(socket_packet, test_raw_and_dgram_socket_recv)
 	dst.sll_protocol = htons(ETH_P_IP);
 	memcpy(dst.sll_addr, lladdr2, sizeof(lladdr1));
 
-	ret = zsock_sendto(sock1, data_to_send, sizeof(data_to_send), 0,
-			   (const struct sockaddr *)&dst, sizeof(struct sockaddr_ll));
+	ret = sendto(sock1, data_to_send, sizeof(data_to_send), 0,
+		     (const struct sockaddr *)&dst, sizeof(struct sockaddr_ll));
 	zassert_equal(ret, sizeof(data_to_send), "Cannot send all data (%d)",
 		      -errno);
 
@@ -627,8 +560,8 @@ ZTEST(socket_packet, test_raw_and_dgram_socket_recv)
 	errno = 0;
 	iter = 0;
 	do {
-		ret = zsock_recvfrom(sock2, data_to_receive, sizeof(data_to_receive),
-				     0, (struct sockaddr *)&src, &addrlen);
+		ret = recvfrom(sock2, data_to_receive, sizeof(data_to_receive),
+			       0, (struct sockaddr *)&src, &addrlen);
 		k_msleep(10);
 		iter++;
 	} while (ret < 0 && errno == EAGAIN && iter < max_iter);
@@ -645,8 +578,8 @@ ZTEST(socket_packet, test_raw_and_dgram_socket_recv)
 	errno = 0;
 	iter = 0;
 	do {
-		ret = zsock_recvfrom(sock3, data_to_receive, sizeof(data_to_receive),
-				     0, (struct sockaddr *)&src, &addrlen);
+		ret = recvfrom(sock3, data_to_receive, sizeof(data_to_receive),
+			       0, (struct sockaddr *)&src, &addrlen);
 		k_msleep(10);
 		iter++;
 	} while (ret < 0 && errno == EAGAIN && iter < max_iter);
@@ -656,9 +589,9 @@ ZTEST(socket_packet, test_raw_and_dgram_socket_recv)
 	zassert_mem_equal(expected_payload_raw, data_to_receive,
 			  sizeof(expected_payload_raw), "Data mismatch");
 
-	zsock_close(sock1);
-	zsock_close(sock2);
-	zsock_close(sock3);
+	close(sock1);
+	close(sock2);
+	close(sock3);
 }
 
 ZTEST_SUITE(socket_packet, NULL, NULL, NULL, NULL, NULL);

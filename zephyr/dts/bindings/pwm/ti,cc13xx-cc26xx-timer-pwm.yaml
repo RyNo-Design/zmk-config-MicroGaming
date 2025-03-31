@@ -69,6 +69,4 @@ properties:
     required: true
 
 pwm-cells:
-  - channel
-  - period
-  - flags
+- period

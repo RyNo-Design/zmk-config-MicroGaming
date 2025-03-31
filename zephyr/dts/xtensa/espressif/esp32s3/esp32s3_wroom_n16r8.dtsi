@@ -13,5 +13,6 @@
 
 /* 8MB psram */
 &psram0 {
-	size = <DT_SIZE_M(8)>;
+	reg = <0x3c000000 DT_SIZE_M(8)>;
+	status = "okay";
 };

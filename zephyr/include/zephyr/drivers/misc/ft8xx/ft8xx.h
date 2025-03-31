@@ -13,7 +13,6 @@
 #define ZEPHYR_DRIVERS_MISC_FT8XX_FT8XX_H_
 
 #include <stdint.h>
-#include <zephyr/device.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,11 +45,8 @@ struct ft8xx_touch_transform {
  * @brief Callback API to inform API user that FT8xx triggered interrupt
  *
  * This callback is called from IRQ context.
- *
- * @param dev Pointer to the device structure for the driver instance
- * @param user_data Pointer to user data provided during callback registration
  */
-typedef void (*ft8xx_int_callback)(const struct device *dev, void *user_data);
+typedef void (*ft8xx_int_callback)(void);
 
 /**
  * @brief Calibrate touchscreen
@@ -63,11 +59,9 @@ typedef void (*ft8xx_int_callback)(const struct device *dev, void *user_data);
  * ft8xx_touch_transform_set() to avoid calibrating touchscreen after each
  * device reset.
  *
- * @param dev  Pointer to the device structure for the driver instance
  * @param data Pointer to touchscreen transform structure to populate
  */
-void ft8xx_calibrate(const struct device *dev,
-		     struct ft8xx_touch_transform *data);
+void ft8xx_calibrate(struct ft8xx_touch_transform *data);
 
 /**
  * @brief Set touchscreen calibration data
@@ -76,20 +70,16 @@ void ft8xx_calibrate(const struct device *dev,
  * Data is to be obtained from calibration procedure started with
  * ft8xx_calibrate().
  *
- * @param dev  Pointer to the device structure for the driver instance
  * @param data Pointer to touchscreen transform structure to apply
  */
-void ft8xx_touch_transform_set(const struct device *dev,
-			       const struct ft8xx_touch_transform *data);
+void ft8xx_touch_transform_set(const struct ft8xx_touch_transform *data);
 
 /**
  * @brief Get tag of recently touched element
  *
- * @param dev Pointer to the device structure for the driver instance
- *
  * @return Tag value 0-255 of recently touched element
  */
-int ft8xx_get_touch_tag(const struct device *dev);
+int ft8xx_get_touch_tag(void);
 
 /**
  * @brief Set callback executed when FT8xx triggers interrupt
@@ -101,13 +91,9 @@ int ft8xx_get_touch_tag(const struct device *dev);
  * kept active until ft8xx_get_touch_tag() is called. It results in single
  * execution of @p callback until ft8xx_get_touch_tag() is called.
  *
- * @param dev       Pointer to the device structure for the driver instance
- * @param callback  Pointer to function called when FT8xx triggers interrupt
- * @param user_data Pointer to user data to be passed to the @p callback
+ * @param callback Pointer to function called when FT8xx triggers interrupt
  */
-void ft8xx_register_int(const struct device *dev,
-			ft8xx_int_callback callback,
-			void *user_data);
+void ft8xx_register_int(ft8xx_int_callback callback);
 
 /**
  * @}

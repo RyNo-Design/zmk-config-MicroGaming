@@ -6,7 +6,6 @@
 
 #ifndef MOCKS_CRYPTO_H_
 #define MOCKS_CRYPTO_H_
-#include <stddef.h>
 
 #include <zephyr/fff.h>
 #include <zephyr/kernel.h>

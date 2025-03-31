@@ -73,9 +73,6 @@ enum shared_multi_heap_attr {
 	/** non-cacheable */
 	SMH_REG_ATTR_NON_CACHEABLE,
 
-	/** external Memory */
-	SMH_REG_ATTR_EXTERNAL,
-
 	/** must be the last item */
 	SMH_REG_ATTR_NUM,
 };

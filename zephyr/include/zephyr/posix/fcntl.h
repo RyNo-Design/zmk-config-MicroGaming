@@ -7,23 +7,25 @@
 #ifndef ZEPHYR_POSIX_FCNTL_H_
 #define ZEPHYR_POSIX_FCNTL_H_
 
-#include <zephyr/sys/fdtable.h>
+#ifdef CONFIG_PICOLIBC
+#define O_CREAT 0x0040
+#else
+#define O_CREAT 0x0200
+#endif
 
-#define O_APPEND   ZVFS_O_APPEND
-#define O_CREAT    ZVFS_O_CREAT
-#define O_EXCL     ZVFS_O_EXCL
-#define O_NONBLOCK ZVFS_O_NONBLOCK
-#define O_TRUNC    ZVFS_O_TRUNC
+#define O_ACCMODE (O_RDONLY | O_WRONLY | O_RDWR)
 
-#define O_ACCMODE (ZVFS_O_RDONLY | ZVFS_O_RDWR | ZVFS_O_WRONLY)
+#define O_RDONLY 00
+#define O_WRONLY 01
+#define O_RDWR	 02
 
-#define O_RDONLY ZVFS_O_RDONLY
-#define O_RDWR   ZVFS_O_RDWR
-#define O_WRONLY ZVFS_O_WRONLY
+#define O_APPEND   0x0400
+#define O_EXCL	   0x0800
+#define O_NONBLOCK 0x4000
 
-#define F_DUPFD ZVFS_F_DUPFD
-#define F_GETFL ZVFS_F_GETFL
-#define F_SETFL ZVFS_F_SETFL
+#define F_DUPFD 0
+#define F_GETFL 3
+#define F_SETFL 4
 
 #ifdef __cplusplus
 extern "C" {

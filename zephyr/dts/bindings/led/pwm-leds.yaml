@@ -1,10 +1,7 @@
 # Copyright (c) 2018, Linaro Limited
 # SPDX-License-Identifier: Apache-2.0
 
-description: |
-  Group of PWM-controlled LEDs.
-
-  Each LED is defined in a child node of the pwm-leds node.
+description: PWM LEDs parent node
 
 compatible: "pwm-leds"
 

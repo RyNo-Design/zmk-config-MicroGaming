@@ -23,9 +23,6 @@ typedef void (*gpio_xlnx_ps_config_irq_t)(const struct device *dev);
  */
 struct gpio_xlnx_ps_dev_data {
 	struct gpio_driver_data common;
-
-	DEVICE_MMIO_NAMED_RAM(reg_base);
-	mem_addr_t base;
 };
 
 /**
@@ -39,8 +36,7 @@ struct gpio_xlnx_ps_dev_data {
 struct gpio_xlnx_ps_dev_cfg {
 	struct gpio_driver_config common;
 
-	DEVICE_MMIO_NAMED_ROM(reg_base);
-
+	uint32_t base_addr;
 	const struct device *const *bank_devices;
 	uint32_t num_banks;
 	gpio_xlnx_ps_config_irq_t config_func;

@@ -47,8 +47,6 @@ enum adc_pm_policy_state_flag {
 	ADC_PM_POLICY_STATE_FLAG_COUNT,
 };
 
-#define XEC_ADC_MAX_HW_CHAN 16
-#define XEC_ADC_CFG_CHANNELS DT_INST_PROP(0, channels)
 
 struct adc_xec_regs {
 	uint32_t control_reg;
@@ -56,8 +54,8 @@ struct adc_xec_regs {
 	uint32_t status_reg;
 	uint32_t single_reg;
 	uint32_t repeat_reg;
-	uint32_t channel_read_reg[XEC_ADC_CFG_CHANNELS];
-	uint32_t unused[10 + (XEC_ADC_MAX_HW_CHAN - XEC_ADC_CFG_CHANNELS)];
+	uint32_t channel_read_reg[8];
+	uint32_t unused[18];
 	uint32_t config_reg;
 	uint32_t vref_channel_reg;
 	uint32_t vref_control_reg;
@@ -141,7 +139,7 @@ static int adc_xec_channel_setup(const struct device *dev,
 		return -EINVAL;
 	}
 
-	if (channel_cfg->channel_id >= XEC_ADC_CFG_CHANNELS) {
+	if (channel_cfg->channel_id >= MCHP_ADC_MAX_CHAN) {
 		return -EINVAL;
 	}
 
@@ -207,7 +205,7 @@ static int adc_xec_start_read(const struct device *dev,
 	struct adc_xec_data * const data = dev->data;
 	uint32_t sar_ctrl;
 
-	if (sequence->channels & ~BIT_MASK(XEC_ADC_CFG_CHANNELS)) {
+	if (sequence->channels & ~BIT_MASK(MCHP_ADC_MAX_CHAN)) {
 		LOG_ERR("Incorrect channels, bitmask 0x%x", sequence->channels);
 		return -EINVAL;
 	}
@@ -399,7 +397,7 @@ static int adc_xec_pm_action(const struct device *dev, enum pm_device_action act
 }
 #endif /* CONFIG_PM_DEVICE */
 
-static DEVICE_API(adc, adc_xec_api) = {
+struct adc_driver_api adc_xec_api = {
 	.channel_setup = adc_xec_channel_setup,
 	.read = adc_xec_read,
 #if defined(CONFIG_ADC_ASYNC)

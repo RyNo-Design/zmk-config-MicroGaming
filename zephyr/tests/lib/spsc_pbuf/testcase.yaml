@@ -1,24 +1,23 @@
 tests:
   libraries.spsc_pbuf:
     integration_platforms:
-      - native_sim
+      - native_posix
     # Exclude platform which does not link with cache functions
     platform_exclude: ast1030_evb
     timeout: 120
 
   libraries.spsc_pbuf.cache:
     integration_platforms:
-      - native_sim
-    # This configuration only make sense for interprocessor data sharing so
-    # configuration can only be verified against compilation errors on a single core.
-    platform_allow: native_sim
-    build_only: true
+      - native_posix
+    # Exclude platform which does not link with cache functions
+    platform_exclude: ast1030_evb
+    timeout: 120
     extra_configs:
       - CONFIG_SPSC_PBUF_CACHE_ALWAYS=y
 
   libraries.spsc_pbuf.nocache.:
     integration_platforms:
-      - native_sim
+      - native_posix
     # Exclude platform which does not link with cache functions
     platform_exclude: ast1030_evb
     timeout: 120
@@ -27,7 +26,7 @@ tests:
 
   libraries.spsc_pbuf.utilization:
     integration_platforms:
-      - native_sim
+      - native_posix
     # Exclude platform which does not link with cache functions
     platform_exclude: ast1030_evb
     timeout: 120

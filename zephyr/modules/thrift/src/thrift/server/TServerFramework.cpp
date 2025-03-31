@@ -236,7 +236,8 @@ void TServerFramework::newlyConnectedClient(const shared_ptr<TConnectedClient> &
 	onClientConnected(pClient);
 }
 
-TOOLCHAIN_DISABLE_WARNING(TOOLCHAIN_WARNING_DELETE_NON_VIRTUAL_DTOR)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdelete-non-virtual-dtor"
 void TServerFramework::disposeConnectedClient(TConnectedClient *pClient)
 {
 	onClientDisconnected(pClient);
@@ -247,7 +248,7 @@ void TServerFramework::disposeConnectedClient(TConnectedClient *pClient)
 		// mon_.notify();
 	}
 }
-TOOLCHAIN_ENABLE_WARNING(TOOLCHAIN_WARNING_DELETE_NON_VIRTUAL_DTOR)
+#pragma GCC diagnostic pop
 
 } // namespace server
 } // namespace thrift

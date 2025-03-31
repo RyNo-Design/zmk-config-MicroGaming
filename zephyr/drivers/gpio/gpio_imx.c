@@ -82,11 +82,7 @@ static int imx_gpio_configure(const struct device *port, gpio_pin_t pin,
 
 	/* Init pin configuration struct, and use pinctrl api to apply settings */
 	__ASSERT_NO_MSG(pin < config->mux_count);
-
 	memcpy(&pin_cfg.pinmux, &config->pin_muxes[pin], sizeof(pin_cfg.pinmux));
-
-	unsigned int key = irq_lock();
-
 	/* cfg register will be set by pinctrl_configure_pins */
 	pin_cfg.pin_ctrl_flags = reg;
 	pinctrl_configure_pins(&pin_cfg, 1, PINCTRL_REG_NONE);
@@ -110,8 +106,6 @@ static int imx_gpio_configure(const struct device *port, gpio_pin_t pin,
 		WRITE_BIT(base->GDIR, pin, 0U);
 	}
 
-	irq_unlock(key);
-
 	return 0;
 }
 
@@ -132,10 +126,8 @@ static int imx_gpio_port_set_masked_raw(const struct device *port,
 	const struct imx_gpio_config *config = port->config;
 	GPIO_Type *base = config->base;
 
-	unsigned int key = irq_lock();
 	GPIO_WritePortOutput(base,
 			(GPIO_ReadPortInput(base) & ~mask) | (value & mask));
-	irq_unlock(key);
 
 	return 0;
 }
@@ -146,9 +138,7 @@ static int imx_gpio_port_set_bits_raw(const struct device *port,
 	const struct imx_gpio_config *config = port->config;
 	GPIO_Type *base = config->base;
 
-	unsigned int key = irq_lock();
 	GPIO_WritePortOutput(base, GPIO_ReadPortInput(base) | pins);
-	irq_unlock(key);
 
 	return 0;
 }
@@ -159,9 +149,7 @@ static int imx_gpio_port_clear_bits_raw(const struct device *port,
 	const struct imx_gpio_config *config = port->config;
 	GPIO_Type *base = config->base;
 
-	unsigned int key = irq_lock();
 	GPIO_WritePortOutput(base, GPIO_ReadPortInput(base) & ~pins);
-	irq_unlock(key);
 
 	return 0;
 }
@@ -172,9 +160,7 @@ static int imx_gpio_port_toggle_bits(const struct device *port,
 	const struct imx_gpio_config *config = port->config;
 	GPIO_Type *base = config->base;
 
-	unsigned int key = irq_lock();
 	GPIO_WritePortOutput(base, GPIO_ReadPortInput(base) ^ pins);
-	irq_unlock(key);
 
 	return 0;
 }
@@ -246,14 +232,14 @@ static void imx_gpio_port_isr(const struct device *port)
 	struct imx_gpio_data *data = port->data;
 	uint32_t int_status;
 
-	int_status = config->base->ISR & config->base->IMR;
+	int_status = config->base->ISR;
 
 	config->base->ISR = int_status;
 
 	gpio_fire_callbacks(&data->callbacks, port, int_status);
 }
 
-static DEVICE_API(gpio, imx_gpio_driver_api) = {
+static const struct gpio_driver_api imx_gpio_driver_api = {
 	.pin_configure = imx_gpio_configure,
 	.port_get_raw = imx_gpio_port_get_raw,
 	.port_set_masked_raw = imx_gpio_port_set_masked_raw,

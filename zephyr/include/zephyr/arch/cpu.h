@@ -9,7 +9,7 @@
 #ifndef ZEPHYR_INCLUDE_ARCH_CPU_H_
 #define ZEPHYR_INCLUDE_ARCH_CPU_H_
 
-#include <zephyr/arch/arch_interface.h>
+#include <zephyr/sys/arch_interface.h>
 
 #if defined(CONFIG_X86)
 #include <zephyr/arch/x86/arch.h>
@@ -31,6 +31,8 @@
 #include <zephyr/arch/posix/arch.h>
 #elif defined(CONFIG_SPARC)
 #include <zephyr/arch/sparc/arch.h>
+#else
+#error "Unknown Architecture"
 #endif
 
 #endif /* ZEPHYR_INCLUDE_ARCH_CPU_H_ */

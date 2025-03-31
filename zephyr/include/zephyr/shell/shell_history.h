@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef ZEPHYR_INCLUDE_SHELL_HISTORY_H_
-#define ZEPHYR_INCLUDE_SHELL_HISTORY_H_
+#ifndef SHELL_HISTORY_H__
+#define SHELL_HISTORY_H__
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
@@ -111,4 +111,4 @@ static inline bool z_shell_history_active(struct shell_history *history)
 }
 #endif
 
-#endif /* ZEPHYR_INCLUDE_SHELL_HISTORY_H_ */
+#endif /* SHELL_HISTORY_H__ */

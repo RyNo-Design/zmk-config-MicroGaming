@@ -1,8 +1,5 @@
 common:
-  platform_allow:
-    - native_sim
-  integration_platforms:
-    - native_sim
+  platform_allow: native_posix
 tests:
   drivers.smbus.emul:
     tags: smbus

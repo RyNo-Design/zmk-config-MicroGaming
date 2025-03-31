@@ -4,7 +4,6 @@
 
 from west import log
 
-
 # Parse a CMakeCache file and return a dict of key:value (discarding
 # type hints).
 def parseCMakeCacheFile(filePath):

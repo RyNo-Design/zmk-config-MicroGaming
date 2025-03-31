@@ -5,8 +5,6 @@
 
 const DB_FILE = 'kconfig.json';
 const RESULTS_PER_PAGE_OPTIONS = [10, 25, 50];
-let zephyr_gh_base_url;
-let zephyr_version;
 
 /* search state */
 let db;
@@ -60,37 +58,12 @@ function showProgress(message) {
 }
 
 /**
- * Generate a GitHub link for a given file path in the Zephyr repository.
- * @param {string} path - The file path in the repository.
- * @param {number} [line] - Optional line number to link to.
- * @param {string} [mode=blob] - The mode (blob or edit). Defaults to 'blob'.
- * @param {string} [revision=main] - The branch, tag, or commit hash. Defaults to 'main'.
- * @returns {string} - The generated GitHub URL.
- */
-function getGithubLink(path, line, mode = "blob", revision = "main") {
-    let url = [
-        zephyr_gh_base_url,
-        mode,
-        revision,
-        path
-    ].join("/");
-
-    if (line !== undefined){
-        url +=  `#L${line}`;
-    }
-
-    return url;
-}
-
-
-/**
  * Render a Kconfig literal property.
  * @param {Element} parent Parent element.
  * @param {String} title Title.
- * @param {Element} contentElement Content Element.
+ * @param {String} content Content.
  */
-function renderKconfigPropLiteralElement(parent, title, contentElement)
-{
+function renderKconfigPropLiteral(parent, title, content) {
     const term = document.createElement('dt');
     parent.appendChild(term);
 
@@ -108,18 +81,8 @@ function renderKconfigPropLiteralElement(parent, title, contentElement)
     literal.className = 'pre';
     code.appendChild(literal);
 
-    literal.appendChild(contentElement);
-}
-
-/**
- * Render a Kconfig literal property.
- * @param {Element} parent Parent element.
- * @param {String} title Title.
- * @param {String} content Content.
- */
-function renderKconfigPropLiteral(parent, title, content) {
-    const contentElement = document.createTextNode(content);
-    renderKconfigPropLiteralElement(parent, title, contentElement);
+    const literalText = document.createTextNode(content);
+    literal.appendChild(literalText);
 }
 
 /**
@@ -305,17 +268,7 @@ function renderKconfigEntry(entry) {
     renderKconfigPropList(props, 'Implied by', entry.implied_by, true);
     renderKconfigPropList(props, 'Ranges', entry.ranges, false);
     renderKconfigPropList(props, 'Choices', entry.choices, false);
-
-    /* symbol location with permalink */
-    const locationPermalink = document.createElement('a');
-    locationPermalink.href = getGithubLink(entry.filename, entry.linenr, "blob", zephyr_version);
-
-    const locationElement = document.createTextNode(`${entry.filename}:${entry.linenr}`);
-    locationElement.class = "pre";
-    locationPermalink.appendChild(locationElement);
-
-    renderKconfigPropLiteralElement(props, 'Location', locationPermalink);
-
+    renderKconfigPropLiteral(props, 'Location', `${entry.filename}:${entry.linenr}`);
     renderKconfigPropLiteral(props, 'Menu path', entry.menupath);
 
     return container;
@@ -530,9 +483,7 @@ function setupKconfigSearch() {
     fetch(DB_FILE)
         .then(response => response.json())
         .then(json => {
-            db = json["symbols"];
-            zephyr_gh_base_url = json["gh_base_url"];
-            zephyr_version = json["zephyr_version"];
+            db = json;
 
             results.replaceChildren();
 
@@ -540,7 +491,7 @@ function setupKconfigSearch() {
             doSearchFromURL();
 
             /* install event listeners */
-            input.addEventListener('input', () => {
+            input.addEventListener('keyup', () => {
                 searchOffset = 0;
                 doSearch();
             });

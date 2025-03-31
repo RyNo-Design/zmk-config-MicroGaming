@@ -4,7 +4,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-description: AndesTech ATCIIC100 I2C
+description:
+  This is a representation of AndesTech atciic100 I2C node
 
 compatible: "andestech,atciic100"
 

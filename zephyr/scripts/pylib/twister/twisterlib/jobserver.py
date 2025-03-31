@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 logger = logging.getLogger('twister')
-
+logger.setLevel(logging.DEBUG)
 
 class JobHandle:
     """Small object to handle claim of a job."""
@@ -62,7 +62,9 @@ class JobClient:
         kwargs["env"].update(self.env())
         kwargs["pass_fds"] += self.pass_fds()
 
-        return subprocess.Popen(argv, **kwargs)
+        return subprocess.Popen(  # pylint:disable=consider-using-with
+            argv, **kwargs
+        )
 
 
 class GNUMakeJobClient(JobClient):
@@ -148,19 +150,17 @@ class GNUMakeJobClient(JobClient):
                     # Use F_GETFL to see if file descriptors are valid
                     if pipe:
                         rc = fcntl.fcntl(pipe[0], fcntl.F_GETFL)
-                        if rc & os.O_ACCMODE != os.O_RDONLY:
+                        if not rc & os.O_ACCMODE == os.O_RDONLY:
                             logger.warning(
-                                f"FD {pipe[0]} is not readable (flags={rc:x});"
-                                " ignoring GNU make jobserver"
-                            )
+                                "FD %s is not readable (flags=%x); "
+                                "ignoring GNU make jobserver", pipe[0], rc)
                             pipe = None
                     if pipe:
                         rc = fcntl.fcntl(pipe[1], fcntl.F_GETFL)
-                        if rc & os.O_ACCMODE != os.O_WRONLY:
+                        if not rc & os.O_ACCMODE == os.O_WRONLY:
                             logger.warning(
-                                f"FD {pipe[1]} is not writable (flags={rc:x});"
-                                " ignoring GNU make jobserver"
-                            )
+                                "FD %s is not writable (flags=%x); "
+                                "ignoring GNU make jobserver", pipe[1], rc)
                             pipe = None
                     if pipe:
                         logger.info("using GNU make jobserver")

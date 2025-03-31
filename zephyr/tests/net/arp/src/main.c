@@ -70,7 +70,7 @@ static uint8_t *net_arp_get_mac(const struct device *dev)
 		context->mac_addr[2] = 0x5E;
 		context->mac_addr[3] = 0x00;
 		context->mac_addr[4] = 0x53;
-		context->mac_addr[5] = sys_rand8_get();
+		context->mac_addr[5] = sys_rand32_get();
 	}
 
 	return context->mac_addr;
@@ -149,6 +149,24 @@ static int tester_send(const struct device *dev, struct net_pkt *pkt)
 	return 0;
 }
 
+static inline struct in_addr *if_get_addr(struct net_if *iface)
+{
+	int i;
+
+	for (i = 0; i < NET_IF_MAX_IPV4_ADDR; i++) {
+		if (iface->config.ip.ipv4->unicast[i].is_used &&
+		    iface->config.ip.ipv4->unicast[i].address.family ==
+								AF_INET &&
+		    iface->config.ip.ipv4->unicast[i].addr_state ==
+							NET_ADDR_PREFERRED) {
+			return
+			    &iface->config.ip.ipv4->unicast[i].address.in_addr;
+		}
+	}
+
+	return NULL;
+}
+
 static inline struct net_pkt *prepare_arp_reply(struct net_if *iface,
 						struct net_pkt *req,
 						struct net_eth_addr *addr,
@@ -196,8 +214,6 @@ static inline struct net_pkt *prepare_arp_reply(struct net_if *iface,
 	net_ipv4_addr_copy_raw(hdr->src_ipaddr, NET_ARP_HDR(req)->dst_ipaddr);
 
 	net_buf_add(pkt->buffer, sizeof(struct net_arp_hdr));
-
-	net_pkt_set_ll_proto_type(pkt, NET_ETH_PTYPE_ARP);
 
 	return pkt;
 }
@@ -248,8 +264,6 @@ static inline struct net_pkt *prepare_arp_request(struct net_if *iface,
 	net_ipv4_addr_copy_raw(hdr->dst_ipaddr, req_hdr->dst_ipaddr);
 
 	net_buf_add(pkt->buffer, sizeof(struct net_arp_hdr));
-
-	net_pkt_set_ll_proto_type(pkt, NET_ETH_PTYPE_ARP);
 
 	return pkt;
 }
@@ -313,7 +327,6 @@ ZTEST(arp_fn_tests, test_arp)
 	}
 
 	struct net_eth_hdr *eth_hdr = NULL;
-	struct net_eth_addr dst_lladdr;
 	struct net_pkt *pkt;
 	struct net_pkt *pkt2;
 	struct net_if *iface;
@@ -322,20 +335,19 @@ ZTEST(arp_fn_tests, test_arp)
 	struct net_ipv4_hdr *ipv4;
 	int len;
 
-	struct in_addr dst = { { { 192, 0, 2, 2 } } };
+	struct in_addr dst = { { { 192, 168, 0, 2 } } };
 	struct in_addr dst_far = { { { 10, 11, 12, 13 } } };
 	struct in_addr dst_far2 = { { { 172, 16, 14, 186 } } };
-	struct in_addr src = { { { 192, 0, 2, 1 } } };
+	struct in_addr src = { { { 192, 168, 0, 1 } } };
 	struct in_addr netmask = { { { 255, 255, 255, 0 } } };
-	struct in_addr gw = { { { 192, 0, 2, 42 } } };
+	struct in_addr gw = { { { 192, 168, 0, 42 } } };
 
 	net_arp_init();
-
-	(void)memset(&dst_lladdr, 0xff, sizeof(struct net_eth_addr));
 
 	iface = net_if_lookup_by_dev(DEVICE_GET(net_arp_test));
 
 	net_if_ipv4_set_gw(iface, &gw);
+	net_if_ipv4_set_netmask(iface, &netmask);
 
 	/* Unicast test */
 	ifaddr = net_if_ipv4_addr_add(iface,
@@ -345,8 +357,6 @@ ZTEST(arp_fn_tests, test_arp)
 	zassert_not_null(ifaddr, "Cannot add address");
 	ifaddr->addr_state = NET_ADDR_PREFERRED;
 
-	net_if_ipv4_set_netmask_by_addr(iface, &src, &netmask);
-
 	len = strlen(app_data);
 
 	/* Application data for testing */
@@ -354,16 +364,13 @@ ZTEST(arp_fn_tests, test_arp)
 		len, AF_INET, 0, K_SECONDS(1));
 	zassert_not_null(pkt, "out of mem");
 
-	(void)net_linkaddr_set(net_pkt_lladdr_src(pkt),
-			       net_if_get_link_addr(iface)->addr,
-			       sizeof(struct net_eth_addr));
+	net_pkt_lladdr_src(pkt)->addr = (uint8_t *)net_if_get_link_addr(iface);
+	net_pkt_lladdr_src(pkt)->len = sizeof(struct net_eth_addr);
 
 	ipv4 = (struct net_ipv4_hdr *)net_buf_add(pkt->buffer,
 						  sizeof(struct net_ipv4_hdr));
 	net_ipv4_addr_copy_raw(ipv4->src, (uint8_t *)&src);
 	net_ipv4_addr_copy_raw(ipv4->dst, (uint8_t *)&dst);
-
-	net_pkt_set_ll_proto_type(pkt, NET_ETH_PTYPE_IP);
 
 	memcpy(net_buf_add(pkt->buffer, len), app_data, len);
 
@@ -372,9 +379,6 @@ ZTEST(arp_fn_tests, test_arp)
 	/* pkt2 is the ARP packet and pkt is the IPv4 packet and it was
 	 * stored in ARP table.
 	 */
-
-	zassert_equal(net_pkt_ll_proto_type(pkt2), NET_ETH_PTYPE_ARP,
-		      "ARP packet type is wrong");
 
 	/**TESTPOINTS: Check packets*/
 	zassert_not_equal((void *)(pkt2), (void *)(pkt),
@@ -525,16 +529,12 @@ ZTEST(arp_fn_tests, test_arp)
 	net_ipv4_addr_copy_raw(arp_hdr->dst_ipaddr, (uint8_t *)&dst);
 	net_ipv4_addr_copy_raw(arp_hdr->src_ipaddr, (uint8_t *)&src);
 
-	net_pkt_set_ll_proto_type(pkt, NET_ETH_PTYPE_ARP);
-
 	pkt2 = prepare_arp_reply(iface, pkt, &eth_hwaddr, &eth_hdr);
 
 	zassert_not_null(pkt2, "ARP reply generation failed.");
 
 	/* The pending packet should now be sent */
-	switch (net_arp_input(pkt2,
-			      (struct net_eth_addr *)net_pkt_lladdr_src(pkt2)->addr,
-			      &dst_lladdr)) {
+	switch (net_arp_input(pkt2, eth_hdr)) {
 	case NET_OK:
 	case NET_CONTINUE:
 		break;
@@ -570,8 +570,6 @@ ZTEST(arp_fn_tests, test_arp)
 	net_ipv4_addr_copy_raw(arp_hdr->dst_ipaddr, (uint8_t *)&src);
 	net_ipv4_addr_copy_raw(arp_hdr->src_ipaddr, (uint8_t *)&dst);
 
-	net_pkt_set_ll_proto_type(pkt, NET_ETH_PTYPE_ARP);
-
 	pkt2 = prepare_arp_request(iface, pkt, &eth_hwaddr, &eth_hdr);
 
 	/**TESTPOINT: Check if ARP request generation failed*/
@@ -579,9 +577,7 @@ ZTEST(arp_fn_tests, test_arp)
 
 	req_test = true;
 
-	switch (net_arp_input(pkt2,
-			      (struct net_eth_addr *)net_pkt_lladdr_src(pkt2)->addr,
-			      &dst_lladdr)) {
+	switch (net_arp_input(pkt2, eth_hdr)) {
 	case NET_OK:
 	case NET_CONTINUE:
 		break;
@@ -636,12 +632,7 @@ ZTEST(arp_fn_tests, test_arp)
 
 		net_buf_add(pkt->buffer, sizeof(struct net_arp_hdr));
 
-		net_pkt_set_ll_proto_type(pkt, NET_ETH_PTYPE_ARP);
-
-		verdict = net_arp_input(pkt,
-					(struct net_eth_addr *)net_pkt_lladdr_src(pkt)->addr,
-					&dst_lladdr);
-
+		verdict = net_arp_input(pkt, eth_hdr);
 		zassert_not_equal(verdict, NET_DROP, "Gratuitous ARP failed");
 
 		/* Then check that the HW address is changed for an existing

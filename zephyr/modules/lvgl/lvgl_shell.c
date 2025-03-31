@@ -6,7 +6,7 @@
 
 #include <zephyr/shell/shell.h>
 #include <lvgl.h>
-#include <zephyr/autoconf.h>
+#include <autoconf.h>
 
 #ifdef CONFIG_LV_Z_MEM_POOL_SYS_HEAP
 #include "lvgl_mem.h"
@@ -20,11 +20,11 @@ static const char *lvgl_monkey_indev_as_string(lv_monkey_t *monkey)
 	lv_indev_t *input_device;
 
 	input_device = lv_monkey_get_indev(monkey);
-	if (!input_device) {
+	if (!input_device || !input_device->driver) {
 		return "unknown";
 	}
 
-	switch (lv_indev_get_type(input_device)) {
+	switch (input_device->driver->type) {
 	case LV_INDEV_TYPE_POINTER:
 		return "pointer";
 	case LV_INDEV_TYPE_KEYPAD:

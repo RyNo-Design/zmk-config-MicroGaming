@@ -1,37 +1,20 @@
 /*
- * Copyright (c) 2021-2025 Nordic Semiconductor ASA
+ * Copyright (c) 2021-2022 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-
-#include <zephyr/autoconf.h>
-#include <zephyr/bluetooth/addr.h>
-#include <zephyr/bluetooth/audio/audio.h>
-#include <zephyr/bluetooth/audio/bap.h>
+#ifdef CONFIG_BT_BAP_SCAN_DELEGATOR
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/byteorder.h>
-#include <zephyr/bluetooth/gap.h>
-#include <zephyr/bluetooth/iso.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/kernel.h>
-#include <zephyr/net_buf.h>
+#include <zephyr/bluetooth/audio/audio.h>
+#include <zephyr/bluetooth/audio/bap.h>
 #include <zephyr/sys/byteorder.h>
-#include <zephyr/sys/printk.h>
-#include <zephyr/sys/util.h>
-#include <zephyr/sys/util_macro.h>
-
-#include "bstests.h"
 #include "common.h"
 
-#ifdef CONFIG_BT_BAP_SCAN_DELEGATOR
 extern enum bst_result_t bst_result;
 
-#define PA_SYNC_INTERVAL_TO_TIMEOUT_RATIO 20 /* Set the timeout relative to interval */
+#define SYNC_RETRY_COUNT          6 /* similar to retries for connections */
 #define PA_SYNC_SKIP              5
 
 CREATE_FLAG(flag_pa_synced);
@@ -48,8 +31,8 @@ struct sync_state {
 	bool pa_syncing;
 	struct k_work_delayable pa_timer;
 	struct bt_le_per_adv_sync *pa_sync;
-	uint8_t broadcast_code[BT_ISO_BROADCAST_CODE_SIZE];
-	uint32_t bis_sync_req[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS];
+	uint8_t broadcast_code[BT_AUDIO_BROADCAST_CODE_SIZE];
+	uint32_t bis_sync_req[BT_BAP_SCAN_DELEGATOR_MAX_SUBGROUPS];
 } sync_states[CONFIG_BT_BAP_SCAN_DELEGATOR_RECV_STATE_COUNT];
 
 static struct sync_state *sync_state_get(const struct bt_bap_scan_delegator_recv_state *recv_state)
@@ -108,6 +91,29 @@ static struct sync_state *sync_state_get_by_src_id(uint8_t src_id)
 	return NULL;
 }
 
+static uint16_t interval_to_sync_timeout(uint16_t pa_interval)
+{
+	uint16_t pa_timeout;
+
+	if (pa_interval == BT_BAP_PA_INTERVAL_UNKNOWN) {
+		/* Use maximum value to maximize chance of success */
+		pa_timeout = BT_GAP_PER_ADV_MAX_TIMEOUT;
+	} else {
+		/* Ensure that the following calculation does not overflow silently */
+		__ASSERT(SYNC_RETRY_COUNT < 10,
+			 "SYNC_RETRY_COUNT shall be less than 10");
+
+		/* Add retries and convert to unit in 10's of ms */
+		pa_timeout = ((uint32_t)pa_interval * SYNC_RETRY_COUNT) / 10;
+
+		/* Enforce restraints */
+		pa_timeout = CLAMP(pa_timeout, BT_GAP_PER_ADV_MIN_TIMEOUT,
+				   BT_GAP_PER_ADV_MAX_TIMEOUT);
+	}
+
+	return pa_timeout;
+}
+
 static void pa_timer_handler(struct k_work *work)
 {
 	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
@@ -138,7 +144,6 @@ static int pa_sync_past(struct bt_conn *conn,
 	struct bt_le_per_adv_sync_transfer_param param = { 0 };
 	int err;
 
-	param.options = BT_LE_PER_ADV_SYNC_TRANSFER_OPT_FILTER_DUPLICATES;
 	param.skip = PA_SYNC_SKIP;
 	param.timeout = interval_to_sync_timeout(pa_interval);
 
@@ -268,13 +273,6 @@ static int pa_sync_req_cb(struct bt_conn *conn,
 
 	if (past_avail) {
 		err = pa_sync_past(conn, state, pa_interval);
-		if (err == 0) {
-			err = bt_bap_scan_delegator_set_pa_state(state->recv_state->src_id,
-								 BT_BAP_PA_STATE_INFO_REQ);
-			if (err != 0) {
-				printk("Failed to set INFO_REQ state: %d", err);
-			}
-		}
 	} else {
 		err = pa_sync_no_past(state, pa_interval);
 	}
@@ -300,7 +298,7 @@ static int pa_sync_term_req_cb(struct bt_conn *conn,
 
 static void broadcast_code_cb(struct bt_conn *conn,
 			      const struct bt_bap_scan_delegator_recv_state *recv_state,
-			      const uint8_t broadcast_code[BT_ISO_BROADCAST_CODE_SIZE])
+			      const uint8_t broadcast_code[BT_AUDIO_BROADCAST_CODE_SIZE])
 {
 	struct sync_state *state;
 
@@ -312,20 +310,20 @@ static void broadcast_code_cb(struct bt_conn *conn,
 		return;
 	}
 
-	(void)memcpy(state->broadcast_code, broadcast_code, BT_ISO_BROADCAST_CODE_SIZE);
+	(void)memcpy(state->broadcast_code, broadcast_code, BT_AUDIO_BROADCAST_CODE_SIZE);
 
 	SET_FLAG(flag_broadcast_code_received);
 }
 
 static int bis_sync_req_cb(struct bt_conn *conn,
 			   const struct bt_bap_scan_delegator_recv_state *recv_state,
-			   const uint32_t bis_sync_req[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS])
+			   const uint32_t bis_sync_req[BT_BAP_SCAN_DELEGATOR_MAX_SUBGROUPS])
 {
 	struct sync_state *state;
 	bool sync_bis;
 
 	printk("BIS sync request received for %p\n", recv_state);
-	for (int i = 0; i < CONFIG_BT_BAP_BASS_MAX_SUBGROUPS; i++) {
+	for (int i = 0; i < BT_BAP_SCAN_DELEGATOR_MAX_SUBGROUPS; i++) {
 		if (bis_sync_req[i]) {
 			sync_bis = true;
 		}
@@ -365,14 +363,6 @@ static void pa_synced_cb(struct bt_le_per_adv_sync *sync,
 	struct sync_state *state;
 
 	printk("PA %p synced\n", sync);
-
-	if (info->conn) { /* if from PAST */
-		for (size_t i = 0U; i < ARRAY_SIZE(sync_states); i++) {
-			if (!sync_states[i].pa_sync) {
-				sync_states[i].pa_sync = sync;
-			}
-		}
-	}
 
 	state = sync_state_get_by_pa(sync);
 	if (state == NULL) {
@@ -482,25 +472,17 @@ static struct bt_le_scan_cb scan_cb = {
 static int add_source(struct sync_state *state)
 {
 	struct bt_bap_scan_delegator_add_src_param param;
-	struct bt_le_per_adv_sync_info sync_info;
 	int res;
 
 	UNSET_FLAG(flag_recv_state_updated);
 
-	res = bt_le_per_adv_sync_get_info(state->pa_sync, &sync_info);
-	if (res != 0) {
-		FAIL("Failed to get PA sync info: %d)\n", res);
-		return true;
-	}
-
-	bt_addr_le_copy(&param.addr, &sync_info.addr);
-	param.sid = sync_info.sid;
+	param.pa_sync = state->pa_sync;
 	param.encrypt_state = BT_BAP_BIG_ENC_STATE_NO_ENC;
 	param.broadcast_id = g_broadcast_id;
 	param.num_subgroups = 1U;
 
 	for (uint8_t i = 0U; i < param.num_subgroups; i++) {
-		struct bt_bap_bass_subgroup *subgroup_param = &param.subgroups[i];
+		struct bt_bap_scan_delegator_subgroup *subgroup_param = &param.subgroups[i];
 
 		subgroup_param->bis_sync = BT_BAP_BIS_SYNC_NO_PREF;
 		subgroup_param->metadata_len = 0U;
@@ -559,7 +541,7 @@ static int mod_source(struct sync_state *state)
 	param.num_subgroups = 1U;
 
 	for (uint8_t i = 0U; i < param.num_subgroups; i++) {
-		struct bt_bap_bass_subgroup *subgroup_param = &param.subgroups[i];
+		struct bt_bap_scan_delegator_subgroup *subgroup_param = &param.subgroups[i];
 
 		subgroup_param->bis_sync = 0U;
 		subgroup_param->metadata_len = sizeof(pref_context_metadata);
@@ -634,13 +616,6 @@ static void remove_all_sources(void)
 
 			printk("[%zu]: Source removed with id %u\n",
 			       i, state->src_id);
-
-			printk("Terminating PA sync\n");
-			err = pa_sync_term(state);
-			if (err) {
-				FAIL("[%zu]: PA sync term failed (err %d)\n", err);
-				return;
-			}
 		}
 	}
 }
@@ -651,15 +626,9 @@ static int sync_broadcast(struct sync_state *state)
 
 	UNSET_FLAG(flag_recv_state_updated);
 
-	if (!TEST_FLAG(flag_bis_sync_requested)) {
-		/* If we have not received a sync request, set a value ourselves */
-		for (size_t i = 0U; i < ARRAY_SIZE(state->bis_sync_req); i++) {
-			state->bis_sync_req[i] = BIT(i);
-		}
-	}
-
 	/* We don't actually need to sync to the BIG/BISes */
-	err = bt_bap_scan_delegator_set_bis_sync_state(state->src_id, state->bis_sync_req);
+	err = bt_bap_scan_delegator_set_bis_sync_state(state->src_id,
+						       (uint32_t []){ BIT(1) });
 	if (err) {
 		return err;
 	}
@@ -692,7 +661,6 @@ static void sync_all_broadcasts(void)
 
 static int common_init(void)
 {
-	struct bt_le_ext_adv *ext_adv;
 	int err;
 
 	err = bt_enable(NULL);
@@ -703,15 +671,16 @@ static int common_init(void)
 
 	printk("Bluetooth initialized\n");
 
-	err = bt_bap_scan_delegator_register(&scan_delegator_cb);
+	bt_bap_scan_delegator_register_cb(&scan_delegator_cb);
+	bt_le_per_adv_sync_cb_register(&pa_sync_cb);
+
+	err = bt_le_adv_start(BT_LE_ADV_CONN_NAME, ad, AD_SIZE, NULL, 0);
 	if (err) {
-		FAIL("Scan delegator register failed (err %d)\n", err);
+		FAIL("Advertising failed to start (err %d)\n", err);
 		return err;
 	}
 
-	bt_le_per_adv_sync_cb_register(&pa_sync_cb);
-
-	setup_connectable_adv(&ext_adv);
+	printk("Advertising successfully started\n");
 
 	WAIT_FOR_FLAG(flag_connected);
 
@@ -729,25 +698,21 @@ static void test_main_client_sync(void)
 	}
 
 	/* Wait for broadcast assistant to request us to sync to PA */
-	printk("Waiting for flag_pa_synced\n");
 	WAIT_FOR_FLAG(flag_pa_synced);
+
+	/* Wait for broadcast assistant to send us broadcast code */
+	WAIT_FOR_FLAG(flag_broadcast_code_received);
 
 	/* Mod all sources by modifying the metadata */
 	mod_all_sources();
 
 	/* Wait for broadcast assistant to tell us to BIS sync */
-	printk("Waiting for flag_bis_sync_requested\n");
 	WAIT_FOR_FLAG(flag_bis_sync_requested);
 
 	/* Set the BIS sync state */
 	sync_all_broadcasts();
 
-	/* Wait for broadcast assistant to send us broadcast code */
-	printk("Waiting for flag_broadcast_code_received\n");
-	WAIT_FOR_FLAG(flag_broadcast_code_received);
-
 	/* Wait for broadcast assistant to remove source and terminate PA sync */
-	printk("Waiting for flag_pa_terminated\n");
 	WAIT_FOR_FLAG(flag_pa_terminated);
 
 	PASS("BAP Scan Delegator Client Sync passed\n");
@@ -772,14 +737,12 @@ static void test_main_server_sync_client_rem(void)
 	}
 
 	/* Wait for PA to sync */
-	printk("Waiting for flag_pa_synced\n");
 	WAIT_FOR_FLAG(flag_pa_synced);
 
 	/* Add PAs as receive state sources */
 	add_all_sources();
 
 	/* Wait for broadcast assistant to send us broadcast code */
-	printk("Waiting for flag_broadcast_code_received\n");
 	WAIT_FOR_FLAG(flag_broadcast_code_received);
 
 	/* Mod all sources by modifying the metadata */
@@ -789,7 +752,6 @@ static void test_main_server_sync_client_rem(void)
 	sync_all_broadcasts();
 
 	/* For for client to remove source and thus terminate the PA */
-	printk("Waiting for flag_pa_terminated\n");
 	WAIT_FOR_FLAG(flag_pa_terminated);
 
 	PASS("BAP Scan Delegator Server Sync Client Remove passed\n");
@@ -814,14 +776,12 @@ static void test_main_server_sync_server_rem(void)
 	}
 
 	/* Wait for PA to sync */
-	printk("Waiting for flag_pa_synced\n");
 	WAIT_FOR_FLAG(flag_pa_synced);
 
 	/* Add PAs as receive state sources */
 	add_all_sources();
 
 	/* Wait for broadcast assistant to send us broadcast code */
-	printk("Waiting for flag_broadcast_code_received\n");
 	WAIT_FOR_FLAG(flag_broadcast_code_received);
 
 	/* Mod all sources by modifying the metadata */
@@ -834,7 +794,6 @@ static void test_main_server_sync_server_rem(void)
 	remove_all_sources();
 
 	/* Wait for PA sync to be terminated */
-	printk("Waiting for flag_pa_terminated\n");
 	WAIT_FOR_FLAG(flag_pa_terminated);
 
 	PASS("BAP Scan Delegator Server Sync Server Remove passed\n");
@@ -843,19 +802,19 @@ static void test_main_server_sync_server_rem(void)
 static const struct bst_test_instance test_scan_delegator[] = {
 	{
 		.test_id = "bap_scan_delegator_client_sync",
-		.test_pre_init_f = test_init,
+		.test_post_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_main_client_sync,
 	},
 	{
 		.test_id = "bap_scan_delegator_server_sync_client_rem",
-		.test_pre_init_f = test_init,
+		.test_post_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_main_server_sync_client_rem,
 	},
 	{
 		.test_id = "bap_scan_delegator_server_sync_server_rem",
-		.test_pre_init_f = test_init,
+		.test_post_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_main_server_sync_server_rem,
 	},

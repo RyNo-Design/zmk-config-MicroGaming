@@ -8,7 +8,6 @@
 #define ZEPHYR_INCLUDE_SYS_ERRNO_PRIVATE_H_
 
 #include <zephyr/toolchain.h>
-#include <zephyr/types.h> /* For Z_THREAD_LOCAL */
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,7 +26,7 @@ static inline int *z_errno(void)
 }
 
 #elif defined(CONFIG_ERRNO_IN_TLS)
-extern Z_THREAD_LOCAL int z_errno_var;
+extern __thread int z_errno_var;
 
 static inline int *z_errno(void)
 {
@@ -51,7 +50,7 @@ __syscall int *z_errno(void);
 #endif
 
 #if !defined(CONFIG_ERRNO_IN_TLS) && !defined(CONFIG_LIBC_ERRNO)
-#include <zephyr/syscalls/errno_private.h>
+#include <syscalls/errno_private.h>
 #endif /* CONFIG_ERRNO_IN_TLS */
 
 #endif /* ZEPHYR_INCLUDE_SYS_ERRNO_PRIVATE_H_ */

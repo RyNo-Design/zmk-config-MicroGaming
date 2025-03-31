@@ -37,7 +37,6 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/types.h>
-#include "lwm2m_obj_server.h"
 
 #if defined(CONFIG_LWM2M_RW_SENML_JSON_SUPPORT)
 #include "lwm2m_rw_senml_json.h"
@@ -83,6 +82,7 @@ struct notification_attrs {
 };
 
 /* write-attribute related definitions */
+static const char *const LWM2M_ATTR_STR[] = {"pmin", "pmax", "gt", "lt", "st"};
 static const uint8_t LWM2M_ATTR_LEN[] = {4, 4, 2, 2, 2};
 
 static struct lwm2m_attr write_attr_pool[CONFIG_LWM2M_NUM_ATTR];
@@ -92,24 +92,6 @@ static struct lwm2m_attr write_attr_pool[CONFIG_LWM2M_NUM_ATTR];
 void lwm2m_engine_free_list(sys_slist_t *path_list, sys_slist_t *free_list);
 
 struct lwm2m_obj_path_list *lwm2m_engine_get_from_list(sys_slist_t *path_list);
-
-const char *const lwm2m_attr_to_str(uint8_t type)
-{
-	switch (type) {
-	case LWM2M_ATTR_PMIN:
-		return "pmin";
-	case LWM2M_ATTR_PMAX:
-		return "pmax";
-	case LWM2M_ATTR_GT:
-		return "gt";
-	case LWM2M_ATTR_LT:
-		return "lt";
-	case LWM2M_ATTR_STEP:
-		return "st";
-	default:
-		return "unknown";
-	}
-}
 
 static int update_attrs(void *ref, struct notification_attrs *out)
 {
@@ -547,7 +529,7 @@ struct observe_node *engine_observe_node_discover(sys_slist_t *observe_node_list
 						  const uint8_t *token, uint8_t tkl)
 {
 	struct observe_node *obs;
-	int obs_list_size, path_list_size = 0;
+	int obs_list_size, path_list_size;
 
 	if (lwm2m_path_list) {
 		path_list_size = engine_path_list_size(lwm2m_path_list);
@@ -890,10 +872,10 @@ static int lwm2m_update_or_allocate_attribute(void *ref, uint8_t type, void *dat
 
 		if (type <= LWM2M_ATTR_PMAX) {
 			attr->int_val = *(int32_t *)data;
-			LOG_DBG("Update %s to %d", lwm2m_attr_to_str(type), attr->int_val);
+			LOG_DBG("Update %s to %d", LWM2M_ATTR_STR[type], attr->int_val);
 		} else {
 			attr->float_val = *(double *)data;
-			LOG_DBG("Update %s to %f", lwm2m_attr_to_str(type), attr->float_val);
+			LOG_DBG("Update %s to %f", LWM2M_ATTR_STR[type], attr->float_val);
 		}
 		return 0;
 	}
@@ -916,10 +898,10 @@ static int lwm2m_update_or_allocate_attribute(void *ref, uint8_t type, void *dat
 
 	if (type <= LWM2M_ATTR_PMAX) {
 		attr->int_val = *(int32_t *)data;
-		LOG_DBG("Add %s to %d", lwm2m_attr_to_str(type), attr->int_val);
+		LOG_DBG("Add %s to %d", LWM2M_ATTR_STR[type], attr->int_val);
 	} else {
 		attr->float_val = *(double *)data;
-		LOG_DBG("Add %s to %f", lwm2m_attr_to_str(type), attr->float_val);
+		LOG_DBG("Add %s to %f", LWM2M_ATTR_STR[type], attr->float_val);
 	}
 	return 0;
 }
@@ -930,7 +912,7 @@ const char *lwm2m_engine_get_attr_name(const struct lwm2m_attr *attr)
 		return NULL;
 	}
 
-	return lwm2m_attr_to_str(attr->type);
+	return LWM2M_ATTR_STR[attr->type];
 }
 
 static int lwm2m_engine_observer_timestamp_update(sys_slist_t *observer,
@@ -1064,6 +1046,20 @@ int lwm2m_update_observer_min_period(struct lwm2m_ctx *client_ctx,
 	return lwm2m_update_or_allocate_attribute(ref, LWM2M_ATTR_PMIN, &period_s);
 }
 
+int lwm2m_engine_update_observer_min_period(struct lwm2m_ctx *client_ctx, const char *pathstr,
+					    uint32_t period_s)
+{
+	int ret;
+	struct lwm2m_obj_path path;
+
+	ret = lwm2m_string_to_path(pathstr, &path, '/');
+	if (ret < 0) {
+		return ret;
+	}
+
+	return lwm2m_update_observer_min_period(client_ctx, &path, period_s);
+}
+
 int lwm2m_update_observer_max_period(struct lwm2m_ctx *client_ctx,
 				     const struct lwm2m_obj_path *path, uint32_t period_s)
 {
@@ -1108,6 +1104,20 @@ int lwm2m_update_observer_max_period(struct lwm2m_ctx *client_ctx,
 	/* Update Observer timestamp */
 	return lwm2m_engine_observer_timestamp_update(&client_ctx->observer, path,
 						      client_ctx->srv_obj_inst);
+}
+
+int lwm2m_engine_update_observer_max_period(struct lwm2m_ctx *client_ctx, const char *pathstr,
+					    uint32_t period_s)
+{
+	int ret;
+	struct lwm2m_obj_path path;
+
+	ret = lwm2m_string_to_path(pathstr, &path, '/');
+	if (ret < 0) {
+		return ret;
+	}
+
+	return lwm2m_update_observer_max_period(client_ctx, &path, period_s);
 }
 
 struct lwm2m_attr *lwm2m_engine_get_next_attr(const void *ref, struct lwm2m_attr *prev)
@@ -1192,8 +1202,7 @@ int lwm2m_write_attr_handler(struct lwm2m_engine_obj *obj, struct lwm2m_message 
 		/* matching attribute name */
 		for (type = 0U; type < NR_LWM2M_ATTR; type++) {
 			if (LWM2M_ATTR_LEN[type] == plen &&
-			    !memcmp(options[i].value, lwm2m_attr_to_str(type),
-				    LWM2M_ATTR_LEN[type])) {
+			    !memcmp(options[i].value, LWM2M_ATTR_STR[type], LWM2M_ATTR_LEN[type])) {
 				break;
 			}
 		}
@@ -1242,7 +1251,7 @@ int lwm2m_write_attr_handler(struct lwm2m_engine_obj *obj, struct lwm2m_message 
 		}
 
 		if (ret < 0) {
-			LOG_ERR("invalid attr[%s] value", lwm2m_attr_to_str(type));
+			LOG_ERR("invalid attr[%s] value", LWM2M_ATTR_STR[type]);
 			/* bad request */
 			return -EEXIST;
 		}
@@ -1288,7 +1297,7 @@ int lwm2m_write_attr_handler(struct lwm2m_engine_obj *obj, struct lwm2m_message 
 		type = attr->type;
 
 		if (!(BIT(type) & nattrs.flags)) {
-			LOG_DBG("Unset attr %s", lwm2m_attr_to_str(type));
+			LOG_DBG("Unset attr %s", LWM2M_ATTR_STR[type]);
 			(void)memset(attr, 0, sizeof(*attr));
 
 			if (type <= LWM2M_ATTR_PMAX) {
@@ -1308,7 +1317,7 @@ int lwm2m_write_attr_handler(struct lwm2m_engine_obj *obj, struct lwm2m_message 
 			attr->int_val = *(int32_t *)nattr_ptrs[type];
 			update_observe_node = true;
 
-			LOG_DBG("Update %s to %d", lwm2m_attr_to_str(type), attr->int_val);
+			LOG_DBG("Update %s to %d", LWM2M_ATTR_STR[type], attr->int_val);
 		} else {
 			if (attr->float_val == *(double *)nattr_ptrs[type]) {
 				continue;
@@ -1316,7 +1325,7 @@ int lwm2m_write_attr_handler(struct lwm2m_engine_obj *obj, struct lwm2m_message 
 
 			attr->float_val = *(double *)nattr_ptrs[type];
 
-			LOG_DBG("Update %s to %f", lwm2m_attr_to_str(type), attr->float_val);
+			LOG_DBG("Update %s to %f", LWM2M_ATTR_STR[type], attr->float_val);
 		}
 	}
 
@@ -1345,11 +1354,11 @@ int lwm2m_write_attr_handler(struct lwm2m_engine_obj *obj, struct lwm2m_message 
 			attr->int_val = *(int32_t *)nattr_ptrs[type];
 			update_observe_node = true;
 
-			LOG_DBG("Add %s to %d", lwm2m_attr_to_str(type), attr->int_val);
+			LOG_DBG("Add %s to %d", LWM2M_ATTR_STR[type], attr->int_val);
 		} else {
 			attr->float_val = *(double *)nattr_ptrs[type];
 
-			LOG_DBG("Add %s to %f", lwm2m_attr_to_str(type), attr->float_val);
+			LOG_DBG("Add %s to %f", LWM2M_ATTR_STR[type], attr->float_val);
 		}
 
 		nattrs.flags &= ~BIT(type);
@@ -1381,6 +1390,19 @@ bool lwm2m_path_is_observed(const struct lwm2m_obj_path *path)
 		}
 	}
 	return false;
+}
+
+bool lwm2m_engine_path_is_observed(const char *pathstr)
+{
+	int ret;
+	struct lwm2m_obj_path path;
+
+	ret = lwm2m_string_to_path(pathstr, &path, '/');
+	if (ret < 0) {
+		return false;
+	}
+
+	return lwm2m_path_is_observed(&path);
 }
 
 int lwm2m_engine_observation_handler(struct lwm2m_message *msg, int observe, uint16_t accept,

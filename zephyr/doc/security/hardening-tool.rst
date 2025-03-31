@@ -25,7 +25,7 @@ Usage
 
 .. zephyr-app-commands::
     :tool: all
-    :zephyr-app: samples/hello_world
+    :app: samples/hello_world
     :board: reel_board
     :goals: hardenconfig
 

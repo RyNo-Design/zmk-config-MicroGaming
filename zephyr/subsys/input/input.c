@@ -20,9 +20,9 @@ K_MSGQ_DEFINE(input_msgq, sizeof(struct input_event),
 
 static void input_process(struct input_event *evt)
 {
-	STRUCT_SECTION_FOREACH(input_callback, callback) {
-		if (callback->dev == NULL || callback->dev == evt->dev) {
-			callback->callback(evt, callback->user_data);
+	STRUCT_SECTION_FOREACH(input_listener, listener) {
+		if (listener->dev == NULL || listener->dev == evt->dev) {
+			listener->callback(evt);
 		}
 	}
 }
@@ -50,21 +50,7 @@ int input_report(const struct device *dev,
 	};
 
 #ifdef CONFIG_INPUT_MODE_THREAD
-	int ret;
-
-	if (!K_TIMEOUT_EQ(timeout, K_NO_WAIT) &&
-	    k_current_get() == k_work_queue_thread_get(&k_sys_work_q)) {
-		LOG_DBG("Timeout discarded. No blocking in syswq.");
-		timeout = K_NO_WAIT;
-	}
-
-	ret = k_msgq_put(&input_msgq, &evt, timeout);
-	if (ret < 0) {
-		LOG_WRN("Event dropped, queue full, not blocking in syswq.");
-		return ret;
-	}
-
-	return 0;
+	return k_msgq_put(&input_msgq, &evt, timeout);
 #else
 	input_process(&evt);
 	return 0;

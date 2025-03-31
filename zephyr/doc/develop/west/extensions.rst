@@ -87,6 +87,7 @@ details on the west APIs you can use, see :ref:`west-apis`.
    from textwrap import dedent            # just for nicer code indentation
 
    from west.commands import WestCommand  # your extension must subclass this
+   from west import log                   # use this for user output
 
    class MyCommand(WestCommand):
 
@@ -124,8 +125,8 @@ details on the west APIs you can use, see :ref:`west-apis`.
            #   $ west my-command-name -o FOO BAR
            #   --optional is FOO
            #   required is BAR
-           self.inf('--optional is', args.optional)
-           self.inf('required is', args.required)
+           log.inf('--optional is', args.optional)
+           log.inf('required is', args.required)
 
 You can ignore the second argument to ``do_run()`` (``unknown_args`` above), as
 ``WestCommand`` will reject unknown arguments by default. If you want to be

@@ -27,13 +27,14 @@ SPDX-License-Identifier: Apache-2.0
 """
 
 import re
-from typing import Any
+from typing import Any, Dict, List
 
 from docutils import nodes
 from docutils.parsers.rst import directives
 from sphinx.application import Sphinx
 from sphinx.util.docutils import SphinxDirective
 from west.manifest import Manifest
+
 
 __version__ = "0.1.0"
 
@@ -66,7 +67,7 @@ class ManifestProjectsTable(SphinxDirective):
 
         return f"{base_url}/releases/tag/{rev}"
 
-    def run(self) -> list[nodes.Element]:
+    def run(self) -> List[nodes.Element]:
         active_filter = self.options.get("filter", None)
 
         manifest = Manifest.from_file(self.env.config.manifest_projects_table_manifest)
@@ -74,14 +75,11 @@ class ManifestProjectsTable(SphinxDirective):
         for project in manifest.projects:
             if project.name == "manifest":
                 continue
-            if (
-                active_filter == "active"
-                and manifest.is_active(project)
-                or active_filter == "inactive"
-                and not manifest.is_active(project)
-                or active_filter == "all"
-                or active_filter is None
-            ):
+            if active_filter == 'active' and manifest.is_active(project):
+                projects.append(project)
+            elif active_filter == 'inactive' and not manifest.is_active(project):
+                projects.append(project)
+            elif active_filter == 'all' or active_filter is None:
                 projects.append(project)
 
         # build table
@@ -131,7 +129,7 @@ class ManifestProjectsTable(SphinxDirective):
         return [table]
 
 
-def setup(app: Sphinx) -> dict[str, Any]:
+def setup(app: Sphinx) -> Dict[str, Any]:
     app.add_config_value("manifest_projects_table_manifest", None, "env")
 
     directives.register_directive("manifest-projects-table", ManifestProjectsTable)

@@ -5,11 +5,11 @@
 '''Runners for Synopsys Metaware Debugger(mdb).'''
 
 
-import os
 import shutil
+import os
 from os import path
 
-from runners.core import RunnerCaps, ZephyrBinaryRunner
+from runners.core import ZephyrBinaryRunner, RunnerCaps
 
 
 # normally we should create class with common functionality inherited from
@@ -27,23 +27,12 @@ def is_flash_cmd_need_exit_immediately(mdb_runner):
     if is_simulation_run(mdb_runner):
         # for nsim, we can't run and quit immediately
         return False
-
-    # if hostlink is used we can't run and quit immediately, as we still need MDB process
-    # attached to process hostlink IO
-    return not is_hostlink_used(mdb_runner)
-
-def smp_core_order(mdb_runner, id):
-    if is_simulation_run(mdb_runner):
-        # for simulation targets we start cores in direct order
-        # (core 0 first, core 1 second, etc...)
-        # otherwise we face mismatch arcnum (code ID) with ARConnect ID
-        # and core ID in instruction traces
-        return id
+    elif is_hostlink_used(mdb_runner):
+        # if hostlink is used we can't run and quit immediately, as we still need MDB process
+        # attached to process hostlink IO
+        return False
     else:
-        # for HW targets we want to start the primary core last,
-        # to avoid ARConnect initialization interfere
-        # with secondary cores startup - so we reverse start order
-        return mdb_runner.cores - 1 - id
+        return True
 
 def mdb_do_run(mdb_runner, command):
     commander = "mdb64"
@@ -66,11 +55,10 @@ def mdb_do_run(mdb_runner, command):
     else:
         if mdb_runner.jtag == 'digilent':
             mdb_target = ['-digilent']
-            if mdb_runner.dig_device:
-                mdb_target += [mdb_runner.dig_device]
+            if mdb_runner.dig_device: mdb_target += [mdb_runner.dig_device]
         else:
             # \todo: add support of other debuggers
-            raise ValueError(f'unsupported jtag adapter {mdb_runner.jtag}')
+            raise ValueError('unsupported jtag adapter {}'.format(mdb_runner.jtag))
 
     if command == 'flash':
         if is_flash_cmd_need_exit_immediately(mdb_runner):
@@ -87,14 +75,13 @@ def mdb_do_run(mdb_runner, command):
     elif 1 < mdb_runner.cores <= 12:
         mdb_multifiles = '-multifiles='
         for i in range(mdb_runner.cores):
-            mdb_sub_cmd = [commander] + [f'-pset={i + 1}', f'-psetname=core{i}']
+            mdb_sub_cmd = [commander] + ['-pset={}'.format(i + 1), '-psetname=core{}'.format(i)]
             # -prop=download=2 is used for SMP application debug, only the 1st core
             # will download the shared image.
-            if i > 0:
-                mdb_sub_cmd += ['-prop=download=2']
+            if i > 0: mdb_sub_cmd += ['-prop=download=2']
             mdb_sub_cmd += mdb_basic_options + mdb_target + [mdb_runner.elf_name]
             mdb_runner.check_call(mdb_sub_cmd, cwd=mdb_runner.build_dir)
-            mdb_multifiles += f'{"" if i == 0 else ","}core{smp_core_order(mdb_runner, i)}'
+            mdb_multifiles += ('core{}'.format(mdb_runner.cores-1-i) if i == 0 else ',core{}'.format(mdb_runner.cores-1-i))
 
         # to enable multi-core aware mode for use with the MetaWare debugger,
         # need to set the NSIM_MULTICORE environment variable to a non-zero value
@@ -103,7 +90,7 @@ def mdb_do_run(mdb_runner, command):
 
         mdb_cmd = [commander] + [mdb_multifiles] + mdb_run
     else:
-        raise ValueError(f'unsupported cores {mdb_runner.cores}')
+        raise ValueError('unsupported cores {}'.format(mdb_runner.cores))
 
     mdb_runner.call(mdb_cmd, cwd=mdb_runner.build_dir)
 
@@ -186,7 +173,7 @@ class MdbHwBinaryRunner(ZephyrBinaryRunner):
                             help='''choose the number of cores that target has,
                                     e.g. --cores=1''')
         parser.add_argument('--dig-device', default='',
-                            help='''choose the specific digilent device to
+                            help='''choose the the specific digilent device to
                              connect, this is useful when multiple
                              targets are connected''')
 

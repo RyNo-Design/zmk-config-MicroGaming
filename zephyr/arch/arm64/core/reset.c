@@ -41,8 +41,6 @@ void z_arm64_el_highest_init(void)
 	barrier_isync_fence_full();
 }
 
-
-#if !defined(CONFIG_ARMV8_R)
 enum el3_next_el {
 	EL3_TO_EL2,
 	EL3_TO_EL1_NO_EL2,
@@ -115,7 +113,6 @@ void z_arm64_el3_init(void)
 		z_arm64_el2_init();
 	}
 }
-#endif /* CONFIG_ARMV8_R */
 
 void z_arm64_el2_init(void)
 {
@@ -128,12 +125,6 @@ void z_arm64_el2_init(void)
 	write_sctlr_el2(reg);
 
 	reg = read_hcr_el2();
-	/* when EL2 is enable in current security status:
-	 * Clear TGE bit: All exceptions that would not be routed to EL2;
-	 * Clear AMO bit: Physical SError interrupts are not taken to EL2 and EL3.
-	 * Clear IMO bit: Physical IRQ interrupts are not taken to EL2 and EL3.
-	 */
-	reg &= ~(HCR_IMO_BIT | HCR_AMO_BIT | HCR_TGE_BIT);
 	reg |= HCR_RW_BIT;		/* EL1 Execution state is AArch64 */
 	write_hcr_el2(reg);
 
@@ -198,7 +189,6 @@ void z_arm64_el1_init(void)
 	barrier_isync_fence_full();
 }
 
-#if !defined(CONFIG_ARMV8_R)
 void z_arm64_el3_get_next_el(uint64_t switch_addr)
 {
 	uint64_t spsr;
@@ -218,4 +208,3 @@ void z_arm64_el3_get_next_el(uint64_t switch_addr)
 
 	write_spsr_el3(spsr);
 }
-#endif /* CONFIG_ARMV8_R */

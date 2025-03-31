@@ -13,11 +13,3 @@ properties:
 
   interrupts:
     required: true
-
-  "#mbox-cells":
-    type: int
-    description: |
-      Dummy property for device tree compatibility with MBOX driver.
-
-mbox-cells:
-  - channel

@@ -3,8 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-import yaml
-import re
 
 from west import log
 from west.util import west_topdir, WestNotFound
@@ -48,7 +46,6 @@ class Walker:
         self.docZephyr = None
         self.docApp = None
         self.docSDK = None
-        self.docModulesExtRefs = None
 
         # dict of absolute file path => the Document that owns that file
         self.allFileLinks = {}
@@ -71,46 +68,11 @@ class Walker:
         # SDK install path from parsed CMake cache
         self.sdkPath = ""
 
-    def _build_purl(self, url, version=None):
-        if not url:
-            return None
-
-        purl = None
-        # This is designed to match repository with the following url pattern:
-        # '<protocol><type>/<namespace>/<package>
-        COMMON_GIT_URL_REGEX=r'((git@|http(s)?:\/\/)(?P<type>[\w\.@]+)(\.\w+)(\/|:))(?P<namespace>[\w,\-,\_\/]+)\/(?P<package>[\w,\-,\_]+)(.git){0,1}((\/){0,1})$'
-
-        match = re.fullmatch(COMMON_GIT_URL_REGEX, url)
-        if match:
-            purl = f'pkg:{match.group("type")}/{match.group("namespace")}/{match.group("package")}'
-
-        if purl and (version or len(version) > 0):
-            purl += f'@{version}'
-
-        return purl
-
-    def _add_describe_relationship(self, doc, cfgpackage):
-        # create DESCRIBES relationship data
-        rd = RelationshipData()
-        rd.ownerType = RelationshipDataElementType.DOCUMENT
-        rd.ownerDocument = doc
-        rd.otherType = RelationshipDataElementType.PACKAGEID
-        rd.otherPackageID = cfgpackage.spdxID
-        rd.rlnType = "DESCRIBES"
-
-        # add it to pending relationships queue
-        self.pendingRelationships.append(rd)
-
     # primary entry point
     def makeDocuments(self):
         # parse CMake cache file and get compiler path
         log.inf("parsing CMake Cache file")
         self.getCacheFile()
-
-        # check if meta file is generated
-        if not self.metaFile:
-            log.err("CONFIG_BUILD_OUTPUT_META must be enabled to generate spdx files; bailing")
-            return False
 
         # parse codemodel from Walker cfg's build dir
         log.inf("parsing CMake Codemodel files")
@@ -146,7 +108,6 @@ class Walker:
         if self.cmakeCache:
             self.compilerPath = self.cmakeCache.get("CMAKE_C_COMPILER", "")
             self.sdkPath = self.cmakeCache.get("ZEPHYR_SDK_INSTALL_DIR", "")
-            self.metaFile =  self.cmakeCache.get("KERNEL_META_PATH", "")
 
     # determine path from build dir to CMake file-based API index file, then
     # parse it and return the Codemodel
@@ -177,27 +138,10 @@ class Walker:
         # parse it
         return parseReply(indexFilePath)
 
-    def setupAppDocument(self):
-        # set up app document
-        cfgApp = DocumentConfig()
-        cfgApp.name = "app-sources"
-        cfgApp.namespace = self.cfg.namespacePrefix + "/app"
-        cfgApp.docRefID = "DocumentRef-app"
-        self.docApp = Document(cfgApp)
+    # set up Documents before beginning
+    def setupDocuments(self):
+        log.dbg("setting up placeholder documents")
 
-        # also set up app sources package
-        cfgPackageApp = PackageConfig()
-        cfgPackageApp.name = "app-sources"
-        cfgPackageApp.spdxID = "SPDXRef-app-sources"
-        cfgPackageApp.primaryPurpose = "SOURCE"
-        # relativeBaseDir is app sources dir
-        cfgPackageApp.relativeBaseDir = self.cm.paths_source
-        pkgApp = Package(cfgPackageApp, self.docApp)
-        self.docApp.pkgs[pkgApp.cfg.spdxID] = pkgApp
-
-        self._add_describe_relationship(self.docApp, cfgPackageApp)
-
-    def setupBuildDocument(self):
         # set up build document
         cfgBuild = DocumentConfig()
         cfgBuild.name = "build"
@@ -219,7 +163,6 @@ class Walker:
         # add it to pending relationships queue
         self.pendingRelationships.append(rd)
 
-    def setupZephyrDocument(self, zephyr, modules):
         # set up zephyr document
         cfgZephyr = DocumentConfig()
         cfgZephyr.name = "zephyr-sources"
@@ -227,163 +170,84 @@ class Walker:
         cfgZephyr.docRefID = "DocumentRef-zephyr"
         self.docZephyr = Document(cfgZephyr)
 
-        # relativeBaseDir is Zephyr sources topdir
-        try:
-            relativeBaseDir = west_topdir(self.cm.paths_source)
-        except WestNotFound:
-            log.err(f"cannot find west_topdir for CMake Codemodel sources path {self.cm.paths_source}; bailing")
-            return False
-
-        # set up zephyr sources package
+        # also set up zephyr sources package
         cfgPackageZephyr = PackageConfig()
         cfgPackageZephyr.name = "zephyr-sources"
         cfgPackageZephyr.spdxID = "SPDXRef-zephyr-sources"
-        cfgPackageZephyr.relativeBaseDir = relativeBaseDir
-
-        zephyr_url = zephyr.get("remote", "")
-        if zephyr_url:
-            cfgPackageZephyr.url = zephyr_url
-
-        if zephyr.get("revision"):
-            cfgPackageZephyr.revision = zephyr.get("revision")
-
-        purl = None
-        zephyr_tags = zephyr.get("tags", "")
-        if zephyr_tags:
-            # Find tag vX.Y.Z
-            for tag in zephyr_tags:
-                version = re.fullmatch(r'^v(?P<version>\d+\.\d+\.\d+)$', tag)
-                purl = self._build_purl(zephyr_url, tag)
-
-                if purl:
-                    cfgPackageZephyr.externalReferences.append(purl)
-
-                # Extract version from tag once
-                if cfgPackageZephyr.version == "" and version:
-                    cfgPackageZephyr.version = version.group('version')
-
-        if len(cfgPackageZephyr.version) > 0:
-            cpe = f'cpe:2.3:o:zephyrproject:zephyr:{cfgPackageZephyr.version}:-:*:*:*:*:*:*'
-            cfgPackageZephyr.externalReferences.append(cpe)
-
+        # relativeBaseDir is Zephyr sources topdir
+        try:
+            cfgPackageZephyr.relativeBaseDir = west_topdir(self.cm.paths_source)
+        except WestNotFound:
+            log.err(f"cannot find west_topdir for CMake Codemodel sources path {self.cm.paths_source}; bailing")
+            return False
         pkgZephyr = Package(cfgPackageZephyr, self.docZephyr)
         self.docZephyr.pkgs[pkgZephyr.cfg.spdxID] = pkgZephyr
-
-        self._add_describe_relationship(self.docZephyr, cfgPackageZephyr)
-
-        for module in modules:
-            module_name = module.get("name", None)
-            module_path = module.get("path", None)
-            module_url = module.get("remote", None)
-            module_revision = module.get("revision", None)
-
-            if not module_name:
-                log.err(f"cannot find module name in meta file; bailing")
-                return False
-
-            # set up zephyr sources package
-            cfgPackageZephyrModule = PackageConfig()
-            cfgPackageZephyrModule.name = module_name + "-sources"
-            cfgPackageZephyrModule.spdxID = "SPDXRef-" + module_name + "-sources"
-            cfgPackageZephyrModule.relativeBaseDir = module_path
-            cfgPackageZephyrModule.primaryPurpose = "SOURCE"
-
-            if module_revision:
-                cfgPackageZephyrModule.revision = module_revision
-
-            if module_url:
-                cfgPackageZephyrModule.url = module_url
-
-            pkgZephyrModule = Package(cfgPackageZephyrModule, self.docZephyr)
-            self.docZephyr.pkgs[pkgZephyrModule.cfg.spdxID] = pkgZephyrModule
-
-            self._add_describe_relationship(self.docZephyr, cfgPackageZephyrModule)
-
-        return True
-
-    def setupSDKDocument(self):
-        # set up SDK document
-        cfgSDK = DocumentConfig()
-        cfgSDK.name = "sdk"
-        cfgSDK.namespace = self.cfg.namespacePrefix + "/sdk"
-        cfgSDK.docRefID = "DocumentRef-sdk"
-        self.docSDK = Document(cfgSDK)
-
-        # also set up zephyr sdk package
-        cfgPackageSDK = PackageConfig()
-        cfgPackageSDK.name = "sdk"
-        cfgPackageSDK.spdxID = "SPDXRef-sdk"
-        # relativeBaseDir is SDK dir
-        cfgPackageSDK.relativeBaseDir = self.sdkPath
-        pkgSDK = Package(cfgPackageSDK, self.docSDK)
-        self.docSDK.pkgs[pkgSDK.cfg.spdxID] = pkgSDK
 
         # create DESCRIBES relationship data
         rd = RelationshipData()
         rd.ownerType = RelationshipDataElementType.DOCUMENT
-        rd.ownerDocument = self.docSDK
+        rd.ownerDocument = self.docZephyr
         rd.otherType = RelationshipDataElementType.PACKAGEID
-        rd.otherPackageID = cfgPackageSDK.spdxID
+        rd.otherPackageID = cfgPackageZephyr.spdxID
         rd.rlnType = "DESCRIBES"
 
         # add it to pending relationships queue
         self.pendingRelationships.append(rd)
 
-    def setupModulesDocument(self, modules):
-        # set up zephyr document
-        cfgModuleExtRef = DocumentConfig()
-        cfgModuleExtRef.name = "modules-deps"
-        cfgModuleExtRef.namespace = self.cfg.namespacePrefix + "/modules-deps"
-        cfgModuleExtRef.docRefID = "DocumentRef-modules-deps"
-        self.docModulesExtRefs = Document(cfgModuleExtRef)
+        # set up app document
+        cfgApp = DocumentConfig()
+        cfgApp.name = "app-sources"
+        cfgApp.namespace = self.cfg.namespacePrefix + "/app"
+        cfgApp.docRefID = "DocumentRef-app"
+        self.docApp = Document(cfgApp)
 
-        for module in modules:
-            module_name = module.get("name", None)
-            module_security = module.get("security", None)
+        # also set up app sources package
+        cfgPackageApp = PackageConfig()
+        cfgPackageApp.name = "app-sources"
+        cfgPackageApp.spdxID = "SPDXRef-app-sources"
+        # relativeBaseDir is app sources dir
+        cfgPackageApp.relativeBaseDir = self.cm.paths_source
+        pkgApp = Package(cfgPackageApp, self.docApp)
+        self.docApp.pkgs[pkgApp.cfg.spdxID] = pkgApp
 
-            if not module_name:
-                log.err(f"cannot find module name in meta file; bailing")
-                return False
+        # create DESCRIBES relationship data
+        rd = RelationshipData()
+        rd.ownerType = RelationshipDataElementType.DOCUMENT
+        rd.ownerDocument = self.docApp
+        rd.otherType = RelationshipDataElementType.PACKAGEID
+        rd.otherPackageID = cfgPackageApp.spdxID
+        rd.rlnType = "DESCRIBES"
 
-            module_ext_ref = []
-            if module_security:
-                module_ext_ref = module_security.get("external-references")
-
-            # set up zephyr sources package
-            cfgPackageModuleExtRef = PackageConfig()
-            cfgPackageModuleExtRef.name = module_name + "-deps"
-            cfgPackageModuleExtRef.spdxID = "SPDXRef-" + module_name + "-deps"
-
-            for ref in module_ext_ref:
-                cfgPackageModuleExtRef.externalReferences.append(ref)
-
-            pkgModule = Package(cfgPackageModuleExtRef, self.docModulesExtRefs)
-            self.docModulesExtRefs.pkgs[pkgModule.cfg.spdxID] = pkgModule
-
-            self._add_describe_relationship(self.docModulesExtRefs, cfgPackageModuleExtRef)
-
-
-    # set up Documents before beginning
-    def setupDocuments(self):
-        log.dbg("setting up placeholder documents")
-
-        self.setupBuildDocument()
-
-        try:
-            with open(self.metaFile) as file:
-                content = yaml.load(file.read(), yaml.SafeLoader)
-                if not self.setupZephyrDocument(content["zephyr"], content["modules"]):
-                    return False
-        except (FileNotFoundError, yaml.YAMLError):
-            log.err(f"cannot find a valid zephyr_meta.yml required for SPDX generation; bailing")
-            return False
-
-        self.setupAppDocument()
+        # add it to pending relationships queue
+        self.pendingRelationships.append(rd)
 
         if self.cfg.includeSDK:
-            self.setupSDKDocument()
+            # set up SDK document
+            cfgSDK = DocumentConfig()
+            cfgSDK.name = "sdk"
+            cfgSDK.namespace = self.cfg.namespacePrefix + "/sdk"
+            cfgSDK.docRefID = "DocumentRef-sdk"
+            self.docSDK = Document(cfgSDK)
 
-        self.setupModulesDocument(content["modules"])
+            # also set up zephyr sdk package
+            cfgPackageSDK = PackageConfig()
+            cfgPackageSDK.name = "sdk"
+            cfgPackageSDK.spdxID = "SPDXRef-sdk"
+            # relativeBaseDir is SDK dir
+            cfgPackageSDK.relativeBaseDir = self.sdkPath
+            pkgSDK = Package(cfgPackageSDK, self.docSDK)
+            self.docSDK.pkgs[pkgSDK.cfg.spdxID] = pkgSDK
+
+            # create DESCRIBES relationship data
+            rd = RelationshipData()
+            rd.ownerType = RelationshipDataElementType.DOCUMENT
+            rd.ownerDocument = self.docSDK
+            rd.otherType = RelationshipDataElementType.PACKAGEID
+            rd.otherPackageID = cfgPackageSDK.spdxID
+            rd.rlnType = "DESCRIBES"
+
+            # add it to pending relationships queue
+            self.pendingRelationships.append(rd)
 
         return True
 
@@ -401,10 +265,6 @@ class Walker:
             if len(cfgTarget.target.artifacts) > 0:
                 # add its build file
                 bf = self.addBuildFile(cfgTarget, pkg)
-                if pkg.cfg.name == "zephyr_final":
-                    pkg.cfg.primaryPurpose = "APPLICATION"
-                else:
-                    pkg.cfg.primaryPurpose = "LIBRARY"
 
                 # get its source files if build file is found
                 if bf:
@@ -637,7 +497,6 @@ class Walker:
 
             # not yet assigned; figure out where it goes
             pkgBuild = self.findBuildPackage(srcAbspath)
-            pkgZephyr = self.findZephyrPackage(srcAbspath)
 
             if pkgBuild:
                 log.dbg(f"  - {srcAbspath}: assigning to build document, package {pkgBuild.cfg.name}")
@@ -651,7 +510,7 @@ class Walker:
                 log.dbg(f"  - {srcAbspath}: assigning to app document")
                 srcDoc = self.docApp
                 srcPkg = pkgApp
-            elif pkgZephyr:
+            elif os.path.commonpath([srcAbspath, pkgZephyr.cfg.relativeBaseDir]) == pkgZephyr.cfg.relativeBaseDir:
                 log.dbg(f"  - {srcAbspath}: assigning to zephyr document")
                 srcDoc = self.docZephyr
                 srcPkg = pkgZephyr
@@ -674,16 +533,16 @@ class Walker:
             srcDoc.fileLinks[sf.abspath] = sf
             self.allFileLinks[sf.abspath] = srcDoc
 
-    # figure out which Package contains the given file, if any
+    # figure out which build Package contains the given file, if any
     # call with:
     #   1) absolute path for source filename being searched
-    def findPackageFromSrcAbsPath(self, document, srcAbspath):
+    def findBuildPackage(self, srcAbspath):
         # Multiple target Packages might "contain" the file path, if they
         # are nested. If so, the one with the longest path would be the
         # most deeply-nested target directory, so that's the one which
         # should get the file path.
         pkgLongestMatch = None
-        for pkg in document.pkgs.values():
+        for pkg in self.docBuild.pkgs.values():
             if os.path.commonpath([srcAbspath, pkg.cfg.relativeBaseDir]) == pkg.cfg.relativeBaseDir:
                 # the package does contain this file; is it the deepest?
                 if pkgLongestMatch:
@@ -694,12 +553,6 @@ class Walker:
                     pkgLongestMatch = pkg
 
         return pkgLongestMatch
-
-    def findBuildPackage(self, srcAbspath):
-        return self.findPackageFromSrcAbsPath(self.docBuild, srcAbspath)
-
-    def findZephyrPackage(self, srcAbspath):
-        return self.findPackageFromSrcAbsPath(self.docZephyr, srcAbspath)
 
     # walk through pending RelationshipData entries, create corresponding
     # Relationships, and assign them to the applicable Files / Packages

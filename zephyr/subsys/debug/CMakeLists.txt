@@ -20,27 +20,12 @@ add_subdirectory_ifdef(
   coredump
   )
 
-add_subdirectory_ifdef(
+zephyr_sources_ifdef(
   CONFIG_GDBSTUB
-  gdbstub
+  gdbstub.c
   )
 
 zephyr_sources_ifdef(
-  CONFIG_MIPI_STP_DECODER
-  mipi_stp_decoder.c
-  )
-
-add_subdirectory_ifdef(
-  CONFIG_SYMTAB
-  symtab
-  )
-
-zephyr_sources_ifdef(
-  CONFIG_CS_TRACE_DEFMT
-  coresight/cs_trace_defmt.c
-)
-
-zephyr_sources_ifdef(
-  CONFIG_CPU_LOAD
-  cpu_load.c
+  CONFIG_GDBSTUB_SERIAL_BACKEND
+  gdbstub/gdbstub_backend_serial.c
   )

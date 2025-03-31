@@ -15,7 +15,7 @@
 #define ZEPHYR_INCLUDE_ARCH_RISCV_ERROR_H_
 
 #include <zephyr/arch/riscv/syscall.h>
-#include <zephyr/arch/riscv/exception.h>
+#include <zephyr/arch/riscv/exp.h>
 #include <stdbool.h>
 
 #ifdef __cplusplus
@@ -42,7 +42,7 @@ extern "C" {
 
 __syscall void user_fault(unsigned int reason);
 
-#include <zephyr/syscalls/error.h>
+#include <syscalls/error.h>
 
 #ifdef __cplusplus
 }

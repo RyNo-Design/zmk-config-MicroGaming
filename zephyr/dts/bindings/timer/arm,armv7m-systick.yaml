@@ -5,4 +5,8 @@ description: ARMv7-M System Tick
 
 compatible: "arm,armv7m-systick"
 
-include: [cortex-m-systick.yaml]
+include: base.yaml
+
+properties:
+  reg:
+    required: true

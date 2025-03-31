@@ -15,24 +15,13 @@
 #include <zephyr/sys/errno_private.h>
 #include <zephyr/sys/heap_listener.h>
 #include <zephyr/sys/libc-hooks.h>
-#include <zephyr/internal/syscall_handler.h>
+#include <zephyr/syscall_handler.h>
 #include <zephyr/app_memory/app_memdomain.h>
 #include <zephyr/init.h>
 #include <zephyr/sys/sem.h>
 #include <zephyr/sys/mutex.h>
-#include <zephyr/kernel/mm.h>
+#include <zephyr/sys/mem_manage.h>
 #include <sys/time.h>
-
-int _fstat(int fd, struct stat *st);
-int _read(int fd, void *buf, int nbytes);
-int _write(int fd, const void *buf, int nbytes);
-int _open(const char *name, int flags, ...);
-int _close(int file);
-int _lseek(int file, int ptr, int dir);
-int _kill(int pid, int sig);
-int _getpid(void);
-
-#ifndef CONFIG_NEWLIB_LIBC_CUSTOM_SBRK
 
 #define LIBC_BSS	K_APP_BMEM(z_libc_partition)
 #define LIBC_DATA	K_APP_DMEM(z_libc_partition)
@@ -144,11 +133,10 @@ static int malloc_prepare(void)
 	return 0;
 }
 
-SYS_INIT(malloc_prepare, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_LIBC);
+SYS_INIT(malloc_prepare, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
 
 /* Current offset from HEAP_BASE of unused memory */
 LIBC_BSS static size_t heap_sz;
-#endif /* CONFIG_NEWLIB_LIBC_CUSTOM_SBRK */
 
 static int _stdout_hook_default(int c)
 {
@@ -193,10 +181,10 @@ int z_impl_zephyr_read_stdin(char *buf, int nbytes)
 #ifdef CONFIG_USERSPACE
 static inline int z_vrfy_zephyr_read_stdin(char *buf, int nbytes)
 {
-	K_OOPS(K_SYSCALL_MEMORY_WRITE(buf, nbytes));
+	Z_OOPS(Z_SYSCALL_MEMORY_WRITE(buf, nbytes));
 	return z_impl_zephyr_read_stdin((char *)buf, nbytes);
 }
-#include <zephyr/syscalls/zephyr_read_stdin_mrsh.c>
+#include <syscalls/zephyr_read_stdin_mrsh.c>
 #endif
 
 int z_impl_zephyr_write_stdout(const void *buffer, int nbytes)
@@ -216,14 +204,14 @@ int z_impl_zephyr_write_stdout(const void *buffer, int nbytes)
 #ifdef CONFIG_USERSPACE
 static inline int z_vrfy_zephyr_write_stdout(const void *buf, int nbytes)
 {
-	K_OOPS(K_SYSCALL_MEMORY_READ(buf, nbytes));
+	Z_OOPS(Z_SYSCALL_MEMORY_READ(buf, nbytes));
 	return z_impl_zephyr_write_stdout((const void *)buf, nbytes);
 }
-#include <zephyr/syscalls/zephyr_write_stdout_mrsh.c>
+#include <syscalls/zephyr_write_stdout_mrsh.c>
 #endif
 
-#ifndef CONFIG_POSIX_DEVICE_IO
-int _read(int fd, void *buf, int nbytes)
+#ifndef CONFIG_POSIX_API
+int _read(int fd, char *buf, int nbytes)
 {
 	ARG_UNUSED(fd);
 
@@ -239,7 +227,7 @@ int _write(int fd, const void *buf, int nbytes)
 }
 __weak FUNC_ALIAS(_write, write, int);
 
-int _open(const char *name, int flags, ...)
+int _open(const char *name, int mode)
 {
 	return -1;
 }
@@ -250,15 +238,16 @@ int _close(int file)
 	return -1;
 }
 __weak FUNC_ALIAS(_close, close, int);
-#endif /* CONFIG_POSIX_DEVICE_IO */
 
-#ifndef CONFIG_POSIX_FD_MGMT
 int _lseek(int file, int ptr, int dir)
 {
 	return 0;
 }
 __weak FUNC_ALIAS(_lseek, lseek, int);
-#endif /* CONFIG_POSIX_FD_MGMT */
+#else
+extern ssize_t write(int file, const char *buffer, size_t count);
+#define _write	write
+#endif
 
 int _isatty(int file)
 {
@@ -266,31 +255,24 @@ int _isatty(int file)
 }
 __weak FUNC_ALIAS(_isatty, isatty, int);
 
-#ifndef CONFIG_POSIX_SIGNALS
 int _kill(int i, int j)
 {
 	return 0;
 }
 __weak FUNC_ALIAS(_kill, kill, int);
-#endif /* CONFIG_POSIX_SIGNALS */
 
-#ifndef CONFIG_POSIX_FILE_SYSTEM
-int _fstat(int file, struct stat *st)
-{
-	st->st_mode = S_IFCHR;
-	return 0;
-}
-__weak FUNC_ALIAS(_fstat, fstat, int);
-#endif /* CONFIG_POSIX_FILE_SYSTEM */
-
-#ifndef CONFIG_POSIX_MULTI_PROCESS
 int _getpid(void)
 {
 	return 0;
 }
 __weak FUNC_ALIAS(_getpid, getpid, int);
 
-#endif /* CONFIG_POSIX_MULTI_PROCESS */
+int _fstat(int file, struct stat *st)
+{
+	st->st_mode = S_IFCHR;
+	return 0;
+}
+__weak FUNC_ALIAS(_fstat, fstat, int);
 
 __weak void _exit(int status)
 {
@@ -300,7 +282,6 @@ __weak void _exit(int status)
 	}
 }
 
-#ifndef CONFIG_NEWLIB_LIBC_CUSTOM_SBRK
 void *_sbrk(intptr_t count)
 {
 	void *ret, *ptr;
@@ -321,7 +302,6 @@ void *_sbrk(intptr_t count)
 	return ret;
 }
 __weak FUNC_ALIAS(_sbrk, sbrk, void *);
-#endif /* CONFIG_NEWLIB_LIBC_CUSTOM_SBRK */
 
 #ifdef CONFIG_MULTITHREADING
 
@@ -389,9 +369,6 @@ void __retarget_lock_init(_LOCK_T *lock)
 	__ASSERT(*lock != NULL, "non-recursive lock allocation failed");
 
 	k_sem_init((struct k_sem *)*lock, 1, 1);
-#ifdef CONFIG_USERSPACE
-	k_object_access_all_grant(*lock);
-#endif /* CONFIG_USERSPACE */
 }
 
 /* Create a new dynamic recursive lock */
@@ -408,9 +385,6 @@ void __retarget_lock_init_recursive(_LOCK_T *lock)
 	__ASSERT(*lock != NULL, "recursive lock allocation failed");
 
 	k_mutex_init((struct k_mutex *)*lock);
-#ifdef CONFIG_USERSPACE
-	k_object_access_all_grant(*lock);
-#endif /* CONFIG_USERSPACE */
 }
 
 /* Close dynamic non-recursive lock */
@@ -496,6 +470,11 @@ __weak FUNC_NORETURN void __chk_fail(void)
 }
 
 #if CONFIG_XTENSA
+extern int _read(int fd, char *buf, int nbytes);
+extern int _open(const char *name, int mode);
+extern int _close(int file);
+extern int _lseek(int file, int ptr, int dir);
+
 /* The Newlib in xtensa toolchain has a few missing functions for the
  * reentrant versions of the syscalls.
  */
@@ -518,7 +497,7 @@ int _open_r(struct _reent *r, const char *name, int flags, int mode)
 	ARG_UNUSED(r);
 	ARG_UNUSED(flags);
 
-	return _open(name, flags, mode);
+	return _open(name, mode);
 }
 
 int _close_r(struct _reent *r, int file)
@@ -580,7 +559,7 @@ void *_sbrk_r(struct _reent *r, int count)
 
 int _gettimeofday(struct timeval *__tp, void *__tzp)
 {
-#ifdef CONFIG_XSI_SINGLE_PROCESS
+#ifdef CONFIG_POSIX_CLOCK
 	return gettimeofday(__tp, __tzp);
 #else
 	/* Non-posix systems should not call gettimeofday() here as it will

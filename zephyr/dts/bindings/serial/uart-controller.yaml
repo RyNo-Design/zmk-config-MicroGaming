@@ -23,7 +23,6 @@ properties:
       - "none"
       - "odd"
       - "even"
-    default: "none"
   stop-bits:
     type: string
     description: |

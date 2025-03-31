@@ -7,7 +7,8 @@
 #include <zephyr/device.h>
 #include <zephyr/init.h>
 #include <zephyr/arch/common/semihost.h>
-#include <zephyr/sys/libc-hooks.h>
+
+extern void __stdout_hook_install(int (*fn)(int));
 
 int arch_printk_char_out(int _c)
 {
@@ -17,6 +18,7 @@ int arch_printk_char_out(int _c)
 
 static int semihost_console_init(void)
 {
+
 	/*
 	 * The printk output callback is arch_printk_char_out by default and
 	 * is installed at link time. That makes printk() usable very early.

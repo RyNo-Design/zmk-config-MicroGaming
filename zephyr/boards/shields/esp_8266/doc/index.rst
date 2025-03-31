@@ -110,7 +110,7 @@ configurations should be used based on the board standard headers available.
 Build and Programming
 *********************
 
-Set ``--shield <shield designation>`` when you invoke ``west build``.
+Set ``-DSHIELD=<shield designation>`` when you invoke ``west build``.
 
 To build shield with specific overlay:
 

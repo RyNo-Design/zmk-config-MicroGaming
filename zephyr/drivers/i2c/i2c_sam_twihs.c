@@ -321,7 +321,7 @@ static int i2c_sam_twihs_initialize(const struct device *dev)
 	return 0;
 }
 
-static DEVICE_API(i2c, i2c_sam_twihs_driver_api) = {
+static const struct i2c_driver_api i2c_sam_twihs_driver_api = {
 	.configure = i2c_sam_twihs_configure,
 	.transfer = i2c_sam_twihs_transfer,
 };

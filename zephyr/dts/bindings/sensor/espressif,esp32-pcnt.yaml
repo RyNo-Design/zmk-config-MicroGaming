@@ -3,7 +3,7 @@
 
 description: |
 
-  ESP32 Pulse Counter (PCNT)
+  Espressif's Pulse Counter Mode (PCNT) controller Node
 
   The pulse counter module is designed to count the number of
   rising and/or falling edges of an input signal.

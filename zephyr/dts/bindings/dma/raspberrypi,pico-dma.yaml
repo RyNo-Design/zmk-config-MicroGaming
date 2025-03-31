@@ -2,13 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 description: |
-  Raspberry Pi Pico DMA
+  Raspberry Pi Pico GPIO
 
   channel: Select channel for data transmitting
 
   slot: Select peripheral data request
-    Use the definitions defined in `zephyr/dt-bindings/dma/rpi-pico-dma-rp2040.h`,
-    or `zephyr/dt-bindings/dma/rpi-pico-dma-rp2350.h`
+    Use the definitions defined in `zephyr/dt-bindings/dma/rpi_pico_dma.h`.
 
   channel-config: A 32bit mask specifying the DMA channel configuration
     - bit 3: Enable Quiet IRQ
@@ -31,7 +30,7 @@ properties:
 
   irq0-channels:
     type: uint8-array
-    default: [0, 2, 4, 6, 8, 10]
+    default: [0, 2, 4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]
     description: Channels list that uses the irq0
 
   "#dma-cells":

@@ -12,7 +12,7 @@
  * Run the nested interrupt test for the supported platforms only.
  */
 #if defined(CONFIG_CPU_CORTEX_M) || defined(CONFIG_ARC) || \
-	defined(CONFIG_GIC) || defined(CONFIG_NRFX_CLIC)
+	defined(CONFIG_GIC)
 #define TEST_NESTED_ISR
 #endif
 
@@ -56,18 +56,6 @@
  */
 #define IRQ0_PRIO	IRQ_DEFAULT_PRIORITY
 #define IRQ1_PRIO	0x0
-#elif defined(CONFIG_SOC_SERIES_NRF54LX) && defined(CONFIG_RISCV_CORE_NORDIC_VPR)
-#define IRQ0_LINE	16
-#define IRQ1_LINE	17
-
-#define IRQ0_PRIO	1
-#define IRQ1_PRIO	2
-#elif defined(CONFIG_SOC_NRF54H20_CPUPPR)
-#define IRQ0_LINE	14
-#define IRQ1_LINE	15
-
-#define IRQ0_PRIO	1
-#define IRQ1_PRIO	2
 #else
 /*
  * For all the other platforms, use the last two available IRQ lines for
@@ -112,7 +100,7 @@ void isr0(const void *param)
 	trigger_irq(irq_line_1);
 
 	/* Wait for interrupt */
-	k_busy_wait(DURATION * USEC_PER_MSEC);
+	k_busy_wait(MS_TO_US(DURATION));
 
 	/* Validate nested ISR result token */
 	zassert_equal(isr1_result, ISR1_TOKEN, "isr1 did not execute");
@@ -160,7 +148,7 @@ ZTEST(interrupt_feature, test_nested_isr)
 	trigger_irq(irq_line_0);
 
 	/* Wait for interrupt */
-	k_busy_wait(DURATION * USEC_PER_MSEC);
+	k_busy_wait(MS_TO_US(DURATION));
 
 	/* Validate ISR result token */
 	zassert_equal(isr0_result, ISR0_TOKEN, "isr0 did not execute");

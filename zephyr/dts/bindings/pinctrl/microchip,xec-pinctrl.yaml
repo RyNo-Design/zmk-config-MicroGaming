@@ -3,8 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 description: |
-    Microchip XEC Pin Controller
-
+    Microchip XEC Pin controller Node
     Based on pincfg-node.yaml binding.
     The MCHP XEC pin controller is a singleton node responsible for controlling
     pin function selection and pin properties. For example, you can use this

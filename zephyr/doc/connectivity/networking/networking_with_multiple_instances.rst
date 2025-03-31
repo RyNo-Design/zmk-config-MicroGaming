@@ -9,15 +9,14 @@ Networking with multiple Zephyr instances
 
 This page describes how to set up a virtual network between multiple
 Zephyr instances. The Zephyr instances could be running inside QEMU
-or could be native_sim board processes. The Linux host can be used
+or could be native_posix board processes. The Linux host can be used
 to route network traffic between these systems.
 
 Prerequisites
 *************
 
-On the Linux Host, find the Zephyr `net-tools`_ project, which can either be
-found in a Zephyr standard installation under the ``tools/net-tools`` directory
-or installed stand alone from its own git repository:
+On the Linux Host, fetch the Zephyr ``net-tools`` project, which is located
+in a separate Git repository:
 
 .. code-block:: console
 
@@ -35,10 +34,10 @@ For the steps below, you will need five terminal windows:
   with the Zephyr environment initialized.
 
 As there are multiple ways to setup the Zephyr network, the example below uses
-``qemu_x86`` board with ``e1000`` Ethernet controller and native_sim board
+``qemu_x86`` board with ``e1000`` Ethernet controller and native_posix board
 to simplify the setup instructions. You can use other QEMU boards and drivers
 if needed, see :ref:`networking_with_eth_qemu` for details. You can also use
-two or more native_sim board Zephyr instances and connect them together.
+two or more native_posix board Zephyr instances and connect them together.
 
 
 Step 1 - Create configuration files
@@ -142,20 +141,20 @@ In terminal #4, if you are using QEMU, type this:
       -DCONFIG_ETH_QEMU_IFACE_NAME=\"zeth.1\" \
       -DCONFIG_ETH_QEMU_EXTRA_ARGS=\"mac=00:00:5e:00:53:01\"
 
-or if you want to use native_sim board, type this:
+or if you want to use native_posix board, type this:
 
 .. code-block:: console
 
-   west build -d build/server -b native_sim -t run \
+   west build -d build/server -b native_posix -t run \
       samples/net/sockets/echo_server -- \
       -DCONFIG_NET_CONFIG_MY_IPV4_ADDR=\"198.51.100.1\" \
       -DCONFIG_NET_CONFIG_PEER_IPV4_ADDR=\"203.0.113.1\" \
       -DCONFIG_NET_CONFIG_MY_IPV6_ADDR=\"2001:db8:100::1\" \
       -DCONFIG_NET_CONFIG_PEER_IPV6_ADDR=\"2001:db8:200::1\" \
       -DCONFIG_NET_CONFIG_MY_IPV4_GW=\"203.0.113.1\" \
-      -DCONFIG_ETH_NATIVE_TAP_DRV_NAME=\"zeth.1\" \
-      -DCONFIG_ETH_NATIVE_TAP_MAC_ADDR=\"00:00:5e:00:53:01\" \
-      -DCONFIG_ETH_NATIVE_TAP_RANDOM_MAC=n
+      -DCONFIG_ETH_NATIVE_POSIX_DRV_NAME=\"zeth.1\" \
+      -DCONFIG_ETH_NATIVE_POSIX_MAC_ADDR=\"00:00:5e:00:53:01\" \
+      -DCONFIG_ETH_NATIVE_POSIX_RANDOM_MAC=n
 
 
 In terminal #5, if you are using QEMU, type this:
@@ -173,23 +172,21 @@ In terminal #5, if you are using QEMU, type this:
       -DCONFIG_ETH_QEMU_IFACE_NAME=\"zeth.2\" \
       -DCONFIG_ETH_QEMU_EXTRA_ARGS=\"mac=00:00:5e:00:53:02\"
 
-or if you want to use native_sim board, type this:
+or if you want to use native_posix board, type this:
 
 .. code-block:: console
 
-   west build -d build/client -b native_sim -t run \
+   west build -d build/client -b native_posix -t run \
       samples/net/sockets/echo_client -- \
       -DCONFIG_NET_CONFIG_MY_IPV4_ADDR=\"203.0.113.1\" \
       -DCONFIG_NET_CONFIG_PEER_IPV4_ADDR=\"198.51.100.1\" \
       -DCONFIG_NET_CONFIG_MY_IPV6_ADDR=\"2001:db8:200::1\" \
       -DCONFIG_NET_CONFIG_PEER_IPV6_ADDR=\"2001:db8:100::1\" \
       -DCONFIG_NET_CONFIG_MY_IPV4_GW=\"198.51.100.1\" \
-      -DCONFIG_ETH_NATIVE_TAP_DRV_NAME=\"zeth.2\" \
-      -DCONFIG_ETH_NATIVE_TAP_MAC_ADDR=\"00:00:5e:00:53:02\" \
-      -DCONFIG_ETH_NATIVE_TAP_RANDOM_MAC=n
+      -DCONFIG_ETH_NATIVE_POSIX_DRV_NAME=\"zeth.2\" \
+      -DCONFIG_ETH_NATIVE_POSIX_MAC_ADDR=\"00:00:5e:00:53:02\" \
+      -DCONFIG_ETH_NATIVE_POSIX_RANDOM_MAC=n
 
 
 Also if you have firewall enabled in your host, you need to allow traffic
 between ``zeth.1``, ``zeth.2`` and ``zeth-br`` interfaces.
-
-.. _`net-tools`: https://github.com/zephyrproject-rtos/net-tools

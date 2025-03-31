@@ -20,7 +20,6 @@ struct vnd_sensor_config {
 
 struct vnd_sensor_data {
 	struct rtio_iodev iodev;
-	struct mpsc io_q;
 	struct k_timer timer;
 	const struct device *dev;
 	uint32_t sample_number;
@@ -84,13 +83,13 @@ static void vnd_sensor_iodev_submit(struct rtio_iodev_sqe *iodev_sqe)
 {
 	struct vnd_sensor_data *data = (struct vnd_sensor_data *) iodev_sqe->sqe.iodev;
 
-	mpsc_push(&data->io_q, &iodev_sqe->q);
+	rtio_mpsc_push(&data->iodev.iodev_sq, &iodev_sqe->q);
 }
 
 static void vnd_sensor_handle_int(const struct device *dev)
 {
 	struct vnd_sensor_data *data = dev->data;
-	struct mpsc_node *node = mpsc_pop(&data->io_q);
+	struct rtio_mpsc_node *node = rtio_mpsc_pop(&data->iodev.iodev_sq);
 
 	if (node != NULL) {
 		struct rtio_iodev_sqe *iodev_sqe = CONTAINER_OF(node, struct rtio_iodev_sqe, q);
@@ -117,7 +116,7 @@ static int vnd_sensor_init(const struct device *dev)
 
 	data->dev = dev;
 
-	mpsc_init(&data->io_q);
+	rtio_mpsc_init(&data->iodev.iodev_sq);
 
 	k_timer_init(&data->timer, vnd_sensor_timer_expiry, NULL);
 

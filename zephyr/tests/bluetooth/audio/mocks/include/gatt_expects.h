@@ -8,7 +8,6 @@
 #define MOCKS_GATT_EXPECTS_H_
 
 #include <zephyr/bluetooth/gatt.h>
-#include <zephyr/ztest_assert.h>
 
 #include "gatt.h"
 #include "expects_util.h"

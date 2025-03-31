@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 description: |
-        ESP32 general-purpose timers.
-
+        Espressif's general-purpose Timers.
         Each Timer is part of a Timer Group and the number of available Timers
         is SoC-dependent.
 

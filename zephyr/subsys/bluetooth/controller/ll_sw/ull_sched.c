@@ -127,7 +127,7 @@ int ull_sched_after_cen_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 {
 	uint32_t ticks_to_expire;
 	uint32_t ticks_slot;
-	uint32_t remainder = 0U;
+	uint32_t remainder;
 	uint8_t ticker_id;
 
 	ticker_id = after_match_slot_get(user_id, ticks_slot_abs,
@@ -180,7 +180,8 @@ void ull_sched_mfy_after_cen_offset_get(void *param)
 
 	conn = HDR_LLL2ULL(lll->conn);
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
-		ticks_slot_overhead = HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
+		ticks_slot_overhead = MAX(conn->ull.ticks_active_to_start,
+					  conn->ull.ticks_prepare_to_start);
 	} else {
 		ticks_slot_overhead = 0U;
 	}
@@ -203,10 +204,12 @@ void ull_sched_mfy_after_cen_offset_get(void *param)
 
 void ull_sched_mfy_win_offset_use(void *param)
 {
+	struct ll_conn *conn = param;
 	uint32_t ticks_slot_overhead;
 
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
-		ticks_slot_overhead = HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
+		ticks_slot_overhead = MAX(conn->ull.ticks_active_to_start,
+					  conn->ull.ticks_prepare_to_start);
 	} else {
 		ticks_slot_overhead = 0U;
 	}
@@ -321,16 +324,15 @@ static int group_free_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 #if defined(CONFIG_BT_BROADCASTER) && CONFIG_BT_CTLR_ADV_AUX_SET > 0
 		} else if (IN_RANGE(ticker_id, TICKER_ID_ADV_AUX_BASE,
 				    TICKER_ID_ADV_AUX_LAST)) {
+			const struct ll_adv_aux_set *aux;
+
 			*ticks_anchor += ticks_to_expire;
 			*ticks_anchor += ticks_slot;
-			*ticks_anchor += HAL_TICKER_US_TO_TICKS(
-				EVENT_TICKER_RES_MARGIN_US << 1);
-
-#if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
-			const struct ll_adv_aux_set *aux;
 
 			aux = ull_adv_aux_get(ticker_id -
 					      TICKER_ID_ADV_AUX_BASE);
+
+#if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
 			if (aux->lll.adv->sync) {
 				const struct ll_adv_sync_set *sync;
 
@@ -343,6 +345,12 @@ static int group_free_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 			}
 #endif /* CONFIG_BT_CTLR_ADV_PERIODIC */
 
+			if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
+				*ticks_anchor +=
+					MAX(aux->ull.ticks_active_to_start,
+					    aux->ull.ticks_prepare_to_start);
+			}
+
 			return 0;
 
 #if defined(CONFIG_BT_CTLR_ADV_PERIODIC)
@@ -350,8 +358,16 @@ static int group_free_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 				    TICKER_ID_ADV_SYNC_LAST)) {
 			*ticks_anchor += ticks_to_expire;
 			*ticks_anchor += ticks_slot;
-			*ticks_anchor += HAL_TICKER_US_TO_TICKS(
-				EVENT_TICKER_RES_MARGIN_US << 1);
+
+			if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
+				const struct ll_adv_sync_set *sync;
+
+				sync = ull_adv_sync_get(ticker_id -
+							TICKER_ID_ADV_SYNC_BASE);
+				*ticks_anchor +=
+					MAX(sync->ull.ticks_active_to_start,
+					    sync->ull.ticks_prepare_to_start);
+			}
 
 			return 0;
 
@@ -360,8 +376,16 @@ static int group_free_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 				    TICKER_ID_ADV_ISO_LAST)) {
 			*ticks_anchor += ticks_to_expire;
 			*ticks_anchor += ticks_slot;
-			*ticks_anchor += HAL_TICKER_US_TO_TICKS(
-				EVENT_TICKER_RES_MARGIN_US << 1);
+
+			if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
+				const struct ll_adv_iso_set *iso;
+
+				iso = ull_adv_iso_get(ticker_id -
+						      TICKER_ID_ADV_ISO_BASE);
+				*ticks_anchor +=
+					MAX(iso->ull.ticks_active_to_start,
+					    iso->ull.ticks_prepare_to_start);
+			}
 
 			return 0;
 
@@ -374,8 +398,6 @@ static int group_free_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 				    TICKER_ID_CONN_LAST)) {
 			*ticks_anchor += ticks_to_expire;
 			*ticks_anchor += ticks_slot;
-			*ticks_anchor += HAL_TICKER_US_TO_TICKS(
-				EVENT_TICKER_RES_MARGIN_US << 1);
 
 			return 0;
 #endif /* CONFIG_BT_CONN */
@@ -420,11 +442,10 @@ static uint8_t after_match_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 	 * found ticker to change. In this case the iterations have to be
 	 * restarted with the new reference ticks_anchor value.
 	 * Simultaneous continuous scanning on 1M and Coded PHY, alongwith
-	 * directed advertising and N other state/role could expire in quick
-	 * succession, hence have a retry count of UINT8_MAX, which is possible
-	 * maximum implementation limit for ticker nodes.
+	 * directed advertising and one other state/role could expire in quick
+	 * succession, hence have a retry count of 4.
 	 */
-	retry = UINT8_MAX;
+	retry = 4U;
 
 	/* Initialize variable required for iterations to find a free slot */
 	ticker_id = ticker_id_prev = TICKER_NULL;
@@ -502,22 +523,28 @@ static uint8_t after_match_slot_get(uint8_t user_id, uint32_t ticks_slot_abs,
 			continue;
 		}
 
-#if defined(CONFIG_BT_CONN)
-		/* Consider Peripheral role ticks_slot as available */
-		if (IN_RANGE(ticker_id, TICKER_ID_CONN_BASE, TICKER_ID_CONN_LAST)) {
-			const struct ll_conn *conn;
-
-			conn = ll_conn_get(ticker_id - TICKER_ID_CONN_BASE);
-			if (conn && (conn->lll.role == BT_HCI_ROLE_PERIPHERAL)) {
-				continue;
-			}
-		}
-#endif /* CONFIG_BT_CONN */
-
 		ticks_to_expire_normal = ticks_to_expire;
 
 #if defined(CONFIG_BT_CTLR_LOW_LAT)
-		ticks_slot_abs_curr = HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
+#if defined(CONFIG_BT_CTLR_XTAL_ADVANCED)
+		if (hdr->ticks_prepare_to_start & XON_BITMASK) {
+			const uint32_t ticks_prepare_to_start =
+				MAX(hdr->ticks_active_to_start,
+				    hdr->ticks_preempt_to_start);
+
+			ticks_slot_abs_curr = hdr->ticks_prepare_to_start &
+					      ~XON_BITMASK;
+			ticks_to_expire_normal -= ticks_slot_abs_curr -
+						  ticks_prepare_to_start;
+		} else
+#endif /* CONFIG_BT_CTLR_XTAL_ADVANCED */
+		{
+			const uint32_t ticks_prepare_to_start =
+				MAX(hdr->ticks_active_to_start,
+				    hdr->ticks_prepare_to_start);
+
+			ticks_slot_abs_curr = ticks_prepare_to_start;
+		}
 #endif
 
 		ticks_slot_abs_curr += ticks_slot;
@@ -692,9 +719,8 @@ static struct ull_hdr *ull_hdr_get_cb(uint8_t ticker_id, uint32_t *ticks_slot)
 		struct ll_conn *conn;
 
 		conn = ll_conn_get(ticker_id - TICKER_ID_CONN_BASE);
-		if (conn) {
-			if (IS_ENABLED(CONFIG_BT_CTLR_CENTRAL_RESERVE_MAX) &&
-			    (conn->lll.role == BT_HCI_ROLE_CENTRAL)) {
+		if (conn && !conn->lll.role) {
+			if (IS_ENABLED(CONFIG_BT_CTLR_CENTRAL_RESERVE_MAX)) {
 				uint32_t ready_delay_us;
 				uint16_t max_tx_time;
 				uint16_t max_rx_time;
@@ -731,9 +757,7 @@ static struct ull_hdr *ull_hdr_get_cb(uint8_t ticker_id, uint32_t *ticks_slot)
 				*ticks_slot = conn->ull.ticks_slot;
 			}
 
-			if ((conn->lll.role == BT_HCI_ROLE_CENTRAL) &&
-			    (*ticks_slot <
-			     HAL_TICKER_US_TO_TICKS(CONFIG_BT_CTLR_CENTRAL_SPACING))) {
+			if (*ticks_slot < HAL_TICKER_US_TO_TICKS(CONFIG_BT_CTLR_CENTRAL_SPACING)) {
 				*ticks_slot =
 					HAL_TICKER_US_TO_TICKS(CONFIG_BT_CTLR_CENTRAL_SPACING);
 			}

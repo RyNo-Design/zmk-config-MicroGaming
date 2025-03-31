@@ -2,13 +2,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-import os
 import re
-import subprocess
+import os
 import time
+import subprocess
 
-from runners.core import BuildConfiguration, RunnerCaps, ZephyrBinaryRunner
-
+from runners.core import ZephyrBinaryRunner, RunnerCaps, BuildConfiguration
 
 class SpiBurnBinaryRunner(ZephyrBinaryRunner):
     '''Runner front-end for SPI_burn.'''
@@ -40,8 +39,7 @@ class SpiBurnBinaryRunner(ZephyrBinaryRunner):
                             help='ICEman connection establishing timeout in seconds')
         parser.add_argument('--telink-tools-path', help='path to Telink flash tools')
         parser.add_argument('--gdb-port', default='1111', help='Port to connect for gdb-client')
-        parser.add_argument('--gdb-ex', default='', nargs='?',
-                            help='Additional gdb commands to run')
+        parser.add_argument('--gdb-ex', default='', nargs='?', help='Additional gdb commands to run')
 
     @classmethod
     def do_create(cls, cfg, args):
@@ -50,23 +48,18 @@ class SpiBurnBinaryRunner(ZephyrBinaryRunner):
             spiburn = f'{args.telink_tools_path}/flash/bin/SPI_burn'
             iceman = f'{args.telink_tools_path}/ice/ICEman'
         else:
-            # If telink_tools_path arg is not specified then
-            # pass to tools shall be specified in PATH
+            # If telink_tools_path arg is not specified then pass to tools shall be specified in PATH
             spiburn = 'SPI_burn'
             iceman  = 'ICEman'
 
         # Get flash address offset
         if args.dt_flash == 'y':
             build_conf = BuildConfiguration(cfg.build_dir)
-            address = hex(
-                cls.get_flash_address(args, build_conf) - build_conf['CONFIG_FLASH_BASE_ADDRESS']
-            )
+            address = hex(cls.get_flash_address(args, build_conf) - build_conf['CONFIG_FLASH_BASE_ADDRESS'])
         else:
             address = args.addr
 
-        return SpiBurnBinaryRunner(
-            cfg, address, spiburn, iceman, args.timeout, args.gdb_port, args.gdb_ex, args.erase
-        )
+        return SpiBurnBinaryRunner(cfg, address, spiburn, iceman, args.timeout, args.gdb_port, args.gdb_ex, args.erase)
 
     def do_run(self, command, **kwargs):
 
@@ -134,12 +127,7 @@ class SpiBurnBinaryRunner(ZephyrBinaryRunner):
             gdb_ex = re.split("(-ex) ", self.gdb_ex)[1::]
 
             # Compose gdb command
-            client_cmd = [
-                self.cfg.gdb,
-                self.cfg.elf_file,
-                '-ex',
-                f'target remote :{self.gdb_port}',
-            ] + gdb_ex
+            client_cmd = [self.cfg.gdb, self.cfg.elf_file, '-ex', f'target remote :{self.gdb_port}'] + gdb_ex
 
             # Run gdb
             self.run_client(client_cmd)

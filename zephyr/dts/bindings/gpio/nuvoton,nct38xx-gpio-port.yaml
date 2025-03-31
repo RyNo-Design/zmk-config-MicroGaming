@@ -11,7 +11,7 @@ properties:
   reg:
     required: true
 
-  pin-mask:
+  pin_mask:
     type: int
     required: true
     description: |
@@ -21,7 +21,7 @@ properties:
       NCT3808: <0xdc>
       others: <0xff>
 
-  pinmux-mask:
+  pinmux_mask:
     type: int
     description: |
       NCT38XX series port 0 has Pin Multiplexing functionality. However, not

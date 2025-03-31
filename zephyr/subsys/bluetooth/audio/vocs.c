@@ -5,36 +5,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <errno.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-#include <sys/types.h>
+#include <zephyr/kernel.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/check.h>
 
-#include <zephyr/autoconf.h>
-#include <zephyr/bluetooth/att.h>
-#include <zephyr/bluetooth/audio/audio.h>
-#include <zephyr/bluetooth/audio/vocs.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
+
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/device.h>
-#include <zephyr/init.h>
-#include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/sys/atomic.h>
-#include <zephyr/sys/byteorder.h>
-#include <zephyr/sys/check.h>
-#include <zephyr/sys/util.h>
-#include <zephyr/sys/util_macro.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/bluetooth/audio/vocs.h>
 
 #include "audio_internal.h"
 #include "vocs_internal.h"
+#include <zephyr/bluetooth/audio/audio.h>
 
 #define LOG_LEVEL CONFIG_BT_VOCS_LOG_LEVEL
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_vocs);
 
 #define VALID_VOCS_OPCODE(opcode)	((opcode) == BT_VOCS_OPCODE_SET_OFFSET)
@@ -146,7 +134,8 @@ static ssize_t write_location(struct bt_conn *conn, const struct bt_gatt_attr *a
 	}
 
 	new_location = sys_get_le32(buf);
-	if ((new_location & BT_AUDIO_LOCATION_RFU) > 0) {
+	if (new_location == BT_AUDIO_LOCATION_PROHIBITED ||
+	    (new_location & BT_AUDIO_LOCATION_RFU) > 0) {
 		LOG_DBG("Invalid location %u", new_location);
 
 		return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
@@ -424,8 +413,10 @@ int bt_vocs_register(struct bt_vocs *vocs,
 	inst->cb = param->cb;
 
 	if (param->output_desc) {
-		(void)utf8_lcpy(inst->output_desc, param->output_desc,
-				sizeof(inst->output_desc));
+		strncpy(inst->output_desc, param->output_desc,
+			sizeof(inst->output_desc) - 1);
+		/* strncpy may not always null-terminate */
+		inst->output_desc[sizeof(inst->output_desc) - 1] = '\0';
 		if (IS_ENABLED(CONFIG_BT_VOCS_LOG_LEVEL_DBG) &&
 		    strcmp(inst->output_desc, param->output_desc)) {
 			LOG_DBG("Output desc clipped to %s", inst->output_desc);

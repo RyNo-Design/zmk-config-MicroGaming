@@ -25,8 +25,6 @@ extern "C" {
 /**
  * @brief USB-C Device APIs
  * @defgroup _usbc_device_api USB-C Device API
- * @since 3.3
- * @version 0.1.0
  * @{
  */
 
@@ -91,7 +89,7 @@ enum usbc_policy_notify_t {
 	MSG_ACCEPT_RECEIVED,
 	/** Power Delivery Reject message was received */
 	MSG_REJECTED_RECEIVED,
-	/** Power Delivery discarded the message being transmitted */
+	/** Power Delivery discarded the message being transmited */
 	MSG_DISCARDED,
 	/** Power Delivery Not Supported message was received */
 	MSG_NOT_SUPPORTED_RECEIVED,
@@ -291,7 +289,7 @@ typedef bool (*policy_cb_present_contract_is_valid_t)(const struct device *dev,
  *	  be sent to the Sink
  *
  * @param dev USB-C Connector Instance
- * @return true if a different set of Source Caps is available
+ * @return true if a different set of Cource Caps is available
  */
 typedef bool (*policy_cb_change_src_caps_t)(const struct device *dev);
 
@@ -351,15 +349,6 @@ int usbc_suspend(const struct device *dev);
  * @retval 0 on success
  */
 int usbc_request(const struct device *dev, const enum usbc_policy_request_t req);
-
-/**
- * @internal
- * @brief Bypass the next USB-C stack sleep and execute one more iteration of the state machines.
- * Used internally to decrease the response time.
- *
- * @param dev Runtime device structure
- */
-void usbc_bypass_next_sleep(const struct device *dev);
 
 /**
  * @brief Set pointer to Device Policy Manager (DPM) data

@@ -1,4 +1,4 @@
-description: Xilinx AXI GPIO IP
+description: Xilinx AXI GPIO IP node
 
 compatible: "xlnx,xps-gpio-1.00.a"
 

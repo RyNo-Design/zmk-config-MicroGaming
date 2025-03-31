@@ -19,7 +19,6 @@
 #include <zephyr/kernel_structs.h>
 #include <zephyr/arch/common/ffs.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/arch/x86/ia32/exception.h>
 #include <zephyr/arch/x86/ia32/gdbstub.h>
 #include <zephyr/arch/x86/ia32/thread.h>
 #include <zephyr/arch/x86/ia32/syscall.h>
@@ -46,7 +45,7 @@
  */
 #if defined(CONFIG_USERSPACE)
 #define GS_TLS_SEG	(0x38 | 0x03)
-#elif defined(CONFIG_X86_STACK_PROTECTION)
+#elif defined(CONFIG_HW_STACK_PROTECTION)
 #define GS_TLS_SEG	(0x28 | 0x03)
 #else
 #define GS_TLS_SEG	(0x18 | 0x03)
@@ -251,7 +250,7 @@ static inline void arch_irq_direct_pm(void)
 {
 	if (_kernel.idle) {
 		_kernel.idle = 0;
-		pm_system_resume();
+		z_pm_save_idle_exit();
 	}
 }
 
@@ -267,8 +266,8 @@ static inline void arch_irq_direct_pm(void)
  * tracing/tracing.h cannot be included here due to circular dependency
  */
 #if defined(CONFIG_TRACING)
-void sys_trace_isr_enter(void);
-void sys_trace_isr_exit(void);
+extern void sys_trace_isr_enter(void);
+extern void sys_trace_isr_exit(void);
 #endif
 
 static inline void arch_isr_direct_header(void)
@@ -288,7 +287,7 @@ static inline void arch_isr_direct_header(void)
  *	  cannot be referenced from a public header, so we move it to an
  *	  external function.
  */
-void arch_isr_direct_footer_swap(unsigned int key);
+extern void arch_isr_direct_footer_swap(unsigned int key);
 
 static inline void arch_isr_direct_footer(int swap)
 {
@@ -334,6 +333,53 @@ static inline void arch_isr_direct_footer(int swap)
 	static inline int name##_body(void)
 #endif /* !CONFIG_X86_KPTI */
 
+/**
+ * @brief Exception Stack Frame
+ *
+ * A pointer to an "exception stack frame" (ESF) is passed as an argument
+ * to exception handlers registered via nanoCpuExcConnect().  As the system
+ * always operates at ring 0, only the EIP, CS and EFLAGS registers are pushed
+ * onto the stack when an exception occurs.
+ *
+ * The exception stack frame includes the volatile registers (EAX, ECX, and
+ * EDX) as well as the 5 non-volatile registers (EDI, ESI, EBX, EBP and ESP).
+ * Those registers are pushed onto the stack by _ExcEnt().
+ */
+
+typedef struct nanoEsf {
+#ifdef CONFIG_GDBSTUB
+	unsigned int ss;
+	unsigned int gs;
+	unsigned int fs;
+	unsigned int es;
+	unsigned int ds;
+#endif
+	unsigned int esp;
+	unsigned int ebp;
+	unsigned int ebx;
+	unsigned int esi;
+	unsigned int edi;
+	unsigned int edx;
+	unsigned int eax;
+	unsigned int ecx;
+	unsigned int errorCode;
+	unsigned int eip;
+	unsigned int cs;
+	unsigned int eflags;
+} z_arch_esf_t;
+
+extern unsigned int z_x86_exception_vector;
+
+struct _x86_syscall_stack_frame {
+	uint32_t eip;
+	uint32_t cs;
+	uint32_t eflags;
+
+	/* These are only present if cs = USER_CODE_SEG */
+	uint32_t esp;
+	uint32_t ss;
+};
+
 static ALWAYS_INLINE unsigned int arch_irq_lock(void)
 {
 	unsigned int key;
@@ -350,6 +396,18 @@ static ALWAYS_INLINE unsigned int arch_irq_lock(void)
  * correspond to any IRQ line (such as spurious vector or SW IRQ)
  */
 #define NANO_SOFT_IRQ	((unsigned int) (-1))
+
+/**
+ * @defgroup float_apis Floating Point APIs
+ * @ingroup kernel_apis
+ * @{
+ */
+
+struct k_thread;
+
+/**
+ * @}
+ */
 
 #ifdef CONFIG_X86_ENABLE_TSS
 extern struct task_state_segment _main_tss;

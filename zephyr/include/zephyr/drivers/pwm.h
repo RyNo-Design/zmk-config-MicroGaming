@@ -16,8 +16,6 @@
 /**
  * @brief PWM Interface
  * @defgroup pwm_interface PWM Interface
- * @since 1.0
- * @version 1.0.0
  * @ingroup io_interfaces
  * @{
  */
@@ -948,6 +946,6 @@ static inline bool pwm_is_ready_dt(const struct pwm_dt_spec *spec)
  * @}
  */
 
-#include <zephyr/syscalls/pwm.h>
+#include <syscalls/pwm.h>
 
 #endif /* ZEPHYR_INCLUDE_DRIVERS_PWM_H_ */

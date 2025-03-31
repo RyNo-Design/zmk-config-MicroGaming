@@ -36,7 +36,7 @@
 #include <soc.h>
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(i2c_npcx_port, CONFIG_I2C_LOG_LEVEL);
+LOG_MODULE_REGISTER(i2c_npcx_port, LOG_LEVEL_ERR);
 
 #include "i2c_npcx_controller.h"
 #include "i2c-priv.h"
@@ -147,7 +147,6 @@ static int i2c_npcx_port_recover_bus(const struct device *dev)
 static int i2c_npcx_target_register(const struct device *dev,
 				  struct i2c_target_config *target_cfg)
 {
-	int ret;
 	const struct i2c_npcx_port_config *const config = dev->config;
 
 	if (!target_cfg) {
@@ -159,21 +158,12 @@ static int i2c_npcx_target_register(const struct device *dev,
 		return -EIO;
 	}
 
-	/* Lock mutex of i2c/smb controller */
-	npcx_i2c_ctrl_mutex_lock(config->i2c_ctrl);
-
-	ret = npcx_i2c_ctrl_target_register(config->i2c_ctrl, target_cfg, config->port);
-
-	/* Unlock mutex of i2c/smb controller */
-	npcx_i2c_ctrl_mutex_unlock(config->i2c_ctrl);
-
-	return ret;
+	return npcx_i2c_ctrl_target_register(config->i2c_ctrl, target_cfg, config->port);
 }
 
 static int i2c_npcx_target_unregister(const struct device *dev,
 				     struct i2c_target_config *target_cfg)
 {
-	int ret;
 	const struct i2c_npcx_port_config *const config = dev->config;
 
 	if (config->i2c_ctrl == NULL) {
@@ -181,15 +171,7 @@ static int i2c_npcx_target_unregister(const struct device *dev,
 		return -EIO;
 	}
 
-	/* Lock mutex of i2c/smb controller */
-	npcx_i2c_ctrl_mutex_lock(config->i2c_ctrl);
-
-	ret = npcx_i2c_ctrl_target_unregister(config->i2c_ctrl, target_cfg, config->port);
-
-	/* Unlock mutex of i2c/smb controller */
-	npcx_i2c_ctrl_mutex_unlock(config->i2c_ctrl);
-
-	return ret;
+	return npcx_i2c_ctrl_target_unregister(config->i2c_ctrl, target_cfg);
 }
 #endif
 
@@ -218,7 +200,7 @@ static int i2c_npcx_port_init(const struct device *dev)
 	return 0;
 }
 
-static DEVICE_API(i2c, i2c_port_npcx_driver_api) = {
+static const struct i2c_driver_api i2c_port_npcx_driver_api = {
 	.configure = i2c_npcx_port_configure,
 	.get_config = i2c_npcx_port_get_config,
 	.transfer = i2c_npcx_port_transfer,
@@ -226,9 +208,6 @@ static DEVICE_API(i2c, i2c_port_npcx_driver_api) = {
 #ifdef CONFIG_I2C_TARGET
 	.target_register = i2c_npcx_target_register,
 	.target_unregister = i2c_npcx_target_unregister,
-#endif
-#ifdef CONFIG_I2C_RTIO
-	.iodev_submit = i2c_iodev_submit_fallback,
 #endif
 };
 

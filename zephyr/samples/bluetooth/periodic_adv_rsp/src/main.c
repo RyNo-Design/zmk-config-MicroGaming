@@ -8,7 +8,6 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
-#include <zephyr/bluetooth/hci.h>
 
 #define NUM_RSP_SLOTS 5
 #define NUM_SUBEVENTS 5
@@ -19,13 +18,6 @@ static K_SEM_DEFINE(sem_connected, 0, 1);
 static K_SEM_DEFINE(sem_discovered, 0, 1);
 static K_SEM_DEFINE(sem_written, 0, 1);
 static K_SEM_DEFINE(sem_disconnected, 0, 1);
-
-struct k_poll_event events[] = {
-	K_POLL_EVENT_STATIC_INITIALIZER(K_POLL_TYPE_SEM_AVAILABLE, K_POLL_MODE_NOTIFY_ONLY,
-					&sem_connected, 0),
-	K_POLL_EVENT_STATIC_INITIALIZER(K_POLL_TYPE_SEM_AVAILABLE, K_POLL_MODE_NOTIFY_ONLY,
-					&sem_disconnected, 0),
-};
 
 static struct bt_uuid_128 pawr_char_uuid =
 	BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x56789abcdef1));
@@ -99,6 +91,9 @@ static void response_cb(struct bt_le_ext_adv *adv, struct bt_le_per_adv_response
 	if (buf) {
 		printk("Response: subevent %d, slot %d\n", info->subevent, info->response_slot);
 		bt_data_parse(buf, print_ad_field, NULL);
+	} else {
+		printk("Failed to receive response: subevent %d, slot %d\n", info->subevent,
+		       info->response_slot);
 	}
 }
 
@@ -121,7 +116,10 @@ void connected_cb(struct bt_conn *conn, uint8_t err)
 
 void disconnected_cb(struct bt_conn *conn, uint8_t reason)
 {
-	printk("Disconnected, reason 0x%02X %s\n", reason, bt_hci_err_to_str(reason));
+	printk("Disconnected (reason 0x%02X)\n", reason);
+
+	bt_conn_unref(default_conn);
+	default_conn = NULL;
 
 	k_sem_give(&sem_disconnected);
 }
@@ -268,7 +266,7 @@ int main(void)
 		return 0;
 	}
 
-	/* Create a non-connectable advertising set */
+	/* Create a non-connectable non-scannable advertising set */
 	err = bt_le_ext_adv_create(BT_LE_EXT_ADV_NCONN, &adv_cb, &pawr_adv);
 	if (err) {
 		printk("Failed to create advertising set (err %d)\n", err);
@@ -283,14 +281,13 @@ int main(void)
 	}
 
 	/* Enable Periodic Advertising */
-	printk("Start Periodic Advertising\n");
 	err = bt_le_per_adv_start(pawr_adv);
 	if (err) {
 		printk("Failed to enable periodic advertising (err %d)\n", err);
 		return 0;
 	}
 
-	printk("Start Extended Advertising\n");
+	printk("Start Periodic Advertising\n");
 	err = bt_le_ext_adv_start(pawr_adv, BT_LE_EXT_ADV_START_DEFAULT);
 	if (err) {
 		printk("Failed to start extended advertising (err %d)\n", err);
@@ -298,8 +295,7 @@ int main(void)
 	}
 
 	while (num_synced < MAX_SYNCS) {
-		/* Enable continuous scanning */
-		err = bt_le_scan_start(BT_LE_SCAN_PASSIVE_CONTINUOUS, device_found);
+		err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, device_found);
 		if (err) {
 			printk("Scanning failed to start (err %d)\n", err);
 			return 0;
@@ -307,14 +303,7 @@ int main(void)
 
 		printk("Scanning successfully started\n");
 
-		/* Wait for either remote info available or involuntary disconnect */
-		k_poll(events, ARRAY_SIZE(events), K_FOREVER);
-		err = k_sem_take(&sem_connected, K_NO_WAIT);
-		if (err) {
-			printk("Disconnected before remote info available\n");
-
-			goto disconnected;
-		}
+		k_sem_take(&sem_connected, K_FOREVER);
 
 		err = bt_le_per_adv_set_info_transfer(pawr_adv, default_conn, 0);
 		if (err) {
@@ -347,7 +336,7 @@ int main(void)
 		}
 
 		sync_config.subevent = num_synced % NUM_SUBEVENTS;
-		sync_config.response_slot = num_synced / NUM_SUBEVENTS;
+		sync_config.response_slot = num_synced / NUM_RSP_SLOTS;
 		num_synced++;
 
 		write_params.func = write_func;
@@ -377,22 +366,12 @@ int main(void)
 		printk("PAwR config written to sync %d, disconnecting\n", num_synced - 1);
 
 disconnect:
-		/* Adding delay (2ms * interval value, using 2ms intead of the 1.25ms
-		 * used by controller) to ensure sync is established before
-		 * disconnection.
-		 */
-		k_sleep(K_MSEC(per_adv_params.interval_max * 2));
-
 		err = bt_conn_disconnect(default_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-		if (err != 0 && err != -ENOTCONN) {
+		if (err) {
 			return 0;
 		}
 
-disconnected:
 		k_sem_take(&sem_disconnected, K_FOREVER);
-
-		bt_conn_unref(default_conn);
-		default_conn = NULL;
 	}
 
 	printk("Maximum numnber of syncs onboarded\n");

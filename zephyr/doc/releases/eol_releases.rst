@@ -1,15 +1,7 @@
-.. _eol_releases:
-
 End-of-life releases
-####################
+====================
 
-Release notes and migration guides for end-of-life releases of Zephyr RTOS are kept here for
-historical purposes.
-
-.. _eol_releases_relesase_notes:
-
-Release Notes
-*************
+Release notes for end-of-life releases of Zephyr RTOS are kept here for historical purposes.
 
 .. toctree::
    :maxdepth: 1
@@ -19,16 +11,4 @@ Release Notes
    release-notes-1.?
    release-notes-1.*
    release-notes-2.[0-6]
-   release-notes-3.[0-6]
-
-.. _eol_releases_migration_guides:
-
-Migration Guides
-****************
-
-.. toctree::
-   :maxdepth: 1
-   :glob:
-   :reversed:
-
-   migration-guide-3.[5]
+   release-notes-3.[0-2]

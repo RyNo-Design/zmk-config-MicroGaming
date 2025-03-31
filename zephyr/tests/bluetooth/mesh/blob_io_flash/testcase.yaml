@@ -1,11 +1,8 @@
 tests:
   bluetooth.mesh.blob_io_flash:
-    extra_args:
-      - EXTRA_DTC_OVERLAY_FILE="test.overlay"
-    platform_allow:
-      - native_sim
+    platform_allow: native_posix
     tags:
       - bluetooth
       - mesh
     integration_platforms:
-      - native_sim
+      - native_posix

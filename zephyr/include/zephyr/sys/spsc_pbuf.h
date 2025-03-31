@@ -16,20 +16,15 @@ extern "C" {
 
 /**
  * @brief Single producer, single consumer packet buffer API
- * @defgroup spsc_buf SPSC (Single producer, single consumer) packet buffer API
- * @ingroup datastructure_apis
+ * @ingroup kernel_apis
  * @{
  */
 
-/**@defgroup SPSC_PBUF_FLAGS SPSC packet buffer flags
+/**@defgroup SPSC_PBUF_FLAGS MPSC packet buffer flags
  * @{
  */
 
-/** @brief Flag indicating that cache shall be handled.
- *
- * It shall be used only when packet buffer is shared between two cores as on a single
- * core cache shall not be handled manually because it results in data corruption.
- */
+/** @brief Flag indicating that cache shall be handled. */
 #define SPSC_PBUF_CACHE BIT(0)
 
 /** @brief Size of the field which stores maximum utilization. */

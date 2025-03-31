@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 description: |
-  STM32MP1 RCC (Reset and Clock controller).
-
+  STM32MP1 Reset and Clock controller node.
   On STM32MP1 platforms, clock control configuration is performed on A9 side.
   As a consequence, the only property to be set in devicetree node is the
   clock-frequency (mlhclk_ck).

@@ -19,9 +19,3 @@ properties:
       - 1
       - 4
       - 8
-
-  disk-name:
-    type: string
-    required: true
-    description: |
-      Disk name.

@@ -10,6 +10,7 @@
  */
 
 #include <zephyr/drivers/pinctrl.h>
+#include <cyhal_gpio.h>
 #include <cy_gpio.h>
 
 #define GPIO_PORT_OR_NULL(node_id) \

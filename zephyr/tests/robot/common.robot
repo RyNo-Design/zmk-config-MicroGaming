@@ -2,6 +2,6 @@
 
 *** Keywords ***
 Prepare Machine
-    Execute Command           $elf = ${ELF}
+    Execute Command           $bin = ${ELF}
     Execute Command           include ${RESC}
     Create Terminal Tester    ${UART}

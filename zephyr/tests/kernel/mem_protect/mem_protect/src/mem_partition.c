@@ -7,8 +7,6 @@
 #include <zephyr/kernel.h>
 #include "mem_protect.h"
 
-
-
 /* Add volatile to disable pre-calculation in compile stage in some
  * toolchain, such as arcmwdt toolchain.
  */

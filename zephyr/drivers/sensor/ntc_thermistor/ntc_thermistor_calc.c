@@ -5,6 +5,8 @@
  */
 
 #include <limits.h>
+#include <stdlib.h>
+#include <zephyr/devicetree.h>
 #include "ntc_thermistor.h"
 
 /**
@@ -29,11 +31,11 @@ static int ntc_fixp_linear_interpolate(int x0, int y0, int x1, int y1, int x)
 }
 
 /**
- * Finds indices where ohm falls between.
+ * ntc_lookup_comp() - Finds indicies where ohm falls between
  *
- * @param ohm key value search is looking for
- * @param i_low return Lower interval index value
- * @param i_high return Higher interval index value
+ * @ohm: key value search is looking for
+ * @i_low: return Lower interval index value
+ * @i_high: return Higher interval index value
  */
 static void ntc_lookup_comp(const struct ntc_type *type, unsigned int ohm, int *i_low, int *i_high)
 {
@@ -60,23 +62,29 @@ static void ntc_lookup_comp(const struct ntc_type *type, unsigned int ohm, int *
 	*i_high = high;
 }
 
-uint32_t ntc_get_ohm_of_thermistor(const struct ntc_config *cfg, int sample_value,
-				   int sample_value_max)
+/**
+ * ntc_get_ohm_of_thermistor() - Calculate the resistance read from NTC Thermistor
+ *
+ * @cfg: NTC Thermistor configuration
+ * @sample_mv: Measured voltage in mV
+ */
+uint32_t ntc_get_ohm_of_thermistor(const struct ntc_config *cfg, int sample_mv)
 {
+	int pullup_mv = cfg->pullup_uv / 1000;
 	uint32_t ohm;
 
-	if (sample_value <= 0) {
+	if (sample_mv <= 0) {
 		return cfg->connected_positive ? INT_MAX : 0;
 	}
 
-	if (sample_value >= sample_value_max) {
+	if (sample_mv >= pullup_mv) {
 		return cfg->connected_positive ? 0 : INT_MAX;
 	}
 
 	if (cfg->connected_positive) {
-		ohm = cfg->pulldown_ohm * (sample_value_max - sample_value) / sample_value;
+		ohm = cfg->pulldown_ohm * (pullup_mv - sample_mv) / sample_mv;
 	} else {
-		ohm = cfg->pullup_ohm * sample_value / (sample_value_max - sample_value);
+		ohm = cfg->pullup_ohm * sample_mv / (pullup_mv - sample_mv);
 	}
 
 	return ohm;

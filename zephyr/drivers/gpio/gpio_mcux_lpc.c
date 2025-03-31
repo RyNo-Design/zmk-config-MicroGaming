@@ -1,10 +1,10 @@
 /*
- * Copyright 2017-2020,2022-2023 NXP
+ * Copyright 2017-2020,2023 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define DT_DRV_COMPAT nxp_lpc_gpio_port
+#define DT_DRV_COMPAT nxp_lpc_gpio
 
 /** @file
  * @brief GPIO driver for LPC54XXX family
@@ -17,7 +17,6 @@
 #include <errno.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/pm/device.h>
 #include <zephyr/irq.h>
 #include <soc.h>
 #include <fsl_common.h>
@@ -27,9 +26,6 @@
 #endif
 #include <fsl_gpio.h>
 #include <fsl_device_registers.h>
-#ifdef MCI_IO_MUX
-#include <zephyr/drivers/pinctrl.h>
-#endif
 
 /* Interrupt sources, matching int-source enum in DTS binding definition */
 #define INT_SOURCE_PINT 0
@@ -44,14 +40,11 @@ struct gpio_mcux_lpc_config {
 	uint8_t int_source;
 #ifdef IOPCTL
 	IOPCTL_Type *pinmux_base;
-#endif
-#ifdef IOCON
+#else
 	IOCON_Type *pinmux_base;
 #endif
-#ifdef MCI_IO_MUX
-	MCI_IO_MUX_Type * pinmux_base;
-#endif
 	uint32_t port_no;
+	clock_ip_name_t clock_ip_name;
 };
 
 struct gpio_mcux_lpc_data {
@@ -89,8 +82,8 @@ static int gpio_mcux_lpc_configure(const struct device *dev, gpio_pin_t pin,
 	}
 	/* Select GPIO mux for this pin (func 0 is always GPIO) */
 	*pinconfig &= ~(IOPCTL_PIO_FSEL_MASK);
-#endif
-#ifdef IOCON /* LPC SOCs */
+
+#else /* LPC SOCs */
 	volatile uint32_t *pinconfig;
 	IOCON_Type *pinmux_base;
 
@@ -109,23 +102,6 @@ static int gpio_mcux_lpc_configure(const struct device *dev, gpio_pin_t pin,
 	/* Select GPIO mux for this pin (func 0 is always GPIO) */
 	*pinconfig &= ~(IOCON_PIO_FUNC_MASK);
 #endif
-#ifdef MCI_IO_MUX /* RW61x SOCs */
-		/* Construct a pin control state, and apply it directly. */
-		pinctrl_soc_pin_t pin_cfg;
-
-		if (config->port_no == 1) {
-			pin_cfg = IOMUX_GPIO_IDX(pin + 32) | IOMUX_TYPE(IOMUX_GPIO);
-		} else {
-			pin_cfg = IOMUX_GPIO_IDX(pin) | IOMUX_TYPE(IOMUX_GPIO);
-		}
-		/* Add pull up flags, if required */
-		if ((flags & GPIO_PULL_UP) != 0) {
-			pin_cfg |= IOMUX_PAD_PULL(0x1);
-		} else if ((flags & GPIO_PULL_DOWN) != 0) {
-			pin_cfg |= IOMUX_PAD_PULL(0x2);
-		}
-		pinctrl_configure_pins(&pin_cfg, 1, 0);
-#endif
 
 	if (flags & (GPIO_PULL_UP | GPIO_PULL_DOWN)) {
 #ifdef IOPCTL /* RT600 and RT500 series */
@@ -135,8 +111,7 @@ static int gpio_mcux_lpc_configure(const struct device *dev, gpio_pin_t pin,
 		} else if ((flags & GPIO_PULL_DOWN) != 0) {
 			*pinconfig &= ~(IOPCTL_PIO_PULLUP_EN);
 		}
-#endif
-#ifdef IOCON /* LPC SOCs */
+#else /* LPC SOCs */
 
 		*pinconfig &= ~(IOCON_PIO_MODE_PULLUP|IOCON_PIO_MODE_PULLDOWN);
 		if ((flags & GPIO_PULL_UP) != 0) {
@@ -144,16 +119,6 @@ static int gpio_mcux_lpc_configure(const struct device *dev, gpio_pin_t pin,
 		} else if ((flags & GPIO_PULL_DOWN) != 0) {
 			*pinconfig |= IOCON_PIO_MODE_PULLDOWN;
 		}
-#endif
-	} else {
-#ifdef IOPCTL /* RT600 and RT500 series */
-		*pinconfig &= ~IOPCTL_PIO_PUPD_EN;
-#endif
-#ifdef IOCON /* LPC SOCs */
-		*pinconfig &= ~(IOCON_PIO_MODE_PULLUP|IOCON_PIO_MODE_PULLDOWN);
-#endif
-#ifdef MCI_IO_MUX
-
 #endif
 	}
 
@@ -290,7 +255,7 @@ static int gpio_mcux_lpc_pint_interrupt_cfg(const struct device *dev,
 	}
 
 	/* PINT treats GPIO pins as continuous. Each port has 32 pins */
-	ret = nxp_pint_pin_enable((port * 32) + pin, interrupt_mode, (trig & GPIO_INT_WAKEUP));
+	ret = nxp_pint_pin_enable((port * 32) + pin, interrupt_mode);
 	if (ret < 0) {
 		return ret;
 	}
@@ -399,13 +364,6 @@ static int gpio_mcux_lpc_pin_interrupt_configure(const struct device *dev,
 #endif
 }
 
-void gpio_mcux_lpc_trigger_cb(const struct device *dev, uint32_t pins)
-{
-	struct gpio_mcux_lpc_data *data = dev->data;
-
-	gpio_fire_callbacks(&data->callbacks, dev, pins);
-}
-
 static int gpio_mcux_lpc_manage_cb(const struct device *port,
 				   struct gpio_callback *callback, bool set)
 {
@@ -414,35 +372,16 @@ static int gpio_mcux_lpc_manage_cb(const struct device *port,
 	return gpio_manage_callback(&data->callbacks, callback, set);
 }
 
-static int gpio_mcux_lpc_pm_action(const struct device *dev, enum pm_device_action action)
+static int gpio_mcux_lpc_init(const struct device *dev)
 {
-	switch (action) {
-	case PM_DEVICE_ACTION_RESUME:
-		break;
-	case PM_DEVICE_ACTION_SUSPEND:
-		break;
-	case PM_DEVICE_ACTION_TURN_OFF:
-		break;
-	case PM_DEVICE_ACTION_TURN_ON:
-		const struct gpio_mcux_lpc_config *config = dev->config;
+	const struct gpio_mcux_lpc_config *config = dev->config;
 
-		GPIO_PortInit(config->gpio_base, config->port_no);
-		break;
-	default:
-		return -ENOTSUP;
-	}
+	GPIO_PortInit(config->gpio_base, config->port_no);
+
 	return 0;
 }
 
-static int gpio_mcux_lpc_init(const struct device *dev)
-{
-	/* Rest of the init is done from the PM_DEVICE_TURN_ON action
-	 * which is invoked by pm_device_driver_init().
-	 */
-	return pm_device_driver_init(dev, gpio_mcux_lpc_pm_action);
-}
-
-static DEVICE_API(gpio, gpio_mcux_lpc_driver_api) = {
+static const struct gpio_driver_api gpio_mcux_lpc_driver_api = {
 	.pin_configure = gpio_mcux_lpc_configure,
 	.port_get_raw = gpio_mcux_lpc_port_get_raw,
 	.port_set_masked_raw = gpio_mcux_lpc_port_set_masked_raw,
@@ -453,16 +392,12 @@ static DEVICE_API(gpio, gpio_mcux_lpc_driver_api) = {
 	.manage_callback = gpio_mcux_lpc_manage_cb,
 };
 
-
+static const clock_ip_name_t gpio_clock_names[] = GPIO_CLOCKS;
 
 #ifdef IOPCTL
 #define PINMUX_BASE	IOPCTL
-#endif
-#ifdef IOCON
+#else
 #define PINMUX_BASE	IOCON
-#endif
-#ifdef MCI_IO_MUX
-#define PINMUX_BASE	MCI_IO_MUX
 #endif
 
 #define GPIO_MCUX_LPC_MODULE_IRQ_CONNECT(inst)						\
@@ -485,18 +420,16 @@ static DEVICE_API(gpio, gpio_mcux_lpc_driver_api) = {
 		.common = {								\
 			.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(n),		\
 		},									\
-		.gpio_base = (GPIO_Type *)DT_REG_ADDR(DT_INST_PARENT(n)),		\
+		.gpio_base = GPIO,							\
 		.pinmux_base = PINMUX_BASE,						\
 		.int_source = DT_INST_ENUM_IDX(n, int_source),				\
-		.port_no = DT_INST_REG_ADDR(n)						\
+		.port_no = DT_INST_PROP(n, port),					\
+		.clock_ip_name = gpio_clock_names[DT_INST_PROP(n, port)],		\
 	};										\
 											\
 	static struct gpio_mcux_lpc_data gpio_mcux_lpc_data_##n;			\
 											\
-	PM_DEVICE_DT_INST_DEFINE(n, gpio_mcux_lpc_pm_action);				\
-											\
-	DEVICE_DT_INST_DEFINE(n, lpc_gpio_init_##n,					\
-		    PM_DEVICE_DT_INST_GET(n),						\
+	DEVICE_DT_INST_DEFINE(n, lpc_gpio_init_##n, NULL,				\
 		    &gpio_mcux_lpc_data_##n,						\
 		    &gpio_mcux_lpc_config_##n, PRE_KERNEL_1,				\
 		    CONFIG_GPIO_INIT_PRIORITY,						\

@@ -23,16 +23,15 @@
 #include <zephyr/toolchain/common.h>
 #include <zephyr/linker/sections.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/offsets.h>
+#include <offsets.h>
 
 /* We need to dummy out DT_NODE_HAS_STATUS when building the unittests.
  * Including devicetree.h would require generating dummy header files
  * to match what gen_defines creates, so it's easier to just dummy out
- * DT_NODE_HAS_STATUS. These are undefined at the end of the file.
+ * DT_NODE_HAS_STATUS.
  */
 #ifdef ZTEST_UNITTEST
 #define DT_NODE_HAS_STATUS(node, status) 0
-#define DT_NODE_HAS_STATUS_OKAY(node) 0
 #else
 #include <zephyr/devicetree.h>
 #endif
@@ -44,13 +43,10 @@
  * (sorted by priority). Ensure the objects aren't discarded if there is
  * no direct reference to them
  */
-/* clang-format off */
 #define CREATE_OBJ_LEVEL(object, level)				\
 		__##object##_##level##_start = .;		\
-		KEEP(*(SORT(.z_##object##_##level##_P_?_*)));	\
-		KEEP(*(SORT(.z_##object##_##level##_P_??_*)));	\
-		KEEP(*(SORT(.z_##object##_##level##_P_???_*)));
-/* clang-format on */
+		KEEP(*(SORT(.z_##object##_##level?_*)));	\
+		KEEP(*(SORT(.z_##object##_##level??_*)));
 
 /*
  * link in shell initialization objects for all modules that use shell and
@@ -163,8 +159,8 @@ extern char __gcov_bss_size[];
 /* end address of image, used by newlib for the heap */
 extern char _end[];
 
-#if (DT_NODE_HAS_STATUS_OKAY(DT_CHOSEN(zephyr_ccm)))
-extern char __ccm_data_load_start[];
+#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_ccm), okay)
+extern char __ccm_data_rom_start[];
 extern char __ccm_start[];
 extern char __ccm_data_start[];
 extern char __ccm_data_end[];
@@ -175,14 +171,14 @@ extern char __ccm_noinit_end[];
 extern char __ccm_end[];
 #endif
 
-#if (DT_NODE_HAS_STATUS_OKAY(DT_CHOSEN(zephyr_itcm)))
+#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_itcm), okay)
 extern char __itcm_start[];
 extern char __itcm_end[];
 extern char __itcm_size[];
 extern char __itcm_load_start[];
 #endif
 
-#if (DT_NODE_HAS_STATUS_OKAY(DT_CHOSEN(zephyr_dtcm)))
+#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_dtcm), okay)
 extern char __dtcm_data_start[];
 extern char __dtcm_data_end[];
 extern char __dtcm_bss_start[];
@@ -194,7 +190,7 @@ extern char __dtcm_start[];
 extern char __dtcm_end[];
 #endif
 
-#if (DT_NODE_HAS_STATUS_OKAY(DT_CHOSEN(zephyr_ocm)))
+#if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_ocm), okay)
 extern char __ocm_data_start[];
 extern char __ocm_data_end[];
 extern char __ocm_bss_start[];
@@ -234,7 +230,6 @@ extern char _nocache_ram_size[];
  * section, stored in RAM instead of FLASH.
  */
 #ifdef CONFIG_ARCH_HAS_RAMFUNC_SUPPORT
-extern char __ramfunc_region_start[];
 extern char __ramfunc_start[];
 extern char __ramfunc_end[];
 extern char __ramfunc_size[];
@@ -297,7 +292,7 @@ extern char lnkr_boot_noinit_size[];
 /* lnkr_pinned_start[] and lnkr_pinned_end[] must encapsulate
  * all the pinned sections as these are used by
  * the MMU code to mark the physical page frames with
- * K_MEM_PAGE_FRAME_PINNED.
+ * Z_PAGE_FRAME_PINNED.
  */
 extern char lnkr_pinned_start[];
 extern char lnkr_pinned_end[];
@@ -342,29 +337,6 @@ static inline bool lnkr_is_region_pinned(uint8_t *addr, size_t sz)
 
 #endif /* CONFIG_LINKER_USE_PINNED_SECTION */
 
-#ifdef CONFIG_LINKER_USE_ONDEMAND_SECTION
-/* lnkr_ondemand_start[] and lnkr_ondemand_end[] must encapsulate
- * all the on-demand sections as these are used by
- * the MMU code to mark the virtual pages with the appropriate backing store
- * location token to have them be paged in on demand.
- */
-extern char lnkr_ondemand_start[];
-extern char lnkr_ondemand_end[];
-extern char lnkr_ondemand_load_start[];
-
-extern char lnkr_ondemand_text_start[];
-extern char lnkr_ondemand_text_end[];
-extern char lnkr_ondemand_text_size[];
-extern char lnkr_ondemand_rodata_start[];
-extern char lnkr_ondemand_rodata_end[];
-extern char lnkr_ondemand_rodata_size[];
-
-#endif /* CONFIG_LINKER_USE_ONDEMAND_SECTION */
 #endif /* ! _ASMLANGUAGE */
-
-#ifdef ZTEST_UNITTEST
-#undef DT_NODE_HAS_STATUS
-#undef DT_NODE_HAS_STATUS_OKAY
-#endif
 
 #endif /* ZEPHYR_INCLUDE_LINKER_LINKER_DEFS_H_ */

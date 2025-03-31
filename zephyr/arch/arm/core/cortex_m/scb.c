@@ -21,9 +21,8 @@
 #include <cmsis_core.h>
 #include <zephyr/linker/linker-defs.h>
 #include <zephyr/cache.h>
-#include <zephyr/arch/cache.h>
 
-#if defined(CONFIG_CPU_HAS_NXP_SYSMPU)
+#if defined(CONFIG_CPU_HAS_NXP_MPU)
 #include <fsl_sysmpu.h>
 #endif
 
@@ -55,13 +54,14 @@ void z_arm_clear_arm_mpu_config(void)
 {
 	int i;
 
-	int num_regions = ((MPU->TYPE & MPU_TYPE_DREGION_Msk) >> MPU_TYPE_DREGION_Pos);
+	int num_regions =
+		((MPU->TYPE & MPU_TYPE_DREGION_Msk) >> MPU_TYPE_DREGION_Pos);
 
 	for (i = 0; i < num_regions; i++) {
 		ARM_MPU_ClrRegion(i);
 	}
 }
-#elif CONFIG_CPU_HAS_NXP_SYSMPU
+#elif CONFIG_CPU_HAS_NXP_MPU
 void z_arm_clear_arm_mpu_config(void)
 {
 	int i;
@@ -75,7 +75,7 @@ void z_arm_clear_arm_mpu_config(void)
 		SYSMPU_RegionEnable(SYSMPU, i, false);
 	}
 }
-#endif /* CONFIG_CPU_HAS_NXP_SYSMPU */
+#endif /* CONFIG_CPU_HAS_NXP_MPU */
 #endif /* CONFIG_ARM_MPU */
 
 #if defined(CONFIG_INIT_ARCH_HW_AT_BOOT)
@@ -89,7 +89,7 @@ void z_arm_clear_arm_mpu_config(void)
  */
 void z_arm_init_arch_hw_at_boot(void)
 {
-	/* Disable interrupts */
+    /* Disable interrupts */
 	__disable_irq();
 
 #if defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
@@ -120,27 +120,15 @@ void z_arm_init_arch_hw_at_boot(void)
 	 * reset it to a known clean state.
 	 */
 	if (SCB->CCR & SCB_CCR_DC_Msk) {
-		/*
-		 * Do not use sys_cache_data_disable at this point, but instead
-		 * the architecture specific function. This ensures that the
-		 * cache is disabled although CONFIG_CACHE_MANAGEMENT might be
-		 * disabled.
-		 */
-		SCB_DisableDCache();
+		sys_cache_data_disable();
 	} else {
-		SCB_InvalidateDCache();
+		sys_cache_data_invd_all();
 	}
 #endif /* CONFIG_DCACHE */
 
 #if defined(CONFIG_ICACHE)
-	/*
-	 * Reset I-Cache settings.
-	 * Do not use sys_cache_data_disable at this point, but instead
-	 * the architecture specific function. This ensures that the
-	 * cache is disabled although CONFIG_CACHE_MANAGEMENT might be
-	 * disabled.
-	 */
-	SCB_DisableICache();
+	/* Reset I-Cache settings. */
+	sys_cache_instr_disable();
 #endif /* CONFIG_ICACHE */
 #endif /* CONFIG_ARCH_CACHE */
 

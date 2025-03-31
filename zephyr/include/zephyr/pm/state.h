@@ -134,21 +134,11 @@ struct pm_state_info {
 	 *			substate-id = <2>;
 	 *			min-residency-us = <20000>;
 	 *			exit-latency-us = <200>;
-	 *			zephyr,pm-device-disabled;
 	 *		};
 	 *	};
 	 * @endcode
 	 */
 	uint8_t substate_id;
-
-	/**
-	 * Whether or not this state triggers device power management.
-	 *
-	 * When this property is false the power management subsystem
-	 * will suspend devices before entering this state and will
-	 * properly resume them when leaving it.
-	 */
-	bool pm_device_disabled;
 
 	/**
 	 * Minimum residency duration in microseconds. It is the minimum
@@ -166,24 +156,6 @@ struct pm_state_info {
 	uint32_t exit_latency_us;
 };
 
-/**
- * Power state information needed to lock a power state.
- */
-struct pm_state_constraint {
-	 /**
-	  * Power management state
-	  *
-	  * @see pm_state
-	  **/
-	enum pm_state state;
-	 /**
-	  * Power management sub-state
-	  *
-	  * @see pm_state
-	  **/
-	uint8_t substate_id;
-};
-
 /** @cond INTERNAL_HIDDEN */
 
 /**
@@ -194,7 +166,7 @@ struct pm_state_constraint {
  * @param idx Index within the array.
  */
 #define Z_DT_PHANDLE_01(node_id, prop, idx) \
-	COND_CODE_1(DT_NODE_HAS_STATUS_OKAY(DT_PHANDLE_BY_IDX(node_id, prop, idx)), \
+	COND_CODE_1(DT_NODE_HAS_STATUS(DT_PHANDLE_BY_IDX(node_id, prop, idx), okay), \
 		    (1), (0))
 
 /**
@@ -207,7 +179,7 @@ struct pm_state_constraint {
  * @param node_id A node identifier with compatible zephyr,power-state
  */
 #define Z_PM_STATE_INFO_FROM_DT_CPU(i, node_id)                                                   \
-	COND_CODE_1(DT_NODE_HAS_STATUS_OKAY(DT_PHANDLE_BY_IDX(node_id, cpu_power_states, i)),     \
+	COND_CODE_1(DT_NODE_HAS_STATUS(DT_PHANDLE_BY_IDX(node_id, cpu_power_states, i), okay),    \
 		    (PM_STATE_INFO_DT_INIT(DT_PHANDLE_BY_IDX(node_id, cpu_power_states, i)),), ())
 
 /**
@@ -220,7 +192,7 @@ struct pm_state_constraint {
  * @param node_id A node identifier with compatible zephyr,power-state
  */
 #define Z_PM_STATE_FROM_DT_CPU(i, node_id)                                                        \
-	COND_CODE_1(DT_NODE_HAS_STATUS_OKAY(DT_PHANDLE_BY_IDX(node_id, cpu_power_states, i)),     \
+	COND_CODE_1(DT_NODE_HAS_STATUS(DT_PHANDLE_BY_IDX(node_id, cpu_power_states, i), okay),    \
 		    (PM_STATE_DT_INIT(DT_PHANDLE_BY_IDX(node_id, cpu_power_states, i)),), ())
 
 /** @endcond */
@@ -237,7 +209,6 @@ struct pm_state_constraint {
 		.substate_id = DT_PROP_OR(node_id, substate_id, 0),	       \
 		.min_residency_us = DT_PROP_OR(node_id, min_residency_us, 0),  \
 		.exit_latency_us = DT_PROP_OR(node_id, exit_latency_us, 0),    \
-		.pm_device_disabled = DT_PROP(node_id, zephyr_pm_device_disabled),    \
 	}
 
 /**
@@ -289,7 +260,6 @@ struct pm_state_constraint {
  *				power-state-name = "suspend-to-ram";
  *				min-residency-us = <50000>;
  *				exit-latency-us = <500>;
- *				zephyr,pm-device-disabled;
  *			};
  *		};
  *	};
@@ -359,7 +329,6 @@ struct pm_state_constraint {
 	}
 
 
-#if defined(CONFIG_PM) || defined(__DOXYGEN__)
 /**
  * Obtain information about all supported states by a CPU.
  *
@@ -373,18 +342,6 @@ uint8_t pm_state_cpu_get_all(uint8_t cpu, const struct pm_state_info **states);
 /**
  * @}
  */
-
-#else  /* CONFIG_PM */
-
-static inline uint8_t pm_state_cpu_get_all(uint8_t cpu, const struct pm_state_info **states)
-{
-	ARG_UNUSED(cpu);
-	ARG_UNUSED(states);
-
-	return 0;
-}
-
-#endif /* CONFIG_PM */
 
 #ifdef __cplusplus
 }

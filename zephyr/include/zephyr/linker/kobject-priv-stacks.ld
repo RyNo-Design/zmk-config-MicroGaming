@@ -3,7 +3,6 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-/* Please keep in sync with cmake/linker_script/common/kobject-priv-stacks.cmake */
 
 #ifdef CONFIG_USERSPACE
 #ifdef CONFIG_GEN_PRIV_STACKS
@@ -21,7 +20,7 @@
 	 */
 
 #if defined(LINKER_ZEPHYR_PREBUILT)
-#include <zephyr/linker-kobject-prebuilt-priv-stacks.h>
+#include <linker-kobject-prebuilt-priv-stacks.h>
 #ifdef KOBJECT_PRIV_STACKS_ALIGN
 	. = ALIGN(KOBJECT_PRIV_STACKS_ALIGN);
 	. = . + KOBJECT_PRIV_STACKS_SZ;
@@ -29,7 +28,7 @@
 #endif /* LINKER_ZEPHYR_PREBUILT */
 
 #if defined(LINKER_ZEPHYR_FINAL)
-#include <zephyr/linker-kobject-prebuilt-priv-stacks.h>
+#include <linker-kobject-prebuilt-priv-stacks.h>
 #ifdef KOBJECT_PRIV_STACKS_ALIGN
 	. = ALIGN(KOBJECT_PRIV_STACKS_ALIGN);
 #endif

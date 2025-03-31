@@ -334,7 +334,7 @@ enum tp_type tp_msg_to_type(const char *s)
 		type = _type;		\
 		goto out;		\
 	}				\
-} while (false)
+} while (0)
 
 	is_tp(s, TP_COMMAND);
 	is_tp(s, TP_CONFIG_REQUEST);

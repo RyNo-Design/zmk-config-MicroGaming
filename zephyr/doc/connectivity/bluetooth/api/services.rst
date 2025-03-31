@@ -8,11 +8,6 @@ Battery Service
 
 .. doxygengroup:: bt_bas
 
-Current Time Service
-********************
-
-.. doxygengroup:: bt_cts
-
 Heart Rate Service
 ******************
 

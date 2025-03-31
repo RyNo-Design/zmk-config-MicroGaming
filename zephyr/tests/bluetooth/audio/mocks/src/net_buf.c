@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/net_buf.h>
+#include <kernel.h>
+#include <zephyr/net/buf.h>
 
 void net_buf_unref(struct net_buf *buf)
 {

@@ -19,7 +19,7 @@
 #include <zephyr/types.h>
 #include <stdbool.h>
 
-#include <zephyr/net_buf.h>
+#include <zephyr/net/buf.h>
 
 #if defined(CONFIG_IEEE802154)
 #include <zephyr/net/ieee802154_pkt.h>
@@ -40,37 +40,11 @@ extern "C" {
 /**
  * @brief Network packet management library
  * @defgroup net_pkt Network Packet Library
- * @since 1.5
- * @version 0.8.0
  * @ingroup networking
  * @{
  */
 
 struct net_context;
-
-/** @cond INTERNAL_HIDDEN */
-
-#if defined(CONFIG_NET_PKT_ALLOC_STATS)
-struct net_pkt_alloc_stats {
-	uint64_t alloc_sum;
-	uint64_t time_sum;
-	uint32_t count;
-};
-
-struct net_pkt_alloc_stats_slab {
-	struct net_pkt_alloc_stats ok;
-	struct net_pkt_alloc_stats fail;
-	struct k_mem_slab *slab;
-};
-
-#define NET_PKT_ALLOC_STATS_DEFINE(alloc_name, slab_name)		  \
-	STRUCT_SECTION_ITERABLE(net_pkt_alloc_stats_slab, alloc_name) = { \
-		.slab = &slab_name,					  \
-	}
-
-#else
-#define NET_PKT_ALLOC_STATS_DEFINE(name, slab)
-#endif /* CONFIG_NET_PKT_ALLOC_STATS */
 
 /* buffer cursor used in net_pkt */
 struct net_pkt_cursor {
@@ -79,8 +53,6 @@ struct net_pkt_cursor {
 	/** Current position in the data buffer of the net_buf */
 	uint8_t *pos;
 };
-
-/** @endcond */
 
 /**
  * @brief Network packet.
@@ -100,8 +72,8 @@ struct net_pkt {
 
 	/** buffer holding the packet */
 	union {
-		struct net_buf *frags;   /**< buffer fragment */
-		struct net_buf *buffer;  /**< alias to a buffer fragment */
+		struct net_buf *frags;
+		struct net_buf *buffer;
 	};
 
 	/** Internal buffer iterator used for reading/writing */
@@ -121,19 +93,6 @@ struct net_pkt {
 #endif
 #if defined(CONFIG_NET_ROUTING) || defined(CONFIG_NET_ETHERNET_BRIDGE)
 	struct net_if *orig_iface; /* Original network interface */
-#endif
-
-#if defined(CONFIG_NET_VPN)
-	struct {
-		/** Original network interface */
-		struct net_if *iface;
-		/** Pointer to IP header of the encrypted pkt */
-		union net_ip_header ip_hdr;
-		/** Pointer to UDP header of the encrypted pkt */
-		union net_proto_header proto_hdr;
-		/** Peer id */
-		int peer_id;
-	} vpn;
 #endif
 
 #if defined(CONFIG_NET_PKT_TIMESTAMP) || defined(CONFIG_NET_PKT_TXTIME)
@@ -158,8 +117,7 @@ struct net_pkt {
 	struct net_ptp_time timestamp;
 #endif
 
-#if defined(CONFIG_NET_PKT_RXTIME_STATS) || defined(CONFIG_NET_PKT_TXTIME_STATS) || \
-	defined(CONFIG_TRACING_NET_CORE)
+#if defined(CONFIG_NET_PKT_RXTIME_STATS) || defined(CONFIG_NET_PKT_TXTIME_STATS)
 	struct {
 		/** Create time in cycles */
 		uint32_t create_time;
@@ -179,10 +137,6 @@ struct net_pkt {
 	  CONFIG_NET_PKT_RXTIME_STATS_DETAIL */
 	};
 #endif /* CONFIG_NET_PKT_RXTIME_STATS || CONFIG_NET_PKT_TXTIME_STATS */
-
-#if defined(CONFIG_NET_PKT_ALLOC_STATS)
-	struct net_pkt_alloc_stats_slab *alloc_stats;
-#endif /* CONFIG_NET_PKT_ALLOC_STATS */
 
 	/** Reference counter */
 	atomic_t atomic_ref;
@@ -209,8 +163,8 @@ struct net_pkt {
 
 	/* bitfield byte alignment boundary */
 
-#if defined(CONFIG_NET_IPV4_ACD)
-	uint8_t ipv4_acd_arp_msg : 1;  /* Is this pkt IPv4 conflict detection ARP
+#if defined(CONFIG_NET_IPV4_AUTO)
+	uint8_t ipv4_auto_arp_msg : 1; /* Is this pkt IPv4 autoconf ARP
 					* message.
 					* Note: family needs to be
 					* AF_INET.
@@ -223,6 +177,12 @@ struct net_pkt {
 			       */
 #endif
 	uint8_t ppp_msg : 1; /* This is a PPP message */
+#if defined(CONFIG_NET_TCP)
+	uint8_t tcp_first_msg : 1; /* Is this the first time this pkt is
+				    * sent, or is this a resend of a TCP
+				    * segment.
+				    */
+#endif
 	uint8_t captured : 1;	  /* Set to 1 if this packet is already being
 				   * captured
 				   */
@@ -234,16 +194,7 @@ struct net_pkt {
 	uint8_t l2_processed : 1; /* Set to 1 if this packet has already been
 				   * processed by the L2
 				   */
-	uint8_t chksum_done : 1; /* Checksum has already been computed for
-				  * the packet.
-				  */
-#if defined(CONFIG_NET_IP_FRAGMENT)
-	uint8_t ip_reassembled : 1; /* Packet is a reassembled IP packet. */
-#endif
-#if defined(CONFIG_NET_PKT_TIMESTAMP)
-	uint8_t tx_timestamping : 1; /** Timestamp transmitted packet */
-	uint8_t rx_timestamping : 1; /** Timestamp received packet */
-#endif
+
 	/* bitfield byte alignment boundary */
 
 #if defined(CONFIG_NET_IP)
@@ -268,7 +219,7 @@ struct net_pkt {
 #endif
 	};
 
-#if defined(CONFIG_NET_IP_FRAGMENT)
+#if defined(CONFIG_NET_IPV4_FRAGMENT) || defined(CONFIG_NET_IPV6_FRAGMENT)
 	union {
 #if defined(CONFIG_NET_IPV4_FRAGMENT)
 		struct {
@@ -284,7 +235,7 @@ struct net_pkt {
 		} ipv6_fragment;
 #endif /* CONFIG_NET_IPV6_FRAGMENT */
 	};
-#endif /* CONFIG_NET_IP_FRAGMENT */
+#endif /* CONFIG_NET_IPV4_FRAGMENT || CONFIG_NET_IPV6_FRAGMENT */
 
 #if defined(CONFIG_NET_IPV6)
 	/* Where is the start of the last header before payload data
@@ -333,32 +284,6 @@ struct net_pkt {
 	 * is not prioritised.
 	 */
 	uint8_t priority;
-
-#if defined(CONFIG_NET_OFFLOAD) || defined(CONFIG_NET_L2_IPIP)
-	/* Remote address of the received packet. This is only used by
-	 * network interfaces with an offloaded TCP/IP stack, or if we
-	 * have network tunneling in use.
-	 */
-	union {
-		struct sockaddr remote;
-
-		/* This will make sure that there is enough storage to store
-		 * the address struct. The access to value is via remote
-		 * address.
-		 */
-		struct sockaddr_storage remote_storage;
-	};
-#endif /* CONFIG_NET_OFFLOAD */
-
-#if defined(CONFIG_NET_CAPTURE_COOKED_MODE)
-	/* Tell the capture api that this is a captured packet */
-	uint8_t cooked_mode_pkt : 1;
-#endif /* CONFIG_NET_CAPTURE_COOKED_MODE */
-
-#if defined(CONFIG_NET_IPV4_PMTU)
-	/* Path MTU needed for this destination address */
-	uint8_t ipv4_pmtu : 1;
-#endif /* CONFIG_NET_IPV4_PMTU */
 
 	/* @endcond */
 };
@@ -417,57 +342,8 @@ static inline void net_pkt_set_orig_iface(struct net_pkt *pkt,
 {
 #if defined(CONFIG_NET_ROUTING) || defined(CONFIG_NET_ETHERNET_BRIDGE)
 	pkt->orig_iface = iface;
-#else
-	ARG_UNUSED(pkt);
-	ARG_UNUSED(iface);
 #endif
 }
-
-#if defined(CONFIG_NET_VPN)
-static inline struct net_if *net_pkt_vpn_iface(struct net_pkt *pkt)
-{
-	return pkt->vpn.iface;
-}
-
-static inline void net_pkt_set_vpn_iface(struct net_pkt *pkt,
-					 struct net_if *iface)
-{
-	pkt->vpn.iface = iface;
-}
-
-static inline union net_ip_header *net_pkt_vpn_ip_hdr(struct net_pkt *pkt)
-{
-	return &pkt->vpn.ip_hdr;
-}
-
-static inline void net_pkt_set_vpn_ip_hdr(struct net_pkt *pkt,
-					  union net_ip_header *ip_hdr)
-{
-	pkt->vpn.ip_hdr = *ip_hdr;
-}
-
-static inline union net_proto_header *net_pkt_vpn_udp_hdr(struct net_pkt *pkt)
-{
-	return &pkt->vpn.proto_hdr;
-}
-
-static inline void net_pkt_set_vpn_udp_hdr(struct net_pkt *pkt,
-					   union net_proto_header *proto_hdr)
-{
-	pkt->vpn.proto_hdr = *proto_hdr;
-}
-
-static inline int net_pkt_vpn_peer_id(struct net_pkt *pkt)
-{
-	return pkt->vpn.peer_id;
-}
-
-static inline void net_pkt_set_vpn_peer_id(struct net_pkt *pkt,
-					   int peer_id)
-{
-	pkt->vpn.peer_id = peer_id;
-}
-#endif /* CONFIG_NET_VPN */
 
 static inline uint8_t net_pkt_family(struct net_pkt *pkt)
 {
@@ -487,48 +363,6 @@ static inline bool net_pkt_is_ptp(struct net_pkt *pkt)
 static inline void net_pkt_set_ptp(struct net_pkt *pkt, bool is_ptp)
 {
 	pkt->ptp_pkt = is_ptp;
-}
-
-static inline bool net_pkt_is_tx_timestamping(struct net_pkt *pkt)
-{
-#if defined(CONFIG_NET_PKT_TIMESTAMP)
-	return !!(pkt->tx_timestamping);
-#else
-	ARG_UNUSED(pkt);
-
-	return false;
-#endif
-}
-
-static inline void net_pkt_set_tx_timestamping(struct net_pkt *pkt, bool is_timestamping)
-{
-#if defined(CONFIG_NET_PKT_TIMESTAMP)
-	pkt->tx_timestamping = is_timestamping;
-#else
-	ARG_UNUSED(pkt);
-	ARG_UNUSED(is_timestamping);
-#endif
-}
-
-static inline bool net_pkt_is_rx_timestamping(struct net_pkt *pkt)
-{
-#if defined(CONFIG_NET_PKT_TIMESTAMP)
-	return !!(pkt->rx_timestamping);
-#else
-	ARG_UNUSED(pkt);
-
-	return false;
-#endif
-}
-
-static inline void net_pkt_set_rx_timestamping(struct net_pkt *pkt, bool is_timestamping)
-{
-#if defined(CONFIG_NET_PKT_TIMESTAMP)
-	pkt->rx_timestamping = is_timestamping;
-#else
-	ARG_UNUSED(pkt);
-	ARG_UNUSED(is_timestamping);
-#endif
 }
 
 static inline bool net_pkt_is_captured(struct net_pkt *pkt)
@@ -564,24 +398,11 @@ static inline void net_pkt_set_l2_processed(struct net_pkt *pkt,
 	pkt->l2_processed = is_l2_processed;
 }
 
-static inline bool net_pkt_is_chksum_done(struct net_pkt *pkt)
-{
-	return !!(pkt->chksum_done);
-}
-
-static inline void net_pkt_set_chksum_done(struct net_pkt *pkt,
-					   bool is_chksum_done)
-{
-	pkt->chksum_done = is_chksum_done;
-}
-
 static inline uint8_t net_pkt_ip_hdr_len(struct net_pkt *pkt)
 {
 #if defined(CONFIG_NET_IP)
 	return pkt->ip_hdr_len;
 #else
-	ARG_UNUSED(pkt);
-
 	return 0;
 #endif
 }
@@ -590,9 +411,6 @@ static inline void net_pkt_set_ip_hdr_len(struct net_pkt *pkt, uint8_t len)
 {
 #if defined(CONFIG_NET_IP)
 	pkt->ip_hdr_len = len;
-#else
-	ARG_UNUSED(pkt);
-	ARG_UNUSED(len);
 #endif
 }
 
@@ -601,8 +419,6 @@ static inline uint8_t net_pkt_ip_dscp(struct net_pkt *pkt)
 #if defined(CONFIG_NET_IP_DSCP_ECN)
 	return pkt->ip_dscp;
 #else
-	ARG_UNUSED(pkt);
-
 	return 0;
 #endif
 }
@@ -611,9 +427,6 @@ static inline void net_pkt_set_ip_dscp(struct net_pkt *pkt, uint8_t dscp)
 {
 #if defined(CONFIG_NET_IP_DSCP_ECN)
 	pkt->ip_dscp = dscp;
-#else
-	ARG_UNUSED(pkt);
-	ARG_UNUSED(dscp);
 #endif
 }
 
@@ -622,8 +435,6 @@ static inline uint8_t net_pkt_ip_ecn(struct net_pkt *pkt)
 #if defined(CONFIG_NET_IP_DSCP_ECN)
 	return pkt->ip_ecn;
 #else
-	ARG_UNUSED(pkt);
-
 	return 0;
 #endif
 }
@@ -632,9 +443,25 @@ static inline void net_pkt_set_ip_ecn(struct net_pkt *pkt, uint8_t ecn)
 {
 #if defined(CONFIG_NET_IP_DSCP_ECN)
 	pkt->ip_ecn = ecn;
+#endif
+}
+
+static inline uint8_t net_pkt_tcp_1st_msg(struct net_pkt *pkt)
+{
+#if defined(CONFIG_NET_TCP)
+	return pkt->tcp_first_msg;
+#else
+	return true;
+#endif
+}
+
+static inline void net_pkt_set_tcp_1st_msg(struct net_pkt *pkt, bool is_1st)
+{
+#if defined(CONFIG_NET_TCP)
+	pkt->tcp_first_msg = is_1st;
 #else
 	ARG_UNUSED(pkt);
-	ARG_UNUSED(ecn);
+	ARG_UNUSED(is_1st);
 #endif
 }
 
@@ -847,31 +674,6 @@ static inline uint16_t net_pkt_ip_opts_len(struct net_pkt *pkt)
 #endif
 }
 
-#if defined(CONFIG_NET_IPV4_PMTU)
-static inline bool net_pkt_ipv4_pmtu(struct net_pkt *pkt)
-{
-	return !!pkt->ipv4_pmtu;
-}
-
-static inline void net_pkt_set_ipv4_pmtu(struct net_pkt *pkt, bool value)
-{
-	pkt->ipv4_pmtu = value;
-}
-#else
-static inline bool net_pkt_ipv4_pmtu(struct net_pkt *pkt)
-{
-	ARG_UNUSED(pkt);
-
-	return false;
-}
-
-static inline void net_pkt_set_ipv4_pmtu(struct net_pkt *pkt, bool value)
-{
-	ARG_UNUSED(pkt);
-	ARG_UNUSED(value);
-}
-#endif /* CONFIG_NET_IPV4_PMTU */
-
 #if defined(CONFIG_NET_IPV4_FRAGMENT)
 static inline uint16_t net_pkt_ipv4_fragment_offset(struct net_pkt *pkt)
 {
@@ -1020,33 +822,6 @@ static inline void net_pkt_set_ipv6_fragment_id(struct net_pkt *pkt,
 }
 #endif /* CONFIG_NET_IPV6_FRAGMENT */
 
-#if defined(CONFIG_NET_IP_FRAGMENT)
-static inline bool net_pkt_is_ip_reassembled(struct net_pkt *pkt)
-{
-	return !!(pkt->ip_reassembled);
-}
-
-static inline void net_pkt_set_ip_reassembled(struct net_pkt *pkt,
-					      bool reassembled)
-{
-	pkt->ip_reassembled = reassembled;
-}
-#else /* CONFIG_NET_IP_FRAGMENT */
-static inline bool net_pkt_is_ip_reassembled(struct net_pkt *pkt)
-{
-	ARG_UNUSED(pkt);
-
-	return false;
-}
-
-static inline void net_pkt_set_ip_reassembled(struct net_pkt *pkt,
-					      bool reassembled)
-{
-	ARG_UNUSED(pkt);
-	ARG_UNUSED(reassembled);
-}
-#endif /* CONFIG_NET_IP_FRAGMENT */
-
 static inline uint8_t net_pkt_priority(struct net_pkt *pkt)
 {
 	return pkt->priority;
@@ -1057,31 +832,6 @@ static inline void net_pkt_set_priority(struct net_pkt *pkt,
 {
 	pkt->priority = priority;
 }
-
-#if defined(CONFIG_NET_CAPTURE_COOKED_MODE)
-static inline bool net_pkt_is_cooked_mode(struct net_pkt *pkt)
-{
-	return pkt->cooked_mode_pkt;
-}
-
-static inline void net_pkt_set_cooked_mode(struct net_pkt *pkt, bool value)
-{
-	pkt->cooked_mode_pkt = value;
-}
-#else
-static inline bool net_pkt_is_cooked_mode(struct net_pkt *pkt)
-{
-	ARG_UNUSED(pkt);
-
-	return false;
-}
-
-static inline void net_pkt_set_cooked_mode(struct net_pkt *pkt, bool value)
-{
-	ARG_UNUSED(pkt);
-	ARG_UNUSED(value);
-}
-#endif /* CONFIG_NET_CAPTURE_COOKED_MODE */
 
 #if defined(CONFIG_NET_VLAN)
 static inline uint16_t net_pkt_vlan_tag(struct net_pkt *pkt)
@@ -1127,8 +877,6 @@ static inline uint16_t net_pkt_vlan_tci(struct net_pkt *pkt)
 #else
 static inline uint16_t net_pkt_vlan_tag(struct net_pkt *pkt)
 {
-	ARG_UNUSED(pkt);
-
 	return NET_VLAN_TAG_UNSPEC;
 }
 
@@ -1141,14 +889,11 @@ static inline void net_pkt_set_vlan_tag(struct net_pkt *pkt, uint16_t tag)
 static inline uint8_t net_pkt_vlan_priority(struct net_pkt *pkt)
 {
 	ARG_UNUSED(pkt);
-
 	return 0;
 }
 
 static inline bool net_pkt_vlan_dei(struct net_pkt *pkt)
 {
-	ARG_UNUSED(pkt);
-
 	return false;
 }
 
@@ -1160,8 +905,6 @@ static inline void net_pkt_set_vlan_dei(struct net_pkt *pkt, bool dei)
 
 static inline uint16_t net_pkt_vlan_tci(struct net_pkt *pkt)
 {
-	ARG_UNUSED(pkt);
-
 	return NET_VLAN_TAG_UNSPEC; /* assumes priority is 0 */
 }
 
@@ -1223,9 +966,7 @@ static inline void net_pkt_set_timestamp_ns(struct net_pkt *pkt, net_time_t time
 }
 #endif /* CONFIG_NET_PKT_TIMESTAMP || CONFIG_NET_PKT_TXTIME */
 
-#if defined(CONFIG_NET_PKT_RXTIME_STATS) || defined(CONFIG_NET_PKT_TXTIME_STATS) || \
-	defined(CONFIG_TRACING_NET_CORE)
-
+#if defined(CONFIG_NET_PKT_RXTIME_STATS) || defined(CONFIG_NET_PKT_TXTIME_STATS)
 static inline uint32_t net_pkt_create_time(struct net_pkt *pkt)
 {
 	return pkt->create_time;
@@ -1250,9 +991,36 @@ static inline void net_pkt_set_create_time(struct net_pkt *pkt,
 	ARG_UNUSED(pkt);
 	ARG_UNUSED(create_time);
 }
-#endif /* CONFIG_NET_PKT_RXTIME_STATS || CONFIG_NET_PKT_TXTIME_STATS ||
-	* CONFIG_TRACING_NET_CORE
-	*/
+#endif /* CONFIG_NET_PKT_RXTIME_STATS || CONFIG_NET_PKT_TXTIME_STATS */
+
+/**
+ * @deprecated Use @ref net_pkt_timestamp or @ref net_pkt_timestamp_ns instead.
+ */
+static inline uint64_t net_pkt_txtime(struct net_pkt *pkt)
+{
+#if defined(CONFIG_NET_PKT_TXTIME)
+	return pkt->timestamp.second * NSEC_PER_SEC + pkt->timestamp.nanosecond;
+#else
+	ARG_UNUSED(pkt);
+
+	return 0;
+#endif /* CONFIG_NET_PKT_TXTIME */
+}
+
+/**
+ * @deprecated Use @ref net_pkt_set_timestamp or @ref net_pkt_set_timestamp_ns
+ * instead.
+ */
+static inline void net_pkt_set_txtime(struct net_pkt *pkt, uint64_t txtime)
+{
+#if defined(CONFIG_NET_PKT_TXTIME)
+	pkt->timestamp.second = txtime / NSEC_PER_SEC;
+	pkt->timestamp.nanosecond = txtime % NSEC_PER_SEC;
+#else
+	ARG_UNUSED(pkt);
+	ARG_UNUSED(txtime);
+#endif /* CONFIG_NET_PKT_TXTIME */
+}
 
 #if defined(CONFIG_NET_PKT_TXTIME_STATS_DETAIL) || \
 	defined(CONFIG_NET_PKT_RXTIME_STATS_DETAIL)
@@ -1316,6 +1084,11 @@ static inline void net_pkt_set_stats_tick(struct net_pkt *pkt, uint32_t tick)
 #endif /* CONFIG_NET_PKT_TXTIME_STATS_DETAIL ||
 	  CONFIG_NET_PKT_RXTIME_STATS_DETAIL */
 
+static inline size_t net_pkt_get_len(struct net_pkt *pkt)
+{
+	return net_buf_frags_len(pkt->frags);
+}
+
 static inline uint8_t *net_pkt_data(struct net_pkt *pkt)
 {
 	return pkt->frags->data;
@@ -1343,23 +1116,16 @@ static inline struct net_linkaddr *net_pkt_lladdr_dst(struct net_pkt *pkt)
 
 static inline void net_pkt_lladdr_swap(struct net_pkt *pkt)
 {
-	struct net_linkaddr tmp;
+	uint8_t *addr = net_pkt_lladdr_src(pkt)->addr;
 
-	memcpy(tmp.addr,
-	       net_pkt_lladdr_src(pkt)->addr,
-	       net_pkt_lladdr_src(pkt)->len);
-	memcpy(net_pkt_lladdr_src(pkt)->addr,
-	       net_pkt_lladdr_dst(pkt)->addr,
-	       net_pkt_lladdr_dst(pkt)->len);
-	memcpy(net_pkt_lladdr_dst(pkt)->addr,
-	       tmp.addr,
-	       net_pkt_lladdr_src(pkt)->len);
+	net_pkt_lladdr_src(pkt)->addr = net_pkt_lladdr_dst(pkt)->addr;
+	net_pkt_lladdr_dst(pkt)->addr = addr;
 }
 
 static inline void net_pkt_lladdr_clear(struct net_pkt *pkt)
 {
-	(void)net_linkaddr_clear(net_pkt_lladdr_src(pkt));
-	(void)net_linkaddr_clear(net_pkt_lladdr_dst(pkt));
+	net_pkt_lladdr_src(pkt)->addr = NULL;
+	net_pkt_lladdr_src(pkt)->len = 0U;
 }
 
 static inline uint16_t net_pkt_ll_proto_type(struct net_pkt *pkt)
@@ -1372,32 +1138,32 @@ static inline void net_pkt_set_ll_proto_type(struct net_pkt *pkt, uint16_t type)
 	pkt->ll_proto_type = type;
 }
 
-#if defined(CONFIG_NET_IPV4_ACD)
-static inline bool net_pkt_ipv4_acd(struct net_pkt *pkt)
+#if defined(CONFIG_NET_IPV4_AUTO)
+static inline bool net_pkt_ipv4_auto(struct net_pkt *pkt)
 {
-	return !!(pkt->ipv4_acd_arp_msg);
+	return !!(pkt->ipv4_auto_arp_msg);
 }
 
-static inline void net_pkt_set_ipv4_acd(struct net_pkt *pkt,
-					bool is_acd_arp_msg)
+static inline void net_pkt_set_ipv4_auto(struct net_pkt *pkt,
+					 bool is_auto_arp_msg)
 {
-	pkt->ipv4_acd_arp_msg = is_acd_arp_msg;
+	pkt->ipv4_auto_arp_msg = is_auto_arp_msg;
 }
-#else /* CONFIG_NET_IPV4_ACD */
-static inline bool net_pkt_ipv4_acd(struct net_pkt *pkt)
+#else /* CONFIG_NET_IPV4_AUTO */
+static inline bool net_pkt_ipv4_auto(struct net_pkt *pkt)
 {
 	ARG_UNUSED(pkt);
 
 	return false;
 }
 
-static inline void net_pkt_set_ipv4_acd(struct net_pkt *pkt,
-					bool is_acd_arp_msg)
+static inline void net_pkt_set_ipv4_auto(struct net_pkt *pkt,
+					 bool is_auto_arp_msg)
 {
 	ARG_UNUSED(pkt);
-	ARG_UNUSED(is_acd_arp_msg);
+	ARG_UNUSED(is_auto_arp_msg);
 }
-#endif /* CONFIG_NET_IPV4_ACD */
+#endif /* CONFIG_NET_IPV4_AUTO */
 
 #if defined(CONFIG_NET_LLDP)
 static inline bool net_pkt_is_lldp(struct net_pkt *pkt)
@@ -1539,20 +1305,6 @@ static inline bool net_pkt_filter_local_in_recv_ok(struct net_pkt *pkt)
 
 #endif /* CONFIG_NET_PKT_FILTER && CONFIG_NET_PKT_FILTER_LOCAL_IN_HOOK */
 
-#if defined(CONFIG_NET_OFFLOAD) || defined(CONFIG_NET_L2_IPIP)
-static inline struct sockaddr *net_pkt_remote_address(struct net_pkt *pkt)
-{
-	return &pkt->remote;
-}
-
-static inline void net_pkt_set_remote_address(struct net_pkt *pkt,
-					      struct sockaddr *address,
-					      socklen_t len)
-{
-	memcpy(&pkt->remote, address, len);
-}
-#endif /* CONFIG_NET_OFFLOAD || CONFIG_NET_L2_IPIP */
-
 /* @endcond */
 
 /**
@@ -1569,15 +1321,10 @@ static inline void net_pkt_set_remote_address(struct net_pkt *pkt,
  * @param count Number of net_pkt in this slab.
  */
 #define NET_PKT_SLAB_DEFINE(name, count)				\
-	K_MEM_SLAB_DEFINE(name, sizeof(struct net_pkt), count, 4);      \
-	NET_PKT_ALLOC_STATS_DEFINE(pkt_alloc_stats_##name, name)
-
-/** @cond INTERNAL_HIDDEN */
+	K_MEM_SLAB_DEFINE(name, sizeof(struct net_pkt), count, 4)
 
 /* Backward compatibility macro */
 #define NET_PKT_TX_SLAB_DEFINE(name, count) NET_PKT_SLAB_DEFINE(name, count)
-
-/** @endcond */
 
 /**
  * @brief Create a data fragment net_buf pool
@@ -1675,7 +1422,6 @@ void net_pkt_frag_insert_debug(struct net_pkt *pkt, struct net_buf *frag,
 	*/
 /** @endcond */
 
-#if defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Print fragment list and the fragment sizes
  *
@@ -1683,31 +1429,12 @@ void net_pkt_frag_insert_debug(struct net_pkt *pkt, struct net_buf *frag,
  *
  * @param pkt Network pkt.
  */
+#if defined(NET_PKT_DEBUG_ENABLED)
 void net_pkt_print_frags(struct net_pkt *pkt);
 #else
 #define net_pkt_print_frags(pkt)
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
-/**
- * @brief Get a data buffer from a given pool.
- *
- * @details Normally this version is not useful for applications
- * but is mainly used by network fragmentation code.
- *
- * @param pool The net_buf pool to use.
- * @param min_len Minimum length of the requested fragment.
- * @param timeout Affects the action taken should the net buf pool be empty.
- *        If K_NO_WAIT, then return immediately. If K_FOREVER, then
- *        wait as long as necessary. Otherwise, wait up to the specified time.
- *
- * @return Network buffer if successful, NULL otherwise.
- */
-struct net_buf *net_pkt_get_reserve_data(struct net_buf_pool *pool,
-					 size_t min_len, k_timeout_t timeout);
-#endif
-
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Get RX DATA buffer from pool.
  * Normally you should use net_pkt_get_frag() instead.
@@ -1722,10 +1449,10 @@ struct net_buf *net_pkt_get_reserve_data(struct net_buf_pool *pool,
  *
  * @return Network buffer if successful, NULL otherwise.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_buf *net_pkt_get_reserve_rx_data(size_t min_len, k_timeout_t timeout);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Get TX DATA buffer from pool.
  * Normally you should use net_pkt_get_frag() instead.
@@ -1740,10 +1467,10 @@ struct net_buf *net_pkt_get_reserve_rx_data(size_t min_len, k_timeout_t timeout)
  *
  * @return Network buffer if successful, NULL otherwise.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_buf *net_pkt_get_reserve_tx_data(size_t min_len, k_timeout_t timeout);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Get a data fragment that might be from user specific
  * buffer pool or from global DATA pool.
@@ -1756,11 +1483,11 @@ struct net_buf *net_pkt_get_reserve_tx_data(size_t min_len, k_timeout_t timeout)
  *
  * @return Network buffer if successful, NULL otherwise.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_buf *net_pkt_get_frag(struct net_pkt *pkt, size_t min_len,
 				 k_timeout_t timeout);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Place packet back into the available packets slab
  *
@@ -1770,10 +1497,10 @@ struct net_buf *net_pkt_get_frag(struct net_pkt *pkt, size_t min_len,
  * @param pkt Network packet to release.
  *
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 void net_pkt_unref(struct net_pkt *pkt);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Increase the packet ref count
  *
@@ -1783,10 +1510,10 @@ void net_pkt_unref(struct net_pkt *pkt);
  *
  * @return Network packet if successful, NULL otherwise.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_pkt *net_pkt_ref(struct net_pkt *pkt);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Increase the packet fragment ref count
  *
@@ -1796,19 +1523,19 @@ struct net_pkt *net_pkt_ref(struct net_pkt *pkt);
  *
  * @return a pointer on the referenced Network fragment.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_buf *net_pkt_frag_ref(struct net_buf *frag);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Decrease the packet fragment ref count
  *
  * @param frag Network fragment to unref.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 void net_pkt_frag_unref(struct net_buf *frag);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Delete existing fragment from a packet
  *
@@ -1819,28 +1546,29 @@ void net_pkt_frag_unref(struct net_buf *frag);
  * @return Pointer to the following fragment, or NULL if it had no
  *         further fragments.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_buf *net_pkt_frag_del(struct net_pkt *pkt,
 				 struct net_buf *parent,
 				 struct net_buf *frag);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Add a fragment to a packet at the end of its fragment list
  *
  * @param pkt pkt Network packet where to add the fragment
  * @param frag Fragment to add
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 void net_pkt_frag_add(struct net_pkt *pkt, struct net_buf *frag);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Insert a fragment to a packet at the beginning of its fragment list
  *
  * @param pkt pkt Network packet where to insert the fragment
  * @param frag Fragment to insert
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 void net_pkt_frag_insert(struct net_pkt *pkt, struct net_buf *frag);
 #endif
 
@@ -1936,13 +1664,6 @@ int net_pkt_alloc_buffer_debug(struct net_pkt *pkt,
 	net_pkt_alloc_buffer_debug(_pkt, _size, _proto, _timeout,	\
 				   __func__, __LINE__)
 
-int net_pkt_alloc_buffer_raw_debug(struct net_pkt *pkt, size_t size,
-				   k_timeout_t timeout,
-				   const char *caller, int line);
-#define net_pkt_alloc_buffer_raw(_pkt, _size, _timeout)	\
-	net_pkt_alloc_buffer_raw_debug(_pkt, _size, _timeout,	\
-				       __func__, __LINE__)
-
 struct net_pkt *net_pkt_alloc_with_buffer_debug(struct net_if *iface,
 						size_t size,
 						sa_family_t family,
@@ -1968,22 +1689,9 @@ struct net_pkt *net_pkt_rx_alloc_with_buffer_debug(struct net_if *iface,
 	net_pkt_rx_alloc_with_buffer_debug(_iface, _size, _family,	\
 					   _proto, _timeout,		\
 					   __func__, __LINE__)
-
-int net_pkt_alloc_buffer_with_reserve_debug(struct net_pkt *pkt,
-					    size_t size,
-					    size_t reserve,
-					    enum net_ip_protocol proto,
-					    k_timeout_t timeout,
-					    const char *caller,
-					    int line);
-#define net_pkt_alloc_buffer_with_reserve(_pkt, _size, _reserve, _proto, _timeout) \
-	net_pkt_alloc_buffer_with_reserve_debug(_pkt, _size, _reserve, _proto, \
-						_timeout, __func__, __LINE__)
-
 #endif /* NET_PKT_DEBUG_ENABLED */
 /** @endcond */
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Allocate an initialized net_pkt
  *
@@ -1994,10 +1702,10 @@ int net_pkt_alloc_buffer_with_reserve_debug(struct net_pkt *pkt,
  *
  * @return a pointer to a newly allocated net_pkt on success, NULL otherwise.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_pkt *net_pkt_alloc(k_timeout_t timeout);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Allocate an initialized net_pkt from a specific slab
  *
@@ -2012,11 +1720,11 @@ struct net_pkt *net_pkt_alloc(k_timeout_t timeout);
  *
  * @return a pointer to a newly allocated net_pkt on success, NULL otherwise.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_pkt *net_pkt_alloc_from_slab(struct k_mem_slab *slab,
 					k_timeout_t timeout);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Allocate an initialized net_pkt for RX
  *
@@ -2027,10 +1735,10 @@ struct net_pkt *net_pkt_alloc_from_slab(struct k_mem_slab *slab,
  *
  * @return a pointer to a newly allocated net_pkt on success, NULL otherwise.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_pkt *net_pkt_rx_alloc(k_timeout_t timeout);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Allocate a network packet for a specific network interface.
  *
@@ -2039,19 +1747,15 @@ struct net_pkt *net_pkt_rx_alloc(k_timeout_t timeout);
  *
  * @return a pointer to a newly allocated net_pkt on success, NULL otherwise.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_pkt *net_pkt_alloc_on_iface(struct net_if *iface,
 				       k_timeout_t timeout);
-
-/** @cond INTERNAL_HIDDEN */
 
 /* Same as above but specifically for RX packet */
 struct net_pkt *net_pkt_rx_alloc_on_iface(struct net_if *iface,
 					  k_timeout_t timeout);
-/** @endcond */
-
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Allocate buffer for a net_pkt
  *
@@ -2067,56 +1771,13 @@ struct net_pkt *net_pkt_rx_alloc_on_iface(struct net_if *iface,
  *
  * @return 0 on success, negative errno code otherwise.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 int net_pkt_alloc_buffer(struct net_pkt *pkt,
 			 size_t size,
 			 enum net_ip_protocol proto,
 			 k_timeout_t timeout);
 #endif
 
-#if !defined(NET_PKT_DEBUG_ENABLED)
-/**
- * @brief Allocate buffer for a net_pkt and reserve some space in the first net_buf.
- *
- * @details: such allocator will take into account space necessary for headers,
- *           MTU, and existing buffer (if any). Beware that, due to all these
- *           criteria, the allocated size might be smaller/bigger than
- *           requested one.
- *
- * @param pkt     The network packet requiring buffer to be allocated.
- * @param size    The size of buffer being requested.
- * @param reserve The L2 header size to reserve. This can be 0, in which case
- *                the L2 header is placed into a separate net_buf.
- * @param proto   The IP protocol type (can be 0 for none).
- * @param timeout Maximum time to wait for an allocation.
- *
- * @return 0 on success, negative errno code otherwise.
- */
-#if !defined(NET_PKT_DEBUG_ENABLED)
-int net_pkt_alloc_buffer_with_reserve(struct net_pkt *pkt,
-				      size_t size,
-				      size_t reserve,
-				      enum net_ip_protocol proto,
-				      k_timeout_t timeout);
-#endif
-
-/**
- * @brief Allocate buffer for a net_pkt, of specified size, w/o any additional
- *        preconditions
- *
- * @details: The actual buffer size may be larger than requested one if fixed
- *           size buffers are in use.
- *
- * @param pkt     The network packet requiring buffer to be allocated.
- * @param size    The size of buffer being requested.
- * @param timeout Maximum time to wait for an allocation.
- *
- * @return 0 on success, negative errno code otherwise.
- */
-int net_pkt_alloc_buffer_raw(struct net_pkt *pkt, size_t size,
-			     k_timeout_t timeout);
-#endif
-
-#if !defined(NET_PKT_DEBUG_ENABLED)
 /**
  * @brief Allocate a network packet and buffer at once
  *
@@ -2128,13 +1789,12 @@ int net_pkt_alloc_buffer_raw(struct net_pkt *pkt, size_t size,
  *
  * @return a pointer to a newly allocated net_pkt on success, NULL otherwise.
  */
+#if !defined(NET_PKT_DEBUG_ENABLED)
 struct net_pkt *net_pkt_alloc_with_buffer(struct net_if *iface,
 					  size_t size,
 					  sa_family_t family,
 					  enum net_ip_protocol proto,
 					  k_timeout_t timeout);
-
-/** @cond INTERNAL_HIDDEN */
 
 /* Same as above but specifically for RX packet */
 struct net_pkt *net_pkt_rx_alloc_with_buffer(struct net_if *iface,
@@ -2142,9 +1802,6 @@ struct net_pkt *net_pkt_rx_alloc_with_buffer(struct net_if *iface,
 					     sa_family_t family,
 					     enum net_ip_protocol proto,
 					     k_timeout_t timeout);
-
-/** @endcond */
-
 #endif
 
 /**
@@ -2361,18 +2018,7 @@ struct net_pkt *net_pkt_shallow_clone(struct net_pkt *pkt,
  */
 int net_pkt_read(struct net_pkt *pkt, void *data, size_t length);
 
-/**
- * @brief Read a byte (uint8_t) from a net_pkt
- *
- * @details net_pkt's cursor should be properly initialized and,
- *          if needed, positioned using net_pkt_skip.
- *          Cursor position will be updated after the operation.
- *
- * @param pkt  The network packet from where to read
- * @param data The destination uint8_t where to copy the data
- *
- * @return 0 on success, negative errno code otherwise.
- */
+/* Read uint8_t data data a net_pkt */
 static inline int net_pkt_read_u8(struct net_pkt *pkt, uint8_t *data)
 {
 	return net_pkt_read(pkt, data, 1);
@@ -2435,35 +2081,13 @@ int net_pkt_read_be32(struct net_pkt *pkt, uint32_t *data);
  */
 int net_pkt_write(struct net_pkt *pkt, const void *data, size_t length);
 
-/**
- * @brief Write a byte (uint8_t) data to a net_pkt
- *
- * @details net_pkt's cursor should be properly initialized and,
- *          if needed, positioned using net_pkt_skip.
- *          Cursor position will be updated after the operation.
- *
- * @param pkt  The network packet from where to read
- * @param data The uint8_t value to write
- *
- * @return 0 on success, negative errno code otherwise.
- */
+/* Write uint8_t data into a net_pkt. */
 static inline int net_pkt_write_u8(struct net_pkt *pkt, uint8_t data)
 {
 	return net_pkt_write(pkt, &data, sizeof(uint8_t));
 }
 
-/**
- * @brief Write a uint16_t big endian data to a net_pkt
- *
- * @details net_pkt's cursor should be properly initialized and,
- *          if needed, positioned using net_pkt_skip.
- *          Cursor position will be updated after the operation.
- *
- * @param pkt  The network packet from where to read
- * @param data The uint16_t value in host byte order to write
- *
- * @return 0 on success, negative errno code otherwise.
- */
+/* Write uint16_t big endian data into a net_pkt. */
 static inline int net_pkt_write_be16(struct net_pkt *pkt, uint16_t data)
 {
 	uint16_t data_be16 = htons(data);
@@ -2471,18 +2095,7 @@ static inline int net_pkt_write_be16(struct net_pkt *pkt, uint16_t data)
 	return net_pkt_write(pkt, &data_be16, sizeof(uint16_t));
 }
 
-/**
- * @brief Write a uint32_t big endian data to a net_pkt
- *
- * @details net_pkt's cursor should be properly initialized and,
- *          if needed, positioned using net_pkt_skip.
- *          Cursor position will be updated after the operation.
- *
- * @param pkt  The network packet from where to read
- * @param data The uint32_t value in host byte order to write
- *
- * @return 0 on success, negative errno code otherwise.
- */
+/* Write uint32_t big endian data into a net_pkt. */
 static inline int net_pkt_write_be32(struct net_pkt *pkt, uint32_t data)
 {
 	uint32_t data_be32 = htonl(data);
@@ -2490,18 +2103,7 @@ static inline int net_pkt_write_be32(struct net_pkt *pkt, uint32_t data)
 	return net_pkt_write(pkt, &data_be32, sizeof(uint32_t));
 }
 
-/**
- * @brief Write a uint32_t little endian data to a net_pkt
- *
- * @details net_pkt's cursor should be properly initialized and,
- *          if needed, positioned using net_pkt_skip.
- *          Cursor position will be updated after the operation.
- *
- * @param pkt  The network packet from where to read
- * @param data The uint32_t value in host byte order to write
- *
- * @return 0 on success, negative errno code otherwise.
- */
+/* Write uint32_t little endian data into a net_pkt. */
 static inline int net_pkt_write_le32(struct net_pkt *pkt, uint32_t data)
 {
 	uint32_t data_le32 = sys_cpu_to_le32(data);
@@ -2509,18 +2111,7 @@ static inline int net_pkt_write_le32(struct net_pkt *pkt, uint32_t data)
 	return net_pkt_write(pkt, &data_le32, sizeof(uint32_t));
 }
 
-/**
- * @brief Write a uint16_t little endian data to a net_pkt
- *
- * @details net_pkt's cursor should be properly initialized and,
- *          if needed, positioned using net_pkt_skip.
- *          Cursor position will be updated after the operation.
- *
- * @param pkt  The network packet from where to read
- * @param data The uint16_t value in host byte order to write
- *
- * @return 0 on success, negative errno code otherwise.
- */
+/* Write uint16_t little endian data into a net_pkt. */
 static inline int net_pkt_write_le16(struct net_pkt *pkt, uint16_t data)
 {
 	uint16_t data_le16 = sys_cpu_to_le16(data);
@@ -2536,18 +2127,6 @@ static inline int net_pkt_write_le16(struct net_pkt *pkt, uint16_t data)
  * @return Amount of data which can be read from current pkt cursor
  */
 size_t net_pkt_remaining_data(struct net_pkt *pkt);
-
-/**
- * @brief Get the total amount of bytes stored in a packet.
- *
- * @param pkt Network packet
- *
- * @return Total amount of bytes stored in a packet.
- */
-static inline size_t net_pkt_get_len(struct net_pkt *pkt)
-{
-	return net_buf_frags_len(pkt->frags);
-}
 
 /**
  * @brief Update the overall length of a packet
@@ -2610,8 +2189,6 @@ bool net_pkt_is_contiguous(struct net_pkt *pkt, size_t size);
  */
 size_t net_pkt_get_contiguous_len(struct net_pkt *pkt);
 
-/** @cond INTERNAL_HIDDEN */
-
 struct net_pkt_data_access {
 #if !defined(CONFIG_NET_HEADERS_ALWAYS_CONTIGUOUS)
 	void *data;
@@ -2643,8 +2220,6 @@ struct net_pkt_data_access {
 	}
 
 #endif /* CONFIG_NET_HEADERS_ALWAYS_CONTIGUOUS */
-
-/** @endcond */
 
 /**
  * @brief Get data from a network packet in a contiguous way

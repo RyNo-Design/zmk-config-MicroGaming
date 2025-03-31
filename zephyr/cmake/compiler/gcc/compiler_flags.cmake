@@ -20,13 +20,6 @@ else()
 endif()
 set_compiler_property(PROPERTY optimization_speed -O2)
 set_compiler_property(PROPERTY optimization_size  -Os)
-set_compiler_property(PROPERTY optimization_size_aggressive -Oz)
-set_compiler_property(PROPERTY optimization_fast -Ofast)
-
-if(CMAKE_C_COMPILER_VERSION GREATER_EQUAL "4.5.0")
-  set_compiler_property(PROPERTY optimization_lto -flto=auto)
-  set_compiler_property(PROPERTY prohibit_lto -fno-lto)
-endif()
 
 #######################################################
 # This section covers flags related to warning levels #
@@ -38,9 +31,6 @@ check_set_compiler_property(PROPERTY warning_base
     "SHELL:-Wformat -Wformat-security"
     "SHELL:-Wformat -Wno-format-zero-length"
 )
-
-# C implicit promotion rules will want to make floats into doubles very easily
-check_set_compiler_property(APPEND PROPERTY warning_base -Wdouble-promotion)
 
 check_set_compiler_property(APPEND PROPERTY warning_base -Wno-pointer-sign)
 
@@ -60,7 +50,7 @@ set_compiler_property(PROPERTY warning_dw_1
 )
 check_set_compiler_property(APPEND PROPERTY warning_dw_1
                             -Wlogical-op
-                            -Wno-missing-field-initializers
+                            -Wmissing-field-initializers
 )
 
 set_compiler_property(PROPERTY warning_dw_2
@@ -72,7 +62,6 @@ set_compiler_property(PROPERTY warning_dw_2
                       -Wpointer-arith
                       -Wredundant-decls
                       -Wswitch-default
-                      -Wmissing-field-initializers
 )
 check_set_compiler_property(APPEND PROPERTY warning_dw_2
                             -Wpacked-bitfield-compat
@@ -122,9 +111,9 @@ if (NOT CONFIG_NEWLIB_LIBC AND
   set_compiler_property(APPEND PROPERTY nostdinc_include ${NOSTDINC})
 endif()
 
-check_set_compiler_property(PROPERTY no_printf_return_value -fno-printf-return-value)
+set_compiler_property(PROPERTY no_printf_return_value -fno-printf-return-value)
 
-set_property(TARGET compiler-cpp PROPERTY nostdincxx "-nostdinc++")
+set_compiler_property(TARGET compiler-cpp PROPERTY nostdincxx "-nostdinc++")
 
 # Required C++ flags when using gcc
 set_property(TARGET compiler-cpp PROPERTY required "-fcheck-new")
@@ -168,32 +157,21 @@ set_property(TARGET compiler-cpp PROPERTY no_rtti "-fno-rtti")
 set_compiler_property(PROPERTY coverage -fprofile-arcs -ftest-coverage -fno-inline)
 
 # Security canaries.
-set_compiler_property(PROPERTY security_canaries -fstack-protector)
-set_compiler_property(PROPERTY security_canaries_strong -fstack-protector-strong)
-set_compiler_property(PROPERTY security_canaries_all -fstack-protector-all)
-set_compiler_property(PROPERTY security_canaries_explicit -fstack-protector-explicit)
+set_compiler_property(PROPERTY security_canaries -fstack-protector-all)
 
 # Only a valid option with GCC 7.x and above, so let's do check and set.
 if(CONFIG_STACK_CANARIES_TLS)
   check_set_compiler_property(APPEND PROPERTY security_canaries -mstack-protector-guard=tls)
-  check_set_compiler_property(APPEND PROPERTY security_canaries_strong -mstack-protector-guard=tls)
-  check_set_compiler_property(APPEND PROPERTY security_canaries_all -mstack-protector-guard=tls)
-  check_set_compiler_property(APPEND PROPERTY security_canaries_explicit -mstack-protector-guard=tls)
 else()
   check_set_compiler_property(APPEND PROPERTY security_canaries -mstack-protector-guard=global)
-  check_set_compiler_property(APPEND PROPERTY security_canaries_global -mstack-protector-guard=global)
-  check_set_compiler_property(APPEND PROPERTY security_canaries_all -mstack-protector-guard=global)
-  check_set_compiler_property(APPEND PROPERTY security_canaries_explicit -mstack-protector-guard=global)
 endif()
 
 
 if(NOT CONFIG_NO_OPTIMIZATIONS)
   # _FORTIFY_SOURCE: Detect common-case buffer overflows for certain functions
-  # _FORTIFY_SOURCE=1 : Loose checking (use wide bounds checks)
-  # _FORTIFY_SOURCE=2 : Tight checking (use narrow bounds checks)
-  # GCC always does compile-time bounds checking for string/mem functions, so
-  # there's no additional value to set here
-  set_compiler_property(PROPERTY security_fortify_compile_time)
+  # _FORTIFY_SOURCE=1 : Compile-time checks (requires -O1 at least)
+  # _FORTIFY_SOURCE=2 : Additional lightweight run-time checks
+  set_compiler_property(PROPERTY security_fortify_compile_time _FORTIFY_SOURCE=1)
   set_compiler_property(PROPERTY security_fortify_run_time _FORTIFY_SOURCE=2)
 endif()
 
@@ -232,11 +210,10 @@ set_property(TARGET compiler-cpp PROPERTY no_threadsafe_statics "-fno-threadsafe
 # Required ASM flags when using gcc
 set_property(TARGET asm PROPERTY required "-xassembler-with-cpp")
 
-# GCC compiler flags for imacros. The specific header must be appended by user.
-set_property(TARGET asm PROPERTY imacros "-imacros")
-
 # gcc flag for colourful diagnostic messages
-check_set_compiler_property(PROPERTY diagnostic -fdiagnostics-color=always)
+if (NOT COMPILER STREQUAL "xcc")
+set_compiler_property(PROPERTY diagnostic -fdiagnostics-color=always)
+endif()
 
 # Compiler flag for disabling pointer arithmetic warnings
 set_compiler_property(PROPERTY warning_no_pointer_arithmetic "-Wno-pointer-arith")
@@ -250,15 +227,3 @@ set_compiler_property(PROPERTY no_position_independent
 set_compiler_property(PROPERTY no_global_merge "")
 
 set_compiler_property(PROPERTY warning_shadow_variables -Wshadow)
-set_compiler_property(PROPERTY warning_no_array_bounds -Wno-array-bounds)
-
-set_compiler_property(PROPERTY no_builtin -fno-builtin)
-set_compiler_property(PROPERTY no_builtin_malloc -fno-builtin-malloc)
-
-set_compiler_property(PROPERTY specs -specs=)
-
-set_compiler_property(PROPERTY include_file -include)
-
-set_compiler_property(PROPERTY cmse -mcmse)
-
-set_property(TARGET asm PROPERTY cmse -mcmse)

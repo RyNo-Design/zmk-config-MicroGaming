@@ -4,7 +4,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-description: Microchip MPFS I2C Controller
+description:
+  Microchip MPFS I2C Controller Device Tree Bindings
 
 compatible: "microchip,mpfs-i2c"
 

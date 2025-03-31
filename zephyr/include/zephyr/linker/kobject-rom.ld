@@ -3,7 +3,6 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-/* Please keep in sync with cmake/linker_script/common/kobject-rom.cmake */
 
 #ifdef CONFIG_USERSPACE
 
@@ -17,7 +16,7 @@
 	 */
 
 #if defined(LINKER_ZEPHYR_PREBUILT)
-#include <zephyr/linker-kobject-prebuilt-rodata.h>
+#include <linker-kobject-prebuilt-rodata.h>
 #ifdef KOBJECT_RODATA_ALIGN
 	. = ALIGN(KOBJECT_RODATA_ALIGN);
 
@@ -30,7 +29,7 @@
 #endif /* LINKER_ZEPHYR_PREBUILT */
 
 #if defined(LINKER_ZEPHYR_FINAL)
-#include <zephyr/linker-kobject-prebuilt-rodata.h>
+#include <linker-kobject-prebuilt-rodata.h>
 #ifdef KOBJECT_RODATA_ALIGN
 	. = ALIGN(KOBJECT_RODATA_ALIGN);
 

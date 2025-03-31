@@ -63,14 +63,18 @@ static inline uint32_t flags_get(const uint32_t *flagp)
 static struct k_spinlock lock;
 
 /* Invoked by work thread */
-static void handle_flush(struct k_work *work) { }
+static void handle_flush(struct k_work *work)
+{
+	struct z_work_flusher *flusher
+		= CONTAINER_OF(work, struct z_work_flusher, work);
+
+	k_sem_give(&flusher->sem);
+}
 
 static inline void init_flusher(struct z_work_flusher *flusher)
 {
-	struct k_work *work = &flusher->work;
 	k_sem_init(&flusher->sem, 0, 1);
 	k_work_init(&flusher->work, handle_flush);
-	flag_set(&work->flags, K_WORK_FLUSHING_BIT);
 }
 
 /* List of pending cancellations. */
@@ -91,26 +95,6 @@ static inline void init_work_cancel(struct z_work_canceller *canceler,
 	canceler->work = work;
 	sys_slist_append(&pending_cancels, &canceler->node);
 }
-
-/* Complete flushing of a work item.
- *
- * Invoked with work lock held.
- *
- * Invoked from a work queue thread.
- *
- * Reschedules.
- *
- * @param work the work structure that has completed flushing.
- */
-static void finalize_flush_locked(struct k_work *work)
-{
-	struct z_work_flusher *flusher
-		= CONTAINER_OF(work, struct z_work_flusher, work);
-
-	flag_clear(&work->flags, K_WORK_FLUSHING_BIT);
-
-	k_sem_give(&flusher->sem);
-};
 
 /* Complete cancellation of a work item and unlock held lock.
  *
@@ -141,9 +125,9 @@ static void finalize_cancel_locked(struct k_work *work)
 		if (wc->work == work) {
 			sys_slist_remove(&pending_cancels, prev, &wc->node);
 			k_sem_give(&wc->sem);
-			break;
+		} else {
+			prev = &wc->node;
 		}
-		prev = &wc->node;
 	}
 }
 
@@ -188,9 +172,19 @@ static void queue_flusher_locked(struct k_work_q *queue,
 				 struct k_work *work,
 				 struct z_work_flusher *flusher)
 {
-	init_flusher(flusher);
+	bool in_list = false;
+	struct k_work *wn;
 
-	if ((flags_get(&work->flags) & K_WORK_QUEUED) != 0U) {
+	/* Determine whether the work item is still queued. */
+	SYS_SLIST_FOR_EACH_CONTAINER(&queue->pending, wn, node) {
+		if (wn == work) {
+			in_list = true;
+			break;
+		}
+	}
+
+	init_flusher(flusher);
+	if (in_list) {
 		sys_slist_insert(&queue->pending, &work->node,
 				 &flusher->work.node);
 	} else {
@@ -261,7 +255,7 @@ static inline int queue_submit_locked(struct k_work_q *queue,
 		return -EINVAL;
 	}
 
-	int ret;
+	int ret = -EBUSY;
 	bool chained = (_current == &queue->thread) && !k_is_in_isr();
 	bool draining = flag_test(&queue->flags, K_WORK_QUEUE_DRAIN_BIT);
 	bool plugged = flag_test(&queue->flags, K_WORK_QUEUE_PLUGGED_BIT);
@@ -461,7 +455,7 @@ bool k_work_flush(struct k_work *work,
 	__ASSERT_NO_MSG(sync != NULL);
 #ifdef CONFIG_KERNEL_COHERENCE
 	__ASSERT_NO_MSG(arch_mem_coherent(sync));
-#endif /* CONFIG_KERNEL_COHERENCE */
+#endif
 
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_work, flush, work);
 
@@ -573,7 +567,7 @@ bool k_work_cancel_sync(struct k_work *work,
 	__ASSERT_NO_MSG(!k_is_in_isr());
 #ifdef CONFIG_KERNEL_COHERENCE
 	__ASSERT_NO_MSG(arch_mem_coherent(sync));
-#endif /* CONFIG_KERNEL_COHERENCE */
+#endif
 
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_work, cancel_sync, work, sync);
 
@@ -653,12 +647,6 @@ static void work_queue_main(void *workq_ptr, void *p2, void *p3)
 			 * submissions.
 			 */
 			(void)z_sched_wake_all(&queue->drainq, 1, NULL);
-		} else if (flag_test(&queue->flags, K_WORK_QUEUE_STOP_BIT)) {
-			/* User has requested that the queue stop. Clear the status flags and exit.
-			 */
-			flags_set(&queue->flags, 0);
-			k_spin_unlock(&lock, key);
-			return;
 		} else {
 			/* No work is available and no queue state requires
 			 * special handling.
@@ -684,16 +672,13 @@ static void work_queue_main(void *workq_ptr, void *p2, void *p3)
 		handler(work);
 
 		/* Mark the work item as no longer running and deal
-		 * with any cancellation and flushing issued while it
-		 * was running.  Clear the BUSY flag and optionally
-		 * yield to prevent starving other threads.
+		 * with any cancellation issued while it was running.
+		 * Clear the BUSY flag and optionally yield to prevent
+		 * starving other threads.
 		 */
 		key = k_spin_lock(&lock);
 
 		flag_clear(&work->flags, K_WORK_RUNNING_BIT);
-		if (flag_test(&work->flags, K_WORK_FLUSHING_BIT)) {
-			finalize_flush_locked(work);
-		}
 		if (flag_test(&work->flags, K_WORK_CANCELING_BIT)) {
 			finalize_cancel_locked(work);
 		}
@@ -757,10 +742,6 @@ void k_work_queue_start(struct k_work_q *queue,
 		k_thread_name_set(&queue->thread, cfg->name);
 	}
 
-	if ((cfg != NULL) && (cfg->essential)) {
-		queue->thread.base.user_options |= K_ESSENTIAL;
-	}
-
 	k_thread_start(&queue->thread);
 
 	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_work_queue, start, queue);
@@ -818,41 +799,6 @@ int k_work_queue_unplug(struct k_work_q *queue)
 	return ret;
 }
 
-int k_work_queue_stop(struct k_work_q *queue, k_timeout_t timeout)
-{
-	__ASSERT_NO_MSG(queue);
-
-	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_work_queue, stop, queue, timeout);
-	k_spinlock_key_t key = k_spin_lock(&lock);
-
-	if (!flag_test(&queue->flags, K_WORK_QUEUE_STARTED_BIT)) {
-		k_spin_unlock(&lock, key);
-		SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_work_queue, stop, queue, timeout, -EALREADY);
-		return -EALREADY;
-	}
-
-	if (!flag_test(&queue->flags, K_WORK_QUEUE_PLUGGED_BIT)) {
-		k_spin_unlock(&lock, key);
-		SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_work_queue, stop, queue, timeout, -EBUSY);
-		return -EBUSY;
-	}
-
-	flag_set(&queue->flags, K_WORK_QUEUE_STOP_BIT);
-	notify_queue_locked(queue);
-	k_spin_unlock(&lock, key);
-	SYS_PORT_TRACING_OBJ_FUNC_BLOCKING(k_work_queue, stop, queue, timeout);
-	if (k_thread_join(&queue->thread, timeout)) {
-		key = k_spin_lock(&lock);
-		flag_clear(&queue->flags, K_WORK_QUEUE_STOP_BIT);
-		k_spin_unlock(&lock, key);
-		SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_work_queue, stop, queue, timeout, -ETIMEDOUT);
-		return -ETIMEDOUT;
-	}
-
-	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_work_queue, stop, queue, timeout, 0);
-	return 0;
-}
-
 #ifdef CONFIG_SYS_CLOCK_EXISTS
 
 /* Timeout handler for delayable work.
@@ -908,8 +854,6 @@ static inline int work_delayable_busy_get_locked(const struct k_work_delayable *
 
 int k_work_delayable_busy_get(const struct k_work_delayable *dwork)
 {
-	__ASSERT_NO_MSG(dwork != NULL);
-
 	k_spinlock_key_t key = k_spin_lock(&lock);
 	int ret = work_delayable_busy_get_locked(dwork);
 
@@ -1007,10 +951,10 @@ static int cancel_delayable_async_locked(struct k_work_delayable *dwork)
 	return cancel_async_locked(&dwork->work);
 }
 
-int k_work_schedule_for_queue(struct k_work_q *queue, struct k_work_delayable *dwork,
-			      k_timeout_t delay)
+int k_work_schedule_for_queue(struct k_work_q *queue,
+			       struct k_work_delayable *dwork,
+			       k_timeout_t delay)
 {
-	__ASSERT_NO_MSG(queue != NULL);
 	__ASSERT_NO_MSG(dwork != NULL);
 
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_work, schedule_for_queue, queue, dwork, delay);
@@ -1031,7 +975,8 @@ int k_work_schedule_for_queue(struct k_work_q *queue, struct k_work_delayable *d
 	return ret;
 }
 
-int k_work_schedule(struct k_work_delayable *dwork, k_timeout_t delay)
+int k_work_schedule(struct k_work_delayable *dwork,
+				   k_timeout_t delay)
 {
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_work, schedule, dwork, delay);
 
@@ -1042,15 +987,15 @@ int k_work_schedule(struct k_work_delayable *dwork, k_timeout_t delay)
 	return ret;
 }
 
-int k_work_reschedule_for_queue(struct k_work_q *queue, struct k_work_delayable *dwork,
-				k_timeout_t delay)
+int k_work_reschedule_for_queue(struct k_work_q *queue,
+				 struct k_work_delayable *dwork,
+				 k_timeout_t delay)
 {
-	__ASSERT_NO_MSG(queue != NULL);
 	__ASSERT_NO_MSG(dwork != NULL);
 
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_work, reschedule_for_queue, queue, dwork, delay);
 
-	int ret;
+	int ret = 0;
 	k_spinlock_key_t key = k_spin_lock(&lock);
 
 	/* Remove any active scheduling. */
@@ -1066,7 +1011,8 @@ int k_work_reschedule_for_queue(struct k_work_q *queue, struct k_work_delayable 
 	return ret;
 }
 
-int k_work_reschedule(struct k_work_delayable *dwork, k_timeout_t delay)
+int k_work_reschedule(struct k_work_delayable *dwork,
+				     k_timeout_t delay)
 {
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_work, reschedule, dwork, delay);
 
@@ -1101,7 +1047,7 @@ bool k_work_cancel_delayable_sync(struct k_work_delayable *dwork,
 	__ASSERT_NO_MSG(!k_is_in_isr());
 #ifdef CONFIG_KERNEL_COHERENCE
 	__ASSERT_NO_MSG(arch_mem_coherent(sync));
-#endif /* CONFIG_KERNEL_COHERENCE */
+#endif
 
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_work, cancel_delayable_sync, dwork, sync);
 
@@ -1133,7 +1079,7 @@ bool k_work_flush_delayable(struct k_work_delayable *dwork,
 	__ASSERT_NO_MSG(!k_is_in_isr());
 #ifdef CONFIG_KERNEL_COHERENCE
 	__ASSERT_NO_MSG(arch_mem_coherent(sync));
-#endif /* CONFIG_KERNEL_COHERENCE */
+#endif
 
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_work, flush_delayable, dwork, sync);
 

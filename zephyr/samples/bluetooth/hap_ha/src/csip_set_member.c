@@ -5,16 +5,12 @@
  *
  *  SPDX-License-Identifier: Apache-2.0
  */
-#include <errno.h>
-#include <stddef.h>
-#include <stdint.h>
 
-#include <zephyr/autoconf.h>
-#include <zephyr/bluetooth/audio/cap.h>
-#include <zephyr/bluetooth/audio/csip.h>
-#include <zephyr/bluetooth/conn.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
+
+#include <zephyr/bluetooth/audio/cap.h>
+#include <zephyr/bluetooth/audio/csip.h>
 
 #define CSIP_SIRK_DEBUG	{ 0xcd, 0xcc, 0x72, 0xdd, 0x86, 0x8c, 0xcd, 0xce, \
 			  0x22, 0xfd, 0xa1, 0x21, 0x09, 0x7d, 0x7d, 0x45 }
@@ -45,7 +41,7 @@ int csip_set_member_init(void)
 		.set_size = 2,
 		.rank = CONFIG_HAP_HA_SET_RANK,
 		.lockable = false,
-		.sirk = CSIP_SIRK_DEBUG,
+		.set_sirk = CSIP_SIRK_DEBUG,
 		.cb = &csip_cb,
 	};
 

@@ -7,17 +7,10 @@
 
 #include <zephyr/kernel.h>
 
-#include "net_sample_common.h"
-
 /* Value of 0 will cause the IP stack to select next free port */
 #define MY_PORT 0
 
 #define PEER_PORT 4242
-
-/* Turn off the progress printing so that shell can be used.
- * Set to true if you want to see progress output.
- */
-#define PRINT_PROGRESS false
 
 #if defined(CONFIG_USERSPACE)
 #include <zephyr/app_memory/app_memdomain.h>
@@ -44,7 +37,7 @@ struct udp_control {
 	struct k_timer rx_timer;
 };
 
-struct sample_data {
+struct data {
 	const char *proto;
 
 	struct {
@@ -64,8 +57,8 @@ struct sample_data {
 };
 
 struct configs {
-	struct sample_data ipv4;
-	struct sample_data ipv6;
+	struct data ipv4;
+	struct data ipv6;
 };
 
 #if !defined(CONFIG_NET_CONFIG_PEER_IPV4_ADDR)
@@ -98,3 +91,12 @@ static inline void stop_udp(void) { }
 int start_tcp(void);
 int process_tcp(void);
 void stop_tcp(void);
+
+#if defined(CONFIG_NET_VLAN)
+int init_vlan(void);
+#else
+static inline int init_vlan(void)
+{
+	return 0;
+}
+#endif

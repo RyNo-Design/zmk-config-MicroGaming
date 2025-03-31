@@ -6,7 +6,6 @@
 """
 Simply mock for bash script to use with unit tests.
 """
-
 import sys
 import time
 from argparse import ArgumentParser

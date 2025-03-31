@@ -101,7 +101,7 @@ static int regulator_npm1100_common_init(const struct device *dev)
 	return 0;
 }
 
-static DEVICE_API(regulator, api) __unused = {
+static const __unused struct regulator_driver_api api = {
 	.set_mode = regulator_npm1100_set_mode,
 	.get_mode = regulator_npm1100_get_mode,
 };

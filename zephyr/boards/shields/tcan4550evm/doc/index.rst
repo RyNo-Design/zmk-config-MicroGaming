@@ -53,7 +53,7 @@ Pin Assignments
 Programming
 ***********
 
-Set ``--shield tcan4550evm`` when you invoke ``west build``. For example:
+Set ``-DSHIELD=tcan4550evm`` when you invoke ``west build``. For example:
 
 .. zephyr-app-commands::
    :zephyr-app: tests/drivers/can/api

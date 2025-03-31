@@ -24,5 +24,3 @@ properties:
       - "10BASE-T Full-Duplex"
       - "100BASE-T Half-Duplex"
       - "100BASE-T Full-Duplex"
-      - "1000BASE-T Half-Duplex"
-      - "1000BASE-T Full-Duplex"

@@ -32,6 +32,10 @@ LOG_MODULE_REGISTER(dsi_mcux, CONFIG_MIPI_DSI_LOG_LEVEL);
 #define DSI_DPHY_PLL_CM_MIN 16U
 #define DSI_DPHY_PLL_CM_MAX 255U
 
+/* PLL VCO output frequency max value is 1.5GHz, VCO output is (ref_clk / CN ) * CM. */
+#define DSI_DPHY_PLL_VCO_MAX MHZ(1500)
+#define DSI_DPHY_PLL_VCO_MIN (DSI_DPHY_PLL_REFCLK_CN_MIN * DSI_DPHY_PLL_CM_MIN)
+
 #define DSI_DPHY_PLL_CO_MIN 0
 #define DSI_DPHY_PLL_CO_MAX 3
 
@@ -300,7 +304,7 @@ static ssize_t dsi_mcux_transfer(const struct device *dev, uint8_t channel,
 
 }
 
-static DEVICE_API(mipi_dsi, dsi_mcux_api) = {
+static struct mipi_dsi_driver_api dsi_mcux_api = {
 	.attach = dsi_mcux_attach,
 	.transfer = dsi_mcux_transfer,
 };

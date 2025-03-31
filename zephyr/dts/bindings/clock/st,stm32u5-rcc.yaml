@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 description: |
-  STM32U5 RCC (Reset and Clock controller).
-
+  STM32U5 Reset and Clock controller node.
   For more description confere st,stm32-rcc.yaml
 
 compatible: "st,stm32u5-rcc"

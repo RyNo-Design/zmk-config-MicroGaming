@@ -49,7 +49,6 @@ _skip_\@:
 #endif /* CONFIG_ARM_ON_ENTER_CPU_IDLE_HOOK */
 .endm
 
-#ifndef CONFIG_ARCH_HAS_CUSTOM_CPU_IDLE
 SECTION_FUNC(TEXT, arch_cpu_idle)
 #ifdef CONFIG_TRACING
 	push	{r0, lr}
@@ -69,9 +68,6 @@ SECTION_FUNC(TEXT, arch_cpu_idle)
 
 	bx	lr
 
-#endif
-
-#ifndef CONFIG_ARCH_HAS_CUSTOM_CPU_ATOMIC_IDLE
 SECTION_FUNC(TEXT, arch_cpu_atomic_idle)
 #ifdef CONFIG_TRACING
 	push	{r0, lr}
@@ -97,4 +93,3 @@ SECTION_FUNC(TEXT, arch_cpu_atomic_idle)
 _irq_disabled:
 
 	bx	lr
-#endif

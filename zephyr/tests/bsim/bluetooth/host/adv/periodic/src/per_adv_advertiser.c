@@ -3,28 +3,26 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-#include <errno.h>
 #include <zephyr/kernel.h>
-#include <zephyr/types.h>
-#include <zephyr/sys_clock.h>
-#include <zephyr/sys/printk.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/bluetooth/gatt.h>
 
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
+#include "bs_types.h"
+#include "bs_tracing.h"
+#include "time_machine.h"
+#include "bstests.h"
+
+#include <zephyr/types.h>
+#include <zephyr/sys/printk.h>
+
+#include <zephyr/bluetooth/bluetooth.h>
+
 #include "common.h"
 
 extern enum bst_result_t bst_result;
 
 static struct bt_conn *g_conn;
 
-DEFINE_FLAG_STATIC(flag_connected);
-DEFINE_FLAG_STATIC(flag_bonded);
+CREATE_FLAG(flag_connected);
+CREATE_FLAG(flag_bonded);
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
@@ -33,7 +31,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	if (err != BT_HCI_ERR_SUCCESS) {
-		TEST_FAIL("Failed to connect to %s: %u", addr, err);
+		FAIL("Failed to connect to %s: %u\n", addr, err);
 		return;
 	}
 
@@ -77,7 +75,7 @@ static void common_init(void)
 	err = bt_enable(NULL);
 
 	if (err) {
-		TEST_FAIL("Bluetooth init failed: %d", err);
+		FAIL("Bluetooth init failed: %d\n", err);
 		return;
 	}
 	printk("Bluetooth initialized\n");
@@ -91,7 +89,7 @@ static void create_per_adv_set(struct bt_le_ext_adv **adv)
 	int err;
 
 	printk("Creating extended advertising set...");
-	err = bt_le_ext_adv_create(BT_LE_EXT_ADV_NCONN, NULL, adv);
+	err = bt_le_ext_adv_create(BT_LE_EXT_ADV_NCONN_NAME, NULL, adv);
 	if (err) {
 		printk("Failed to create advertising set: %d\n", err);
 		return;
@@ -107,37 +105,13 @@ static void create_per_adv_set(struct bt_le_ext_adv **adv)
 	}
 	printk("done.\n");
 }
-
-#if defined(CONFIG_BT_CTLR_PHY_CODED)
-static void create_per_adv_set_coded(struct bt_le_ext_adv **adv)
-{
-	int err;
-
-	printk("Creating coded PHY extended advertising set...");
-	err = bt_le_ext_adv_create(BT_LE_EXT_ADV_CODED_NCONN, NULL, adv);
-	if (err) {
-		printk("Failed to create advertising set: %d\n", err);
-		return;
-	}
-	printk("done.\n");
-
-	printk("Setting periodic advertising parameters...");
-	err = bt_le_per_adv_set_param(*adv, BT_LE_PER_ADV_DEFAULT);
-	if (err) {
-		printk("Failed to set periodic advertising parameters: %d\n",
-		       err);
-		return;
-	}
-	printk("done.\n");
-}
-#endif /* CONFIG_BT_CTLR_PHY_CODED */
 
 static void create_conn_adv_set(struct bt_le_ext_adv **adv)
 {
 	int err;
 
 	printk("Creating connectable extended advertising set...");
-	err = bt_le_ext_adv_create(BT_LE_EXT_ADV_CONN, NULL, adv);
+	err = bt_le_ext_adv_create(BT_LE_EXT_ADV_CONN_NAME, NULL, adv);
 	if (err) {
 		printk("Failed to create advertising set: %d\n", err);
 		return;
@@ -251,33 +225,8 @@ static void main_per_adv_advertiser(void)
 	delete_adv_set(per_adv);
 	per_adv = NULL;
 
-	TEST_PASS("Periodic advertiser passed");
+	PASS("Periodic advertiser passed\n");
 }
-
-#if defined(CONFIG_BT_CTLR_PHY_CODED)
-static void main_per_adv_advertiser_coded(void)
-{
-	struct bt_le_ext_adv *per_adv;
-
-	common_init();
-
-	create_per_adv_set_coded(&per_adv);
-
-	start_per_adv_set(per_adv);
-	start_ext_adv_set(per_adv);
-
-	/* Advertise for a bit */
-	k_sleep(K_SECONDS(10));
-
-	stop_per_adv_set(per_adv);
-	stop_ext_adv_set(per_adv);
-
-	delete_adv_set(per_adv);
-	per_adv = NULL;
-
-	TEST_PASS("Periodic advertiser coded PHY passed");
-}
-#endif /* CONFIG_BT_CTLR_PHY_CODED */
 
 static void main_per_adv_conn_advertiser(void)
 {
@@ -307,7 +256,7 @@ static void main_per_adv_conn_advertiser(void)
 	delete_adv_set(conn_adv);
 	conn_adv = NULL;
 
-	TEST_PASS("Periodic advertiser passed");
+	PASS("Periodic advertiser passed\n");
 }
 
 static void main_per_adv_conn_privacy_advertiser(void)
@@ -343,7 +292,7 @@ static void main_per_adv_conn_privacy_advertiser(void)
 	delete_adv_set(conn_adv);
 	conn_adv = NULL;
 
-	TEST_PASS("Periodic advertiser passed");
+	PASS("Periodic advertiser passed\n");
 }
 
 static void main_per_adv_long_data_advertiser(void)
@@ -368,7 +317,7 @@ static void main_per_adv_long_data_advertiser(void)
 	delete_adv_set(per_adv);
 	per_adv = NULL;
 #endif
-	TEST_PASS("Periodic long data advertiser passed");
+	PASS("Periodic long data advertiser passed\n");
 }
 
 static const struct bst_test_instance per_adv_advertiser[] = {
@@ -376,32 +325,32 @@ static const struct bst_test_instance per_adv_advertiser[] = {
 		.test_id = "per_adv_advertiser",
 		.test_descr = "Basic periodic advertising test. "
 			      "Will just start periodic advertising.",
+		.test_post_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = main_per_adv_advertiser
 	},
-#if defined(CONFIG_BT_CTLR_PHY_CODED)
-	{
-		.test_id = "per_adv_advertiser_coded_phy",
-		.test_descr = "Basic periodic advertising test on Coded PHY. "
-			      "Advertiser and periodic advertiser uses Coded PHY",
-		.test_main_f = main_per_adv_advertiser_coded
-	},
-#endif /* CONFIG_BT_CTLR_PHY_CODED */
 	{
 		.test_id = "per_adv_conn_advertiser",
 		.test_descr = "Periodic advertising test with concurrent ACL "
 			      "and PA sync.",
+		.test_post_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = main_per_adv_conn_advertiser
 	},
 	{
 		.test_id = "per_adv_conn_privacy_advertiser",
 		.test_descr = "Periodic advertising test with concurrent ACL "
 			      "with bonding and PA sync.",
+		.test_post_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = main_per_adv_conn_privacy_advertiser
 	},
 	{
 		.test_id = "per_adv_long_data_advertiser",
 		.test_descr = "Periodic advertising test with a longer data length. "
-			      "To test the reassembly of large data packets",
+			      "To test the syncers reassembly of large data packets",
+		.test_post_init_f = test_init,
+		.test_tick_f = test_tick,
 		.test_main_f = main_per_adv_long_data_advertiser
 	},
 	BSTEST_END_MARKER

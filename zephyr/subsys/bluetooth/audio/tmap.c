@@ -1,40 +1,29 @@
 /*
  * Copyright 2023 NXP
- * Copyright (c) 2024 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <errno.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
-#include <sys/types.h>
+#include <zephyr/kernel.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/types.h>
 
-#include <zephyr/autoconf.h>
-#include <zephyr/bluetooth/att.h>
-#include <zephyr/bluetooth/audio/tmap.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
+#include <stdlib.h>
+
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/device.h>
-#include <zephyr/init.h>
-#include <zephyr/kernel.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/sys/byteorder.h>
-#include <zephyr/sys/check.h>
-#include <zephyr/sys/util_macro.h>
-#include <zephyr/types.h>
 
 #include "audio_internal.h"
+#include <zephyr/bluetooth/audio/tmap.h>
+#include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(bt_tmap, CONFIG_BT_TMAP_LOG_LEVEL);
 
 /* Hex value if all TMAP role bits are set */
-#define TMAP_ALL_ROLES                                                                             \
-	(BT_TMAP_ROLE_CG | BT_TMAP_ROLE_CT | BT_TMAP_ROLE_UMS | BT_TMAP_ROLE_UMR |                 \
-	 BT_TMAP_ROLE_BMS | BT_TMAP_ROLE_BMR)
+#define TMAP_ALL_ROLES		0x3F
 
 static uint16_t tmap_role;
 static const struct bt_tmap_cb *cb;
@@ -68,7 +57,7 @@ uint8_t tmap_char_read(struct bt_conn *conn, uint8_t err,
 		return BT_GATT_ITER_STOP;
 	}
 
-	/* Extract the TMAP role of the peer and inform application of the value found */
+	/* Extract the TMAP role of the peer and inform application fo the value found */
 	peer_role = sys_get_le16(data);
 
 	if ((peer_role > 0U) && (peer_role <= TMAP_ALL_ROLES)) {
@@ -127,7 +116,7 @@ static uint8_t discover_func(struct bt_conn *conn, const struct bt_gatt_attr *at
 		/* Discovered TMAP Role characteristic - read value */
 		err = bt_gatt_read(conn, &read_params[0]);
 		if (err != 0) {
-			LOG_DBG("Could not read peer TMAP Role");
+			printk("Could not read peer TMAP Role\n");
 		}
 	} else {
 		return BT_GATT_ITER_CONTINUE;
@@ -160,60 +149,9 @@ static ssize_t read_role(struct bt_conn *conn,
 static struct bt_gatt_attr svc_attrs[] = { BT_TMAS_SERVICE_DEFINITION };
 static struct bt_gatt_service tmas;
 
-static bool valid_tmap_role(enum bt_tmap_role role)
-{
-	if (role == 0 || (role & TMAP_ALL_ROLES) != role) {
-		LOG_DBG("Invalid role %d", role);
-	}
-
-	if ((role & BT_TMAP_ROLE_CG) != 0 && !IS_ENABLED(CONFIG_BT_TMAP_CG_SUPPORTED)) {
-		LOG_DBG("Device does not support the CG role");
-
-		return false;
-	}
-
-	if ((role & BT_TMAP_ROLE_CT) != 0 && !IS_ENABLED(CONFIG_BT_TMAP_CT_SUPPORTED)) {
-		LOG_DBG("Device does not support the CT role");
-
-		return false;
-	}
-
-	if ((role & BT_TMAP_ROLE_UMS) != 0 && !IS_ENABLED(CONFIG_BT_TMAP_UMS_SUPPORTED)) {
-		LOG_DBG("Device does not support the UMS role");
-
-		return false;
-	}
-
-	if ((role & BT_TMAP_ROLE_UMR) != 0 && !IS_ENABLED(CONFIG_BT_TMAP_UMR_SUPPORTED)) {
-		LOG_DBG("Device does not support the UMR role");
-
-		return false;
-	}
-
-	if ((role & BT_TMAP_ROLE_BMS) != 0 && !IS_ENABLED(CONFIG_BT_TMAP_BMS_SUPPORTED)) {
-		LOG_DBG("Device does not support the BMS role");
-
-		return false;
-	}
-
-	if ((role & BT_TMAP_ROLE_BMR) != 0 && !IS_ENABLED(CONFIG_BT_TMAP_BMR_SUPPORTED)) {
-		LOG_DBG("Device does not support the BMR role");
-
-		return false;
-	}
-
-	return true;
-}
-
 int bt_tmap_register(enum bt_tmap_role role)
 {
 	int err;
-
-	CHECKIF(!valid_tmap_role(role)) {
-		LOG_DBG("Invalid role: %d", role);
-
-		return -EINVAL;
-	}
 
 	tmas = (struct bt_gatt_service)BT_GATT_SERVICE(svc_attrs);
 

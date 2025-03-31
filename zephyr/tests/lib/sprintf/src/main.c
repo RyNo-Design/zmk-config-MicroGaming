@@ -12,7 +12,6 @@
  */
 
 #include <zephyr/ztest.h>
-#include <zephyr/test_toolchain.h>
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -500,6 +499,7 @@ ZTEST(sprintf, test_vsprintf)
 
 ZTEST(sprintf, test_snprintf)
 {
+#if defined(__GNUC__) && __GNUC__ >= 7
 	/*
 	 * GCC 7 and newer are smart enough to realize that in the statements
 	 * below, the output will not fit in 0 or 4 bytes, but that it requires
@@ -508,7 +508,9 @@ ZTEST(sprintf, test_snprintf)
 	 * actually testing that snprintf's return value is what it should be
 	 * while truncating the output. So let's suppress this warning here.
 	 */
-	TOOLCHAIN_DISABLE_GCC_WARNING(TOOLCHAIN_WARNING_FORMAT_TRUNCATION);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 
 	int len;
 	char buffer[100];
@@ -533,7 +535,9 @@ ZTEST(sprintf, test_snprintf)
 		     "snprintf(%%x).  Expected '%s', got '%s'\n",
 		     "dea", buffer);
 
-	TOOLCHAIN_ENABLE_GCC_WARNING(TOOLCHAIN_WARNING_FORMAT_TRUNCATION);
+#if defined(__GNUC__) && __GNUC__ >= 7
+#pragma GCC diagnostic pop
+#endif
 }
 
 /**
@@ -750,8 +754,8 @@ ZTEST(sprintf, test_sprintf_string)
 		     "Expected 'short string', got '%s'\n", buffer);
 
 	sprintf(buffer, "%s", REALLY_LONG_STRING);
-	zassert_str_equal(buffer, REALLY_LONG_STRING,
-			  "sprintf(%%s) of REALLY_LONG_STRING doesn't match!\n");
+	zassert_true((strcmp(buffer, REALLY_LONG_STRING) == 0),
+		     "sprintf(%%s) of REALLY_LONG_STRING doesn't match!\n");
 }
 
 
@@ -905,10 +909,10 @@ ZTEST(sprintf, test_fwrite)
 	ret = fwrite("This 3", 0, 4, stdout);
 	zassert_equal(ret, 0, "fwrite failed!");
 
-	ret = fwrite("This 3", 1, 4, stdout);
+	ret = fwrite("This 3", 4, 4, stdout);
 	zassert_equal(ret, 4, "fwrite failed!");
 
-	ret = fwrite("This 3", 1, 4, stdin);
+	ret = fwrite("This 3", 4, 4, stdin);
 	zassert_equal(ret, 0, "fwrite failed!");
 }
 

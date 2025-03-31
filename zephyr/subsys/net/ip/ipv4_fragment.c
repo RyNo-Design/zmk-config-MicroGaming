@@ -23,7 +23,6 @@ LOG_MODULE_DECLARE(net_ipv4, CONFIG_NET_IPV4_LOG_LEVEL);
 #include "ipv4.h"
 #include "route.h"
 #include "net_stats.h"
-#include "pmtu.h"
 
 /* Timeout for various buffer allocations in this file. */
 #define NET_BUF_TIMEOUT K_MSEC(100)
@@ -204,7 +203,6 @@ static void reassemble_packet(struct net_ipv4_reassembly *reass)
 	ipv4_hdr->chksum = net_calc_chksum_ipv4(pkt);
 
 	net_pkt_set_data(pkt, &ipv4_access);
-	net_pkt_set_ip_reassembled(pkt, true);
 
 	LOG_DBG("New pkt %p IPv4 len is %d bytes", pkt, net_pkt_get_len(pkt));
 
@@ -441,8 +439,6 @@ static int send_ipv4_fragment(struct net_pkt *pkt, uint16_t rand_id, uint16_t fi
 	net_pkt_cursor_backup(pkt, &cur_pkt);
 	net_pkt_cursor_backup(frag_pkt, &cur);
 
-	net_pkt_set_ll_proto_type(frag_pkt, net_pkt_ll_proto_type(pkt));
-
 	/* Copy the original IPv4 headers back to the fragment packet */
 	if (net_pkt_copy(frag_pkt, pkt, net_pkt_ip_hdr_len(pkt))) {
 		goto fail;
@@ -470,7 +466,7 @@ static int send_ipv4_fragment(struct net_pkt *pkt, uint16_t rand_id, uint16_t fi
 
 	ipv4_hdr = (struct net_ipv4_hdr *)net_pkt_get_data(frag_pkt, &ipv4_access);
 	if (!ipv4_hdr) {
-		goto fail;
+		return -ENOBUFS;
 	}
 
 	memcpy(ipv4_hdr->id, &rand_id, sizeof(rand_id));
@@ -484,18 +480,14 @@ static int send_ipv4_fragment(struct net_pkt *pkt, uint16_t rand_id, uint16_t fi
 	ipv4_hdr->len = htons((fit_len + net_pkt_ip_hdr_len(pkt)));
 
 	ipv4_hdr->chksum = 0;
-	ipv4_hdr->chksum = net_calc_chksum_ipv4(frag_pkt);
-
-	net_pkt_set_chksum_done(frag_pkt, true);
+	if (net_if_need_calc_tx_checksum(net_pkt_iface(frag_pkt))) {
+		ipv4_hdr->chksum = net_calc_chksum_ipv4(frag_pkt);
+	}
 
 	net_pkt_set_data(frag_pkt, &ipv4_access);
 
 	net_pkt_set_overwrite(frag_pkt, false);
 	net_pkt_cursor_restore(frag_pkt, &cur);
-
-	if (final) {
-		net_pkt_set_context(frag_pkt, net_pkt_context(pkt));
-	}
 
 	/* If everything has been ok so far, we can send the packet. */
 	ret = net_send_data(frag_pkt);
@@ -541,7 +533,7 @@ int net_ipv4_send_fragmented_pkt(struct net_if *iface, struct net_pkt *pkt,
 	}
 
 	/* Generate a random ID to be used for packet identification, ensuring that it is not 0 */
-	uint16_t rand_id = sys_rand16_get();
+	uint16_t rand_id = (uint16_t)sys_rand32_get();
 
 	if (rand_id == 0) {
 		rand_id = 1;
@@ -562,35 +554,6 @@ int net_ipv4_send_fragmented_pkt(struct net_if *iface, struct net_pkt *pkt,
 
 	pkt_len -= net_pkt_ip_hdr_len(pkt);
 
-	/* Calculate the L4 checksum (if not done already) before the fragmentation. */
-	if (!net_pkt_is_chksum_done(pkt)) {
-		struct net_pkt_cursor backup;
-
-		net_pkt_cursor_backup(pkt, &backup);
-		net_pkt_acknowledge_data(pkt, &frag_access);
-
-		switch (frag_hdr->proto) {
-		case IPPROTO_ICMP:
-			ret = net_icmpv4_finalize(pkt, true);
-			break;
-		case IPPROTO_TCP:
-			ret = net_tcp_finalize(pkt, true);
-			break;
-		case IPPROTO_UDP:
-			ret = net_udp_finalize(pkt, true);
-			break;
-		default:
-			ret = 0;
-			break;
-		}
-
-		if (ret < 0) {
-			return ret;
-		}
-
-		net_pkt_cursor_restore(pkt, &backup);
-	}
-
 	while (frag_offset < pkt_len) {
 		bool final = false;
 
@@ -610,7 +573,7 @@ int net_ipv4_send_fragmented_pkt(struct net_if *iface, struct net_pkt *pkt,
 	return 0;
 }
 
-enum net_verdict net_ipv4_prepare_for_send_fragment(struct net_pkt *pkt)
+enum net_verdict net_ipv4_prepare_for_send(struct net_pkt *pkt)
 {
 	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(ipv4_access, struct net_ipv4_hdr);
 	struct net_ipv4_hdr *ip_hdr;
@@ -627,26 +590,10 @@ enum net_verdict net_ipv4_prepare_for_send_fragment(struct net_pkt *pkt)
 	 * and we can skip other checks.
 	 */
 	if (ip_hdr->id[0] == 0 && ip_hdr->id[1] == 0) {
+		uint16_t mtu = net_if_get_mtu(net_pkt_iface(pkt));
 		size_t pkt_len = net_pkt_get_len(pkt);
-		uint16_t mtu;
 
-		if (IS_ENABLED(CONFIG_NET_IPV4_PMTU)) {
-			struct sockaddr_in dst = {
-				.sin_family = AF_INET,
-				.sin_addr = *((struct in_addr *)ip_hdr->dst),
-			};
-
-			ret = net_pmtu_get_mtu((struct sockaddr *)&dst);
-			if (ret <= 0) {
-				goto use_interface_mtu;
-			}
-
-			mtu = ret;
-		} else {
-use_interface_mtu:
-			mtu = net_if_get_mtu(net_pkt_iface(pkt));
-			mtu = MAX(NET_IPV4_MTU, mtu);
-		}
+		mtu = MAX(NET_IPV4_MTU, mtu);
 
 		if (pkt_len > mtu) {
 			ret = net_ipv4_send_fragmented_pkt(net_pkt_iface(pkt), pkt, pkt_len, mtu);
@@ -654,15 +601,16 @@ use_interface_mtu:
 			if (ret < 0) {
 				LOG_DBG("Cannot fragment IPv4 pkt (%d)", ret);
 
-				if (ret == -EPERM) {
-					/* Try to send the packet if the don't fragment flag is set
+				if (ret == -ENOMEM || ret == -ENOBUFS || ret == -EPERM) {
+					/* Try to send the packet if we could not allocate enough
+					 * network packets or if the don't fragment flag is set
 					 * and hope the original large packet can be sent OK.
 					 */
 					goto ignore_frag_error;
+				} else {
+					/* Other error, drop the packet */
+					return NET_DROP;
 				}
-
-				/* Other error, drop the packet */
-				return NET_DROP;
 			}
 
 			/* We need to unref here because we simulate the packet being sent. */

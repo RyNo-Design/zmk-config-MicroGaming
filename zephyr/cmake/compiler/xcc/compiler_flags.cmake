@@ -15,6 +15,3 @@ set_compiler_property(PROPERTY no_position_independent "")
 
 # Remove after testing that -Wshadow works
 set_compiler_property(PROPERTY warning_shadow_variables)
-
-# xcc does not recognize -fno-printf-return-value
-set_compiler_property(PROPERTY no_printf_return_value)

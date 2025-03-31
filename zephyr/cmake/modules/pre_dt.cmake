@@ -11,6 +11,8 @@ include(extensions)
 # Outcome:
 # The following variables will be defined when this CMake module completes:
 #
+# - CMAKE_DTS_PREPROCESSOR: the path to the preprocessor to use
+#   for devicetree files
 # - DTS_ROOT: a deduplicated list of places where devicetree
 #   implementation files (like bindings, vendor prefixes, etc.) are
 #   found
@@ -60,10 +62,6 @@ function(pre_dt_module_run)
   # Finalize DTS_ROOT.
   list(REMOVE_DUPLICATES DTS_ROOT)
 
-  foreach(arch ${ARCH_V2_NAME_LIST})
-    list(APPEND arch_include dts/${arch})
-  endforeach()
-
   # Finalize DTS_ROOT_SYSTEM_INCLUDE_DIRS.
   set(DTS_ROOT_SYSTEM_INCLUDE_DIRS)
   foreach(dts_root ${DTS_ROOT})
@@ -71,7 +69,7 @@ function(pre_dt_module_run)
         include
         include/zephyr
         dts/common
-        ${arch_include}
+        dts/${ARCH}
         dts
         )
       get_filename_component(full_path ${dts_root}/${dts_root_path} REALPATH)

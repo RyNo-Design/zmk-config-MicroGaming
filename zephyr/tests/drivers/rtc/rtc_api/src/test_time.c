@@ -27,9 +27,6 @@ ZTEST(rtc_api, test_set_get_time)
 
 	gmtime_r(&timer_set, (struct tm *)(&datetime_set));
 
-	datetime_set.tm_isdst = -1;
-	datetime_set.tm_nsec = 0;
-
 	memset(&datetime_get, 0xFF, sizeof(datetime_get));
 
 	zassert_equal(rtc_set_time(rtc, &datetime_set), 0, "Failed to set time");
@@ -60,8 +57,8 @@ ZTEST(rtc_api, test_set_get_time)
 
 	zassert_equal(datetime_get.tm_isdst, -1, "Invalid tm_isdst");
 
-	zassert_true((datetime_get.tm_nsec > -1) && (datetime_get.tm_nsec < 1000000000),
-		     "Invalid tm_nsec");
+	zassert_true((datetime_get.tm_nsec > -1) && (datetime_get.tm_yday < 1000000000),
+		     "Invalid tm_yday");
 
 	timer_get = timeutil_timegm((struct tm *)(&datetime_get));
 

@@ -8,25 +8,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <errno.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-
-#include <zephyr/autoconf.h>
-#include <zephyr/bluetooth/addr.h>
-#include <zephyr/bluetooth/audio/tbs.h>
-#include <zephyr/bluetooth/conn.h>
+#include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
-#include <zephyr/shell/shell_string_conv.h>
-#include <zephyr/sys/util_macro.h>
 
-#include "host/shell/bt.h"
+#include <zephyr/bluetooth/audio/tbs.h>
+
+#include "shell/bt.h"
 
 static struct bt_conn *tbs_authorized_conn;
+static bool cbs_registered;
 
 static bool tbs_authorize_cb(struct bt_conn *conn)
 {
@@ -59,63 +50,12 @@ static int cmd_tbs_authorize(const struct shell *sh, size_t argc, char *argv[])
 	return 0;
 }
 
-static int cmd_tbs_init(const struct shell *sh, size_t argc, char *argv[])
+static int cmd_tbs_init(void)
 {
-	static bool registered;
-
-	if (registered) {
-		shell_info(sh, "Already initialized");
-
-		return -ENOEXEC;
+	if (!cbs_registered) {
+		bt_tbs_register_cb(&tbs_cbs);
+		cbs_registered = true;
 	}
-
-	const struct bt_tbs_register_param gtbs_param = {
-		.provider_name = "Generic TBS",
-		.uci = "un000",
-		.uri_schemes_supported = "tel,skype",
-		.gtbs = true,
-		.authorization_required = false,
-		.technology = BT_TBS_TECHNOLOGY_3G,
-		.supported_features = CONFIG_BT_TBS_SUPPORTED_FEATURES,
-	};
-	int err;
-
-	err = bt_tbs_register_bearer(&gtbs_param);
-	if (err < 0) {
-		shell_error(sh, "Failed to register GTBS: %d", err);
-
-		return -ENOEXEC;
-	}
-
-	shell_info(sh, "Registered GTBS");
-
-	for (int i = 0; i < CONFIG_BT_TBS_BEARER_COUNT; i++) {
-		char prov_name[22]; /* Enough to store "Telephone Bearer #255" */
-		const struct bt_tbs_register_param tbs_param = {
-			.provider_name = prov_name,
-			.uci = "un000",
-			.uri_schemes_supported = "tel,skype",
-			.gtbs = false,
-			.authorization_required = false,
-			/* Set different technologies per bearer */
-			.technology = (i % BT_TBS_TECHNOLOGY_WCDMA) + 1,
-			.supported_features = CONFIG_BT_TBS_SUPPORTED_FEATURES,
-		};
-
-		snprintf(prov_name, sizeof(prov_name), "Telephone Bearer #%d", i);
-
-		err = bt_tbs_register_bearer(&tbs_param);
-		if (err < 0) {
-			shell_error(sh, "Failed to register TBS[%d]: %d", i, err);
-
-			return -ENOEXEC;
-		}
-
-		shell_info(sh, "Registered TBS[%d] with index %u", i, (uint8_t)err);
-	}
-
-	bt_tbs_register_cb(&tbs_cbs);
-	registered = true;
 
 	return 0;
 }
@@ -260,7 +200,7 @@ static int cmd_tbs_originate(const struct shell *sh, size_t argc, char *argv[])
 			return -ENOEXEC;
 		}
 	} else {
-		service_index = BT_TBS_GTBS_INDEX;
+		service_index = 0U;
 	}
 
 	result = bt_tbs_originate((uint8_t)service_index, argv[argc - 1],
@@ -453,7 +393,7 @@ static int cmd_tbs_incoming(const struct shell *sh, size_t argc, char *argv[])
 			}
 		}
 	} else {
-		service_index = BT_TBS_GTBS_INDEX;
+		service_index = 0U;
 	}
 
 	result = bt_tbs_remote_incoming((uint8_t)service_index,
@@ -496,7 +436,7 @@ static int cmd_tbs_set_bearer_provider_name(const struct shell *sh, size_t argc,
 			}
 		}
 	} else {
-		service_index = BT_TBS_GTBS_INDEX;
+		service_index = 0U;
 	}
 
 	result = bt_tbs_set_bearer_provider_name((uint8_t)service_index,
@@ -536,7 +476,7 @@ static int cmd_tbs_set_bearer_technology(const struct shell *sh, size_t argc,
 			}
 		}
 	} else {
-		service_index = BT_TBS_GTBS_INDEX;
+		service_index = 0U;
 	}
 
 	technology = shell_strtoul(argv[argc - 1], 0, &result);
@@ -589,7 +529,7 @@ static int cmd_tbs_set_bearer_signal_strength(const struct shell *sh,
 			}
 		}
 	} else {
-		service_index = BT_TBS_GTBS_INDEX;
+		service_index = 0U;
 	}
 
 	signal_strength = shell_strtoul(argv[argc - 1], 0, &result);
@@ -643,7 +583,7 @@ static int cmd_tbs_set_status_flags(const struct shell *sh, size_t argc,
 			}
 		}
 	} else {
-		service_index = BT_TBS_GTBS_INDEX;
+		service_index = 0U;
 	}
 
 	status_flags = shell_strtoul(argv[argc - 1], 0, &result);
@@ -695,7 +635,7 @@ static int cmd_tbs_set_uri_scheme_list(const struct shell *sh, size_t argc,
 			}
 		}
 	} else {
-		service_index = BT_TBS_GTBS_INDEX;
+		service_index = 0U;
 	}
 
 	result = bt_tbs_set_uri_scheme_list((uint8_t)service_index,

@@ -1,21 +1,14 @@
 # Copyright (c) 2022 Nordic Semiconductor ASA
-# Copyright (c) 2024 Arm Limited (or its affiliates). All rights reserved.
-#
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+
 from pathlib import Path
-
-import yaml
-
-try:
-    from yaml import CSafeLoader as SafeLoader
-except ImportError:
-    from yaml import SafeLoader
+from yaml import safe_load
+from dataclasses import dataclass, field
 
 
 logger = logging.getLogger(__name__)
@@ -28,17 +21,15 @@ class QuarantineException(Exception):
 class Quarantine:
     """Handle tests under quarantine."""
 
-    def __init__(self, quarantine_list=None) -> None:
-        if quarantine_list is None:
-            quarantine_list = []
+    def __init__(self, quarantine_list=[]) -> None:
         self.quarantine = QuarantineData()
         for quarantine_file in quarantine_list:
             self.quarantine.extend(QuarantineData.load_data_from_yaml(quarantine_file))
 
-    def get_matched_quarantine(self, testname, platform, architecture, simulator):
-        qelem = self.quarantine.get_matched_quarantine(testname, platform, architecture, simulator)
+    def get_matched_quarantine(self, testname, platform, architecture, simulation):
+        qelem = self.quarantine.get_matched_quarantine(testname, platform, architecture, simulation)
         if qelem:
-            logger.debug(f'{testname} quarantined with reason: {qelem.comment}')
+            logger.debug('%s quarantined with reason: %s' % (testname, qelem.comment))
             return qelem.comment
         return None
 
@@ -96,8 +87,8 @@ class QuarantineData:
     @classmethod
     def load_data_from_yaml(cls, filename: str | Path) -> QuarantineData:
         """Load quarantine from yaml file."""
-        with open(filename, encoding='UTF-8') as yaml_fd:
-            qlist_raw_data: list[dict] = yaml.load(yaml_fd, Loader=SafeLoader)
+        with open(filename, 'r', encoding='UTF-8') as yaml_fd:
+            qlist_raw_data: list[dict] = safe_load(yaml_fd)
         try:
             if not qlist_raw_data:
                 # in case of loading empty quarantine file
@@ -115,7 +106,7 @@ class QuarantineData:
                                scenario: str,
                                platform: str,
                                architecture: str,
-                               simulator_name: str) -> QuarantineElement | None:
+                               simulation: str) -> QuarantineElement | None:
         """Return quarantine element if test is matched to quarantine rules"""
         for qelem in self.qlist:
             matched: bool = False
@@ -125,15 +116,11 @@ class QuarantineData:
             if (qelem.platforms
                     and (matched := _is_element_matched(platform, qelem.re_platforms)) is False):
                 continue
-            if (
-                qelem.architectures
-                and (matched := _is_element_matched(architecture, qelem.re_architectures)) is False
-            ):
+            if (qelem.architectures
+                    and (matched := _is_element_matched(architecture, qelem.re_architectures)) is False):
                 continue
-            if (
-                qelem.simulations
-                and (matched := _is_element_matched(simulator_name, qelem.re_simulations)) is False
-            ):
+            if (qelem.simulations
+                    and (matched := _is_element_matched(simulation, qelem.re_simulations)) is False):
                 continue
 
             if matched:
@@ -143,4 +130,7 @@ class QuarantineData:
 
 def _is_element_matched(element: str, list_of_elements: list[re.Pattern]) -> bool:
     """Return True if given element is matching to any of elements from the list"""
-    return any(pattern.fullmatch(element) for pattern in list_of_elements)
+    for pattern in list_of_elements:
+        if pattern.fullmatch(element):
+            return True
+    return False

@@ -15,7 +15,6 @@ LOG_MODULE_REGISTER(cat1_spi);
 
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/drivers/spi.h>
-#include <zephyr/drivers/spi/rtio.h>
 #include <zephyr/kernel.h>
 
 #include <cyhal_scb_common.h>
@@ -45,14 +44,11 @@ struct ifx_cat1_spi_data {
 
 static int32_t get_hw_block_num(CySCB_Type *reg_addr)
 {
-	extern const uint8_t _CYHAL_SCB_BASE_ADDRESS_INDEX[_SCB_ARRAY_SIZE];
-	extern CySCB_Type *const _CYHAL_SCB_BASE_ADDRESSES[_SCB_ARRAY_SIZE];
-
 	uint32_t i;
 
 	for (i = 0u; i < _SCB_ARRAY_SIZE; i++) {
 		if (_CYHAL_SCB_BASE_ADDRESSES[i] == reg_addr) {
-			return _CYHAL_SCB_BASE_ADDRESS_INDEX[i];
+			return i;
 		}
 	}
 
@@ -290,13 +286,10 @@ static int ifx_cat1_spi_release(const struct device *dev, const struct spi_confi
 	return 0;
 }
 
-static DEVICE_API(spi, ifx_cat1_spi_api) = {
+static const struct spi_driver_api ifx_cat1_spi_api = {
 	.transceive = ifx_cat1_spi_transceive_sync,
 #if defined(CONFIG_SPI_ASYNC)
 	.transceive_async = ifx_cat1_spi_transceive_async,
-#endif
-#ifdef CONFIG_SPI_RTIO
-	.iodev_submit = spi_rtio_iodev_default_submit,
 #endif
 	.release = ifx_cat1_spi_release,
 };
@@ -335,21 +328,33 @@ static int ifx_cat1_spi_init(const struct device *dev)
 		.reg_addr = (CySCB_Type *)DT_INST_REG_ADDR(n),                                     \
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                         \
 		.scb_spi_config =                                                                  \
-			{                                                                          \
-				.spiMode = CY_SCB_SPI_MASTER,       /* overwrite by cfg  */        \
-				.sclkMode = CY_SCB_SPI_CPHA0_CPOL0, /* overwrite by cfg  */        \
-				.rxDataWidth = 8,                   /* overwrite by cfg  */        \
-				.txDataWidth = 8,                   /* overwrite by cfg  */        \
-				.enableMsbFirst = true,             /* overwrite by cfg  */        \
-				.subMode = CY_SCB_SPI_MOTOROLA,                                    \
-				.oversample = IFX_CAT1_SPI_DEFAULT_OVERSAMPLE,                     \
-				.enableMisoLateSample = true,                                      \
-				.ssPolarity = CY_SCB_SPI_ACTIVE_LOW,                               \
-			},                                                                         \
+			{.spiMode = CY_SCB_SPI_MASTER,       /* overwrite by cfg  */               \
+			 .sclkMode = CY_SCB_SPI_CPHA0_CPOL0, /* overwrite by cfg  */               \
+			 .rxDataWidth = 8,                   /* overwrite by cfg  */               \
+			 .txDataWidth = 8,                   /* overwrite by cfg  */               \
+			 .enableMsbFirst = true,             /* overwrite by cfg  */               \
+			 .subMode = DT_INST_PROP_OR(n, sub_mode, CY_SCB_SPI_MOTOROLA),             \
+			 .oversample =                                                             \
+				 DT_INST_PROP_OR(n, oversample, IFX_CAT1_SPI_DEFAULT_OVERSAMPLE),  \
+			 .enableFreeRunSclk = DT_INST_PROP_OR(n, enable_free_run_sclk, false),     \
+			 .enableInputFilter = DT_INST_PROP_OR(n, enable_input_filter, false),      \
+			 .enableMisoLateSample =                                                   \
+				 DT_INST_PROP_OR(n, enable_miso_late_sample, true),                \
+			 .enableTransferSeperation =                                               \
+				 DT_INST_PROP_OR(n, enable_transfer_seperation, false),            \
+			 .enableWakeFromSleep = DT_INST_PROP_OR(n, enableWakeFromSleep, false),    \
+			 .ssPolarity = DT_INST_PROP_OR(n, ss_polarity, CY_SCB_SPI_ACTIVE_LOW),     \
+			 .rxFifoTriggerLevel = DT_INST_PROP_OR(n, rx_fifo_trigger_level, 0),       \
+			 .rxFifoIntEnableMask = DT_INST_PROP_OR(n, rx_fifo_int_enable_mask, 0),    \
+			 .txFifoTriggerLevel = DT_INST_PROP_OR(n, tx_fifo_trigger_level, 0),       \
+			 .txFifoIntEnableMask = DT_INST_PROP_OR(n, tx_fifo_int_enable_mask, 0),    \
+			 .masterSlaveIntEnableMask =                                               \
+				 DT_INST_PROP_OR(n, master_slave_int_enable_mask, 0)},             \
+                                                                                                   \
 		.irq_priority = DT_INST_IRQ(n, priority),                                          \
 	};                                                                                         \
-	SPI_DEVICE_DT_INST_DEFINE(n, ifx_cat1_spi_init, NULL, &spi_cat1_data_##n,                  \
-				  &spi_cat1_config_##n, POST_KERNEL,                               \
-				  CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &ifx_cat1_spi_api);
+	DEVICE_DT_INST_DEFINE(n, &ifx_cat1_spi_init, NULL, &spi_cat1_data_##n,                     \
+			      &spi_cat1_config_##n, POST_KERNEL,                                   \
+			      CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &ifx_cat1_spi_api);
 
 DT_INST_FOREACH_STATUS_OKAY(IFX_CAT1_SPI_INIT)

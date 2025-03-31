@@ -4,11 +4,13 @@
 
 '''Runner for flashing with dfu-util.'''
 
+from collections import namedtuple
 import sys
 import time
-from collections import namedtuple
 
-from runners.core import BuildConfiguration, RunnerCaps, ZephyrBinaryRunner
+from runners.core import ZephyrBinaryRunner, RunnerCaps, \
+    BuildConfiguration
+
 
 DfuSeConfig = namedtuple('DfuSeConfig', ['address', 'options'])
 
@@ -23,11 +25,11 @@ class DfuUtilBinaryRunner(ZephyrBinaryRunner):
         self.dev_id = dev_id # Used only for error checking in do_run
         self.alt = alt
         self.img = img
-        self.cmd = [exe, f'-d,{dev_id}']
+        self.cmd = [exe, '-d,{}'.format(dev_id)]
         try:
-            self.list_pattern = f', alt={int(self.alt)},'
+            self.list_pattern = ', alt={},'.format(int(self.alt))
         except ValueError:
-            self.list_pattern = f', name="{self.alt}",'
+            self.list_pattern = ', name="{}",'.format(self.alt)
 
         if dfuse_config is None:
             self.dfuse = False

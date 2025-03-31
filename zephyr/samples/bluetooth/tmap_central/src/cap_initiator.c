@@ -1,31 +1,21 @@
 /*
- * Copyright (c) 2022-2024 Nordic Semiconductor ASA
+ * Copyright (c) 2022-2023 Nordic Semiconductor ASA
  * Copyright 2023 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <stddef.h>
-#include <stdint.h>
+#if defined(CONFIG_BT_CAP_INITIATOR)
 
-#include <zephyr/autoconf.h>
+#include <zephyr/types.h>
+#include <stddef.h>
+#include <zephyr/kernel.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/bluetooth/audio/bap_lc3_preset.h>
 #include <zephyr/bluetooth/audio/cap.h>
 #include <zephyr/bluetooth/audio/bap.h>
-#include <zephyr/bluetooth/audio/csip.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/hci_types.h>
-#include <zephyr/bluetooth/iso.h>
-#include <zephyr/kernel.h>
-#include <zephyr/net_buf.h>
-#include <zephyr/sys/printk.h>
-#include <zephyr/sys/util.h>
-#include <zephyr/sys/util_macro.h>
-#include <zephyr/types.h>
-
-#if defined(CONFIG_BT_CAP_INITIATOR)
 
 static struct k_work_delayable audio_send_work;
 
@@ -43,7 +33,7 @@ static K_SEM_DEFINE(sem_discover_source, 0, 1);
 static K_SEM_DEFINE(sem_audio_start, 0, 1);
 
 static void unicast_stream_configured(struct bt_bap_stream *stream,
-				      const struct bt_bap_qos_cfg_pref *pref)
+				      const struct bt_audio_codec_qos_pref *pref)
 {
 	printk("Configured stream %p\n", stream);
 
@@ -108,7 +98,6 @@ static struct bt_bap_lc3_preset unicast_preset_48_2_1 =
 					 BT_AUDIO_CONTEXT_TYPE_MEDIA);
 
 static void cap_discovery_complete_cb(struct bt_conn *conn, int err,
-				      const struct bt_csip_set_coordinator_set_member *member,
 				      const struct bt_csip_set_coordinator_csis_inst *csis_inst)
 {
 	if (err != 0) {
@@ -130,7 +119,8 @@ static void cap_discovery_complete_cb(struct bt_conn *conn, int err,
 	k_sem_give(&sem_cas_discovery);
 }
 
-static void unicast_start_complete_cb(int err, struct bt_conn *conn)
+static void unicast_start_complete_cb(struct bt_bap_unicast_group *unicast_group,
+				      int err, struct bt_conn *conn)
 {
 	if (err != 0) {
 		printk("Failed to start (failing conn %p): %d", conn, err);
@@ -148,7 +138,8 @@ static void unicast_update_complete_cb(int err, struct bt_conn *conn)
 	}
 }
 
-static void unicast_stop_complete_cb(int err, struct bt_conn *conn)
+static void unicast_stop_complete_cb(struct bt_bap_unicast_group *unicast_group, int err,
+				     struct bt_conn *conn)
 {
 	if (err != 0) {
 		printk("Failed to stop (failing conn %p): %d", conn, err);
@@ -339,7 +330,7 @@ static int unicast_group_create(struct bt_bap_unicast_group **out_unicast_group)
 	return err;
 }
 
-static int unicast_audio_start(struct bt_conn *conn)
+static int unicast_audio_start(struct bt_conn *conn, struct bt_bap_unicast_group *unicast_group)
 {
 	int err = 0;
 	struct bt_cap_unicast_audio_start_stream_param stream_param;
@@ -354,7 +345,7 @@ static int unicast_audio_start(struct bt_conn *conn)
 	stream_param.ep = unicast_sink_eps[0];
 	stream_param.codec_cfg = &unicast_preset_48_2_1.codec_cfg;
 
-	err = bt_cap_initiator_unicast_audio_start(&param);
+	err = bt_cap_initiator_unicast_audio_start(&param, unicast_group);
 	if (err != 0) {
 		printk("Failed to start unicast audio: %d\n", err);
 		return err;
@@ -393,22 +384,17 @@ static void audio_timer_timeout(struct k_work *work)
 		data_initialized = true;
 	}
 
-	buf = net_buf_alloc(&tx_pool, K_NO_WAIT);
-	if (buf != NULL) {
-		net_buf_reserve(buf, BT_ISO_CHAN_SEND_RESERVE);
-		net_buf_add_mem(buf, buf_data, len_to_send);
-		buf_to_send = buf;
+	buf = net_buf_alloc(&tx_pool, K_FOREVER);
+	net_buf_reserve(buf, BT_ISO_CHAN_SEND_RESERVE);
+	net_buf_add_mem(buf, buf_data, len_to_send);
+	buf_to_send = buf;
 
-		ret = bt_bap_stream_send(stream, buf_to_send, 0);
-		if (ret < 0) {
-			printk("Failed to send audio data on streams: (%d)\n", ret);
-			net_buf_unref(buf_to_send);
-		} else {
-			printk("Sending mock data with len %zu\n", len_to_send);
-		}
+	ret = bt_bap_stream_send(stream, buf_to_send, 0, BT_ISO_TIMESTAMP_NONE);
+	if (ret < 0) {
+		printk("Failed to send audio data on streams: (%d)\n", ret);
+		net_buf_unref(buf_to_send);
 	} else {
-		printk("Failed to allocate TX buffer\n");
-		/* Retry later */
+		printk("Sending mock data with len %zu\n", len_to_send);
 	}
 
 	k_work_schedule(&audio_send_work, K_MSEC(1000));
@@ -471,7 +457,7 @@ int cap_initiator_setup(struct bt_conn *conn)
 		return err;
 	}
 
-	err = unicast_audio_start(conn);
+	err = unicast_audio_start(conn, unicast_group);
 	if (err != 0) {
 		return err;
 	}

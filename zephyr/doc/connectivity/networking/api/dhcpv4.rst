@@ -18,7 +18,7 @@ See this
 `DHCP Wikipedia article <https://en.wikipedia.org/wiki/Dynamic_Host_Configuration_Protocol>`_
 for a detailed overview of how DHCP works.
 
-Note that Zephyr supports both DHCPv4 client and server functionality.
+Note that Zephyr only supports DHCP client functionality.
 
 Sample usage
 ************

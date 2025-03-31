@@ -6,7 +6,11 @@
  */
 
 #include <stdbool.h>
+#ifdef CONFIG_ARCH_POSIX
+#include <fcntl.h>
+#else
 #include <zephyr/posix/fcntl.h>
+#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_sock_packet, CONFIG_NET_SOCKETS_LOG_LEVEL);
@@ -18,7 +22,7 @@ LOG_MODULE_REGISTER(net_sock_packet, CONFIG_NET_SOCKETS_LOG_LEVEL);
 #include <zephyr/net/net_pkt.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/ethernet.h>
-#include <zephyr/internal/syscall_handler.h>
+#include <zephyr/syscall_handler.h>
 #include <zephyr/sys/fdtable.h>
 
 #include "../../ip/net_stats.h"
@@ -46,7 +50,7 @@ static int zpacket_socket(int family, int type, int proto)
 	int fd;
 	int ret;
 
-	fd = zvfs_reserve_fd();
+	fd = z_reserve_fd();
 	if (fd < 0) {
 		return -1;
 	}
@@ -55,19 +59,11 @@ static int zpacket_socket(int family, int type, int proto)
 		if (type == SOCK_RAW) {
 			proto = IPPROTO_RAW;
 		}
-	} else {
-		/* For example in Linux, the protocol parameter can be given
-		 * as htons(ETH_P_ALL) to receive all the network packets.
-		 * So convert the proto field back to host byte order so that
-		 * we do not need to change the protocol field handling in
-		 * other part of the network stack.
-		 */
-		proto = ntohs(proto);
 	}
 
 	ret = net_context_get(family, type, proto, &ctx);
 	if (ret < 0) {
-		zvfs_free_fd(fd);
+		z_free_fd(fd);
 		errno = -ret;
 		return -1;
 	}
@@ -77,8 +73,8 @@ static int zpacket_socket(int family, int type, int proto)
 
 	/* recv_q and accept_q are in union */
 	k_fifo_init(&ctx->recv_q);
-	zvfs_finalize_typed_fd(fd, ctx, (const struct fd_op_vtable *)&packet_sock_fd_op_vtable,
-			    ZVFS_MODE_IFSOCK);
+	z_finalize_fd(fd, ctx,
+		      (const struct fd_op_vtable *)&packet_sock_fd_op_vtable);
 
 	return fd;
 }
@@ -148,10 +144,6 @@ static void zpacket_set_eth_pkttype(struct net_if *iface,
 				    struct sockaddr_ll *addr,
 				    struct net_linkaddr *lladdr)
 {
-	if (lladdr == NULL || lladdr->len == 0) {
-		return;
-	}
-
 	if (net_eth_is_addr_broadcast((struct net_eth_addr *)lladdr->addr)) {
 		addr->sll_pkttype = PACKET_BROADCAST;
 	} else if (net_eth_is_addr_multicast(
@@ -187,7 +179,7 @@ static void zpacket_set_source_addr(struct net_context *ctx,
 		memcpy(addr.sll_addr, pkt->lladdr_src.addr,
 		       MIN(sizeof(addr.sll_addr), pkt->lladdr_src.len));
 
-		addr.sll_protocol = htons(net_pkt_ll_proto_type(pkt));
+		addr.sll_protocol = net_pkt_ll_proto_type(pkt);
 
 		if (net_if_get_link_addr(iface)->type == NET_LINK_ETHERNET) {
 			addr.sll_hatype = ARPHRD_ETHER;
@@ -216,12 +208,12 @@ static void zpacket_set_source_addr(struct net_context *ctx,
 		memcpy(addr.sll_addr, hdr->src.addr,
 		       sizeof(struct net_eth_addr));
 
-		addr.sll_protocol = hdr->type;
+		addr.sll_protocol = ntohs(hdr->type);
 		addr.sll_hatype = ARPHRD_ETHER;
 
-		(void)net_linkaddr_create(&dst_addr, hdr->dst.addr,
-					  sizeof(struct net_eth_addr),
-					  NET_LINK_ETHERNET);
+		dst_addr.addr = hdr->dst.addr;
+		dst_addr.len = sizeof(struct net_eth_addr);
+		dst_addr.type = NET_LINK_ETHERNET;
 
 		zpacket_set_eth_pkttype(iface, &addr, &dst_addr);
 		net_pkt_cursor_restore(pkt, &cur);
@@ -345,8 +337,7 @@ ssize_t zpacket_recvfrom_ctx(struct net_context *ctx, void *buf, size_t max_len,
 		zpacket_set_source_addr(ctx, pkt, src_addr, addrlen);
 	}
 
-	if ((IS_ENABLED(CONFIG_NET_PKT_RXTIME_STATS) ||
-	     IS_ENABLED(CONFIG_TRACING_NET_CORE)) &&
+	if (IS_ENABLED(CONFIG_NET_PKT_RXTIME_STATS) &&
 	    !(flags & ZSOCK_MSG_PEEK)) {
 		net_socket_update_tc_rx_time(pkt, k_cycle_get_32());
 	}
@@ -462,16 +453,16 @@ static int packet_sock_setsockopt_vmeth(void *obj, int level, int optname,
 	return zpacket_setsockopt_ctx(obj, level, optname, optval, optlen);
 }
 
-static int packet_sock_close2_vmeth(void *obj, int fd)
+static int packet_sock_close_vmeth(void *obj)
 {
-	return zsock_close_ctx(obj, fd);
+	return zsock_close_ctx(obj);
 }
 
 static const struct socket_op_vtable packet_sock_fd_op_vtable = {
 	.fd_vtable = {
 		.read = packet_sock_read_vmeth,
 		.write = packet_sock_write_vmeth,
-		.close2 = packet_sock_close2_vmeth,
+		.close = packet_sock_close_vmeth,
 		.ioctl = packet_sock_ioctl_vmeth,
 	},
 	.bind = packet_sock_bind_vmeth,
@@ -489,7 +480,6 @@ static bool packet_is_supported(int family, int type, int proto)
 {
 	switch (type) {
 	case SOCK_RAW:
-		proto = ntohs(proto);
 		return proto == ETH_P_ALL
 		  || proto == ETH_P_ECAT
 		  || proto == ETH_P_IEEE802154

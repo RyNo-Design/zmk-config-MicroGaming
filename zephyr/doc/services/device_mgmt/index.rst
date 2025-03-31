@@ -15,3 +15,16 @@ Device Management
     dfu.rst
     ota.rst
     ec_host_cmd.rst
+
+SMP Groups
+==========
+
+.. toctree::
+    :maxdepth: 1
+
+    smp_groups/smp_group_0.rst
+    smp_groups/smp_group_1.rst
+    smp_groups/smp_group_2.rst
+    smp_groups/smp_group_3.rst
+    smp_groups/smp_group_8.rst
+    smp_groups/smp_group_9.rst

@@ -9,6 +9,7 @@ import sys
 import textwrap
 from urllib.parse import urlparse
 
+from west import log
 from west.commands import WestCommand
 
 from zephyr_ext_common import ZEPHYR_BASE
@@ -80,15 +81,7 @@ class Blobs(WestCommand):
     def get_blobs(self, args):
         blobs = []
         modules = args.modules
-        all_modules = zephyr_module.parse_modules(ZEPHYR_BASE, self.manifest)
-        all_names = [m.meta.get('name', None) for m in all_modules]
-
-        unknown = set(modules) - set(all_names)
-
-        if len(unknown):
-            self.die(f'Unknown module(s): {unknown}')
-
-        for module in all_modules:
+        for module in zephyr_module.parse_modules(ZEPHYR_BASE, self.manifest):
             # Filter by module
             module_name = module.meta.get('name', None)
             if len(modules) and module_name not in modules:
@@ -102,78 +95,46 @@ class Blobs(WestCommand):
         blobs = self.get_blobs(args)
         fmt = args.format or self.DEFAULT_LIST_FMT
         for blob in blobs:
-            self.inf(fmt.format(**blob))
+            log.inf(fmt.format(**blob))
 
     def ensure_folder(self, path):
         path.parent.mkdir(parents=True, exist_ok=True)
 
     def fetch_blob(self, url, path):
         scheme = urlparse(url).scheme
-        self.dbg(f'Fetching {path} with {scheme}')
+        log.dbg(f'Fetching {path} with {scheme}')
         import fetchers
         fetcher = fetchers.get_fetcher_cls(scheme)
 
-        self.dbg(f'Found fetcher: {fetcher}')
+        log.dbg(f'Found fetcher: {fetcher}')
         inst = fetcher()
         self.ensure_folder(path)
         inst.fetch(url, path)
 
-    # Compare the checksum of a file we've just downloaded
-    # to the digest in blob metadata, warn user if they differ.
-    def verify_blob(self, blob) -> bool:
-        self.dbg('Verifying blob {module}: {abspath}'.format(**blob))
-
-        status = zephyr_module.get_blob_status(blob['abspath'], blob['sha256'])
-        if status == zephyr_module.BLOB_OUTDATED:
-            self.err(textwrap.dedent(
-                f'''\
-                The checksum of the downloaded file does not match that
-                in the blob metadata:
-                - if it is not certain that the download was successful,
-                  try running 'west blobs fetch {blob['module']}'
-                  to re-download the file
-                - if the error persists, please consider contacting
-                  the maintainers of the module so that they can check
-                  the corresponding blob metadata
-
-                Module: {blob['module']}
-                Blob:   {blob['path']}
-                URL:    {blob['url']}
-                Info:   {blob['description']}'''))
-            return False
-        return True
-
     def fetch(self, args):
-        bad_checksum_count = 0
         blobs = self.get_blobs(args)
         for blob in blobs:
-            if blob['status'] == zephyr_module.BLOB_PRESENT:
-                self.dbg('Blob {module}: {abspath} is up to date'.format(**blob))
+            if blob['status'] == 'A':
+                log.dbg('Blob {module}: {abspath} is up to date'.format(**blob))
                 continue
-            self.inf('Fetching blob {module}: {abspath}'.format(**blob))
+            log.inf('Fetching blob {module}: {abspath}'.format(**blob))
             self.fetch_blob(blob['url'], blob['abspath'])
-            if not self.verify_blob(blob):
-                bad_checksum_count += 1
-
-        if bad_checksum_count:
-            self.err(f"{bad_checksum_count} blobs have bad checksums")
-            sys.exit(os.EX_DATAERR)
 
     def clean(self, args):
         blobs = self.get_blobs(args)
         for blob in blobs:
-            if blob['status'] == zephyr_module.BLOB_NOT_PRESENT:
-                self.dbg('Blob {module}: {abspath} not in filesystem'.format(**blob))
+            if blob['status'] == 'D':
+                log.dbg('Blob {module}: {abspath} not in filesystem'.format(**blob))
                 continue
-            self.inf('Deleting blob {module}: {status} {abspath}'.format(**blob))
+            log.inf('Deleting blob {module}: {status} {abspath}'.format(**blob))
             blob['abspath'].unlink()
 
     def do_run(self, args, _):
-        self.dbg(f'subcmd: \'{args.subcmd[0]}\' modules: {args.modules}')
+        log.dbg(f'subcmd: \'{args.subcmd[0]}\' modules: {args.modules}')
 
         subcmd = getattr(self, args.subcmd[0])
 
         if args.subcmd[0] != 'list' and args.format is not None:
-            self.die(f'unexpected --format argument; this is a "west blobs list" option')
+            log.die(f'unexpected --format argument; this is a "west blobs list" option')
 
         subcmd(args)

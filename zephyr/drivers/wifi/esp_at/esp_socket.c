@@ -32,8 +32,6 @@ struct esp_socket *esp_socket_get(struct esp_data *data,
 
 			sock->connect_cb = NULL;
 			sock->recv_cb = NULL;
-			memset(&sock->src, 0x0, sizeof(sock->src));
-			memset(&sock->dst, 0x0, sizeof(sock->dst));
 
 			atomic_inc(&sock->refcount);
 
@@ -142,11 +140,6 @@ static struct net_pkt *esp_socket_prepare_pkt(struct esp_socket *sock,
 	net_pkt_set_context(pkt, sock->context);
 	net_pkt_cursor_init(pkt);
 
-#if defined(CONFIG_WIFI_ESP_AT_CIPDINFO_USE)
-	memcpy(&pkt->remote, &sock->context->remote, sizeof(pkt->remote));
-	pkt->family = sock->src.sa_family;
-#endif
-
 	return pkt;
 }
 
@@ -158,16 +151,8 @@ void esp_socket_rx(struct esp_socket *sock, struct net_buf *buf,
 
 	flags = esp_socket_flags(sock);
 
-#ifdef CONFIG_WIFI_ESP_AT_PASSIVE_MODE
-	/* In Passive Receive mode, ESP modem will buffer rx data and make it still
-	 * available even though the peer has closed the connection.
-	 */
-	if (!(flags & ESP_SOCK_CONNECTED) &&
-	    !(flags & ESP_SOCK_CLOSE_PENDING)) {
-#else
 	if (!(flags & ESP_SOCK_CONNECTED) ||
 	    (flags & ESP_SOCK_CLOSE_PENDING)) {
-#endif
 		LOG_DBG("Received data on closed link %d", sock->link_id);
 		return;
 	}

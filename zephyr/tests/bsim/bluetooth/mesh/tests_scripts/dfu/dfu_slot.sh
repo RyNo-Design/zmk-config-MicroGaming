@@ -11,6 +11,7 @@ source $(dirname "${BASH_SOURCE[0]}")/../../_mesh_test.sh
 #    and verifies they do not exist.
 #  - Fourth test is rebooted device that verifies if removing all slots also removed them
 #    from storage.
+conf=prj_mesh1d1_conf
 overlay=overlay_pst_conf
 RunTestFlash dfu_slot dfu_dist_dfu_slot_create -flash_erase
 
@@ -20,7 +21,8 @@ RunTestFlash dfu_slot dfu_dist_dfu_slot_delete_all
 
 RunTestFlash dfu_slot dfu_dist_dfu_slot_check_delete_all -flash_rm
 
-overlay="overlay_pst_conf_overlay_ss_conf_overlay_psa_conf"
+conf=prj_mesh1d1_conf
+overlay="overlay_pst_conf_overlay_psa_conf"
 RunTestFlash dfu_slot_psa dfu_dist_dfu_slot_create -flash_erase
 
 RunTestFlash dfu_slot_psa dfu_dist_dfu_slot_create_recover

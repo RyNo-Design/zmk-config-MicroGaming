@@ -141,8 +141,6 @@ static int connect_socket(sa_family_t family, const char *server, int port,
 		LOG_ERR("Cannot connect to %s remote (%d)",
 			family == AF_INET ? "IPv4" : "IPv6",
 			-errno);
-		close(*sock);
-		*sock = -1;
 		ret = -errno;
 	}
 
@@ -362,23 +360,20 @@ int main(void)
 {
 	int iterations = CONFIG_NET_SAMPLE_SEND_ITERATIONS;
 	int i = 0;
-	int ret = 0;
+	int ret;
 
 	while (iterations == 0 || i < iterations) {
 		ret = run_queries();
 		if (ret < 0) {
-			ret = 1;
-			break;
+			exit(1);
 		}
 
 		if (iterations > 0) {
 			i++;
 			if (i >= iterations) {
-				ret = 0;
 				break;
 			}
 		} else {
-			ret = 0;
 			break;
 		}
 	}
@@ -387,6 +382,6 @@ int main(void)
 		k_sleep(K_FOREVER);
 	}
 
-	exit(ret);
-	return ret;
+	exit(0);
+	return 0;
 }

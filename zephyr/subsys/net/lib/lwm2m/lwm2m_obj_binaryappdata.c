@@ -29,8 +29,11 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define BINARYAPPDATA_VERSION_MINOR 0
 #define BINARYAPPDATA_MAX_ID 6
 
-#define MAX_INSTANCE_COUNT              CONFIG_LWM2M_BINARYAPPDATA_INSTANCE_COUNT
-#define BINARYAPPDATA_DATA_INSTANCE_MAX CONFIG_LWM2M_BINARYAPPDATA_DATA_INSTANCE_COUNT
+/* Support 2 instances of binary data in one object */
+#define BINARYAPPDATA_DATA_INSTANCE_MAX 2
+
+/* Support 2 multi instance object */
+#define MAX_INSTANCE_COUNT	2
 
 /*
  * Calculate resource instances as follows:
@@ -119,4 +122,4 @@ static int lwm2m_binaryappdata_init(void)
 	return ret;
 }
 
-LWM2M_OBJ_INIT(lwm2m_binaryappdata_init);
+SYS_INIT(lwm2m_binaryappdata_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);

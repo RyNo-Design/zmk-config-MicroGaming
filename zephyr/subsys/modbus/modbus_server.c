@@ -309,7 +309,7 @@ static bool mbs_fc03_hreg_read(struct modbus_context *ctx)
 	const uint16_t regs_limit = 125;
 	const uint8_t request_len = 4;
 	uint8_t *presp;
-	uint16_t err = 0;
+	uint16_t err;
 	uint16_t reg_addr;
 	uint16_t reg_qty;
 	uint16_t num_bytes;
@@ -322,16 +322,6 @@ static bool mbs_fc03_hreg_read(struct modbus_context *ctx)
 	reg_addr = sys_get_be16(&ctx->rx_adu.data[0]);
 	reg_qty = sys_get_be16(&ctx->rx_adu.data[2]);
 
-	if (reg_qty == 0 || reg_qty > regs_limit) {
-		LOG_ERR("Wrong register quantity, %u (limit is %u)",
-			reg_qty, regs_limit);
-		mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
-		return true;
-	}
-
-	/* Get number of bytes needed for response. */
-	num_bytes = (uint8_t)(reg_qty * sizeof(uint16_t));
-
 	if ((reg_addr < MODBUS_FP_EXTENSIONS_ADDR) ||
 	    !IS_ENABLED(CONFIG_MODBUS_FP_EXTENSIONS)) {
 		/* Read integer register */
@@ -340,6 +330,14 @@ static bool mbs_fc03_hreg_read(struct modbus_context *ctx)
 			return true;
 		}
 
+		if (reg_qty == 0 || reg_qty > regs_limit) {
+			LOG_ERR("Number of registers limit exceeded");
+			mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
+			return true;
+		}
+
+		/* Get number of bytes needed for response. */
+		num_bytes = (uint8_t)(reg_qty * sizeof(uint16_t));
 	} else {
 		/* Read floating-point register */
 		if (ctx->mbs_user_cb->holding_reg_rd_fp == NULL) {
@@ -347,10 +345,14 @@ static bool mbs_fc03_hreg_read(struct modbus_context *ctx)
 			return true;
 		}
 
-		if (num_bytes % sizeof(uint32_t)) {
-			mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_FC);
+		if (reg_qty == 0 || reg_qty > (regs_limit / 2)) {
+			LOG_ERR("Number of registers limit exceeded");
+			mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
 			return true;
 		}
+
+		/* Get number of bytes needed for response. */
+		num_bytes = (uint8_t)(reg_qty * sizeof(float));
 	}
 
 	/* Number of data bytes + byte count. */
@@ -372,9 +374,6 @@ static bool mbs_fc03_hreg_read(struct modbus_context *ctx)
 				presp += sizeof(uint16_t);
 			}
 
-			/* Increment current register address */
-			reg_addr++;
-			reg_qty--;
 		} else if (IS_ENABLED(CONFIG_MODBUS_FP_EXTENSIONS)) {
 			float fp;
 			uint32_t reg;
@@ -386,10 +385,6 @@ static bool mbs_fc03_hreg_read(struct modbus_context *ctx)
 				sys_put_be32(reg, presp);
 				presp += sizeof(uint32_t);
 			}
-
-			/* Increment current register address */
-			reg_addr += 2;
-			reg_qty -= 2;
 		}
 
 		if (err != 0) {
@@ -398,6 +393,9 @@ static bool mbs_fc03_hreg_read(struct modbus_context *ctx)
 			return true;
 		}
 
+		/* Increment current register address */
+		reg_addr++;
+		reg_qty--;
 	}
 
 	return true;
@@ -421,7 +419,7 @@ static bool mbs_fc04_inreg_read(struct modbus_context *ctx)
 	const uint16_t regs_limit = 125;
 	const uint8_t request_len = 4;
 	uint8_t *presp;
-	int err = 0;
+	int err;
 	uint16_t reg_addr;
 	uint16_t reg_qty;
 	uint16_t num_bytes;
@@ -434,16 +432,6 @@ static bool mbs_fc04_inreg_read(struct modbus_context *ctx)
 	reg_addr = sys_get_be16(&ctx->rx_adu.data[0]);
 	reg_qty = sys_get_be16(&ctx->rx_adu.data[2]);
 
-	if (reg_qty == 0 || reg_qty > regs_limit) {
-		LOG_ERR("Wrong register quantity, %u (limit is %u)",
-			reg_qty, regs_limit);
-		mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
-		return true;
-	}
-
-	/* Get number of bytes needed for response. */
-	num_bytes = (uint8_t)(reg_qty * sizeof(uint16_t));
-
 	if ((reg_addr < MODBUS_FP_EXTENSIONS_ADDR) ||
 	    !IS_ENABLED(CONFIG_MODBUS_FP_EXTENSIONS)) {
 		/* Read integer register */
@@ -452,6 +440,14 @@ static bool mbs_fc04_inreg_read(struct modbus_context *ctx)
 			return true;
 		}
 
+		if (reg_qty == 0 || reg_qty > regs_limit) {
+			LOG_ERR("Number of registers limit exceeded");
+			mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
+			return true;
+		}
+
+		/* Get number of bytes needed for response. */
+		num_bytes = (uint8_t)(reg_qty * sizeof(uint16_t));
 	} else {
 		/* Read floating-point register */
 		if (ctx->mbs_user_cb->input_reg_rd_fp == NULL) {
@@ -459,10 +455,14 @@ static bool mbs_fc04_inreg_read(struct modbus_context *ctx)
 			return true;
 		}
 
-		if (num_bytes % sizeof(uint32_t)) {
-			mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_FC);
+		if (reg_qty == 0 || reg_qty > (regs_limit / 2)) {
+			LOG_ERR("Number of registers limit exceeded");
+			mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
 			return true;
 		}
+
+		/* Get number of bytes needed for response. */
+		num_bytes = (uint8_t)(reg_qty * sizeof(float));
 	}
 
 	/* Number of data bytes + byte count. */
@@ -484,9 +484,6 @@ static bool mbs_fc04_inreg_read(struct modbus_context *ctx)
 				presp += sizeof(uint16_t);
 			}
 
-			/* Increment current register number */
-			reg_addr++;
-			reg_qty--;
 		} else if (IS_ENABLED(CONFIG_MODBUS_FP_EXTENSIONS)) {
 			float fp;
 			uint32_t reg;
@@ -498,10 +495,6 @@ static bool mbs_fc04_inreg_read(struct modbus_context *ctx)
 				sys_put_be32(reg, presp);
 				presp += sizeof(uint32_t);
 			}
-
-			/* Increment current register address */
-			reg_addr += 2;
-			reg_qty -= 2;
 		}
 
 		if (err != 0) {
@@ -509,6 +502,10 @@ static bool mbs_fc04_inreg_read(struct modbus_context *ctx)
 			mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_ADDR);
 			return true;
 		}
+
+		/* Increment current register number */
+		reg_addr++;
+		reg_qty--;
 	}
 
 	return true;
@@ -836,6 +833,7 @@ static bool mbs_fc16_hregs_write(struct modbus_context *ctx)
 	uint16_t reg_addr;
 	uint16_t reg_qty;
 	uint16_t num_bytes;
+	uint8_t reg_size;
 
 	if (ctx->rx_adu.length < request_len) {
 		LOG_ERR("Wrong request length %u", ctx->rx_adu.length);
@@ -847,12 +845,6 @@ static bool mbs_fc16_hregs_write(struct modbus_context *ctx)
 	/* Get the byte count for the data. */
 	num_bytes = ctx->rx_adu.data[4];
 
-	if (reg_qty == 0 || reg_qty > regs_limit) {
-		LOG_ERR("Number of registers limit exceeded");
-		mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
-		return true;
-	}
-
 	if ((reg_addr < MODBUS_FP_EXTENSIONS_ADDR) ||
 	    !IS_ENABLED(CONFIG_MODBUS_FP_EXTENSIONS)) {
 		/* Write integer register */
@@ -860,6 +852,14 @@ static bool mbs_fc16_hregs_write(struct modbus_context *ctx)
 			mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_FC);
 			return true;
 		}
+
+		if (reg_qty == 0 || reg_qty > regs_limit) {
+			LOG_ERR("Number of registers limit exceeded");
+			mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
+			return true;
+		}
+
+		reg_size = sizeof(uint16_t);
 	} else {
 		/* Write floating-point register */
 		if (ctx->mbs_user_cb->holding_reg_wr_fp == NULL) {
@@ -867,10 +867,13 @@ static bool mbs_fc16_hregs_write(struct modbus_context *ctx)
 			return true;
 		}
 
-		if (num_bytes % sizeof(uint32_t)) {
-			mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_FC);
+		if (reg_qty == 0 || reg_qty > (regs_limit / 2)) {
+			LOG_ERR("Number of registers limit exceeded");
+			mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
 			return true;
 		}
+
+		reg_size = sizeof(float);
 	}
 
 	/* Compare number of bytes and payload length */
@@ -880,7 +883,7 @@ static bool mbs_fc16_hregs_write(struct modbus_context *ctx)
 		return true;
 	}
 
-	if ((num_bytes / reg_qty) != sizeof(uint16_t)) {
+	if ((num_bytes / reg_qty) != (uint16_t)reg_size) {
 		LOG_ERR("Mismatch in the number of registers");
 		mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
 		return true;
@@ -889,7 +892,7 @@ static bool mbs_fc16_hregs_write(struct modbus_context *ctx)
 	/* The 1st registers data byte is 6th element in payload */
 	prx_data = &ctx->rx_adu.data[5];
 
-	for (uint16_t reg_cntr = 0; reg_cntr < reg_qty;) {
+	for (uint16_t reg_cntr = 0; reg_cntr < reg_qty; reg_cntr++) {
 		uint16_t addr = reg_addr + reg_cntr;
 
 		if ((reg_addr < MODBUS_FP_EXTENSIONS_ADDR) ||
@@ -898,16 +901,14 @@ static bool mbs_fc16_hregs_write(struct modbus_context *ctx)
 
 			prx_data += sizeof(uint16_t);
 			err = ctx->mbs_user_cb->holding_reg_wr(addr, reg_val);
-			reg_cntr++;
 		} else {
 			uint32_t reg_val = sys_get_be32(prx_data);
 			float fp;
 
 			/* Write to floating point register */
-			memcpy(&fp, &reg_val, sizeof(uint32_t));
+			memcpy(&fp, &reg_val, sizeof(float));
 			prx_data += sizeof(uint32_t);
 			err = ctx->mbs_user_cb->holding_reg_wr_fp(addr, fp);
-			reg_cntr += 2;
 		}
 
 		if (err != 0) {

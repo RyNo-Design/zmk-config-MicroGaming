@@ -40,16 +40,14 @@ peripherals in your project configuration, for example::
 Various Debug/Informational Options
 ***********************************
 
-The following options output more information about
-the running application and provide means for debugging and error handling:
+The following options are enabled by default to provide more information about
+the running application and to provide means for debugging and error handling:
 
 :kconfig:option:`CONFIG_BOOT_BANNER`
   This option can be disabled to save a few bytes.
 
 :kconfig:option:`CONFIG_DEBUG`
-  This option can be enabled for debug builds.
-
-Note that the boot banner is enabled by default.
+  This option can be disabled for production builds
 
 
 MPU/MMU Support

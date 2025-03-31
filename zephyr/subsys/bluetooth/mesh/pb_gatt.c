@@ -8,6 +8,7 @@
 #include <zephyr/bluetooth/conn.h>
 #include "net.h"
 #include "proxy.h"
+#include "adv.h"
 #include "prov.h"
 #include "pb_gatt.h"
 #include "proxy_msg.h"
@@ -198,11 +199,6 @@ static int link_accept(const struct prov_bearer_cb *cb, void *cb_data)
 
 	return 0;
 }
-
-static void link_cancel(void)
-{
-	(void)bt_mesh_pb_gatt_srv_disable();
-}
 #endif
 
 static void buf_send_end(struct bt_conn *conn, void *user_data)
@@ -251,7 +247,6 @@ const struct prov_bearer bt_mesh_pb_gatt = {
 #endif
 #if defined(CONFIG_BT_MESH_PB_GATT)
 	.link_accept = link_accept,
-	.link_cancel = link_cancel,
 #endif
 	.send = buf_send,
 	.clear_tx = clear_tx,

@@ -20,7 +20,7 @@
 #include <kernel_internal.h>
 #include <wait_q.h>
 #include <ksched.h>
-#include <zephyr/internal/syscall_handler.h>
+#include <zephyr/syscall_handler.h>
 #include <zephyr/sys/dlist.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/__assert.h>
@@ -87,9 +87,13 @@ static inline bool is_condition_met(struct k_poll_event *event, uint32_t *state)
 			return true;
 		}
 		break;
+#ifdef CONFIG_PIPES
 	case K_POLL_TYPE_PIPE_DATA_AVAILABLE:
-		*state = K_POLL_STATE_PIPE_DATA_AVAILABLE;
-		return true;
+		if (k_pipe_read_avail(event->pipe)) {
+			*state = K_POLL_STATE_PIPE_DATA_AVAILABLE;
+			return true;
+		}
+#endif
 	case K_POLL_TYPE_IGNORE:
 		break;
 	default:
@@ -150,10 +154,12 @@ static inline void register_event(struct k_poll_event *event,
 		__ASSERT(event->msgq != NULL, "invalid message queue\n");
 		add_event(&event->msgq->poll_events, event, poller);
 		break;
+#ifdef CONFIG_PIPES
 	case K_POLL_TYPE_PIPE_DATA_AVAILABLE:
 		__ASSERT(event->pipe != NULL, "invalid pipe\n");
 		add_event(&event->pipe->poll_events, event, poller);
 		break;
+#endif
 	case K_POLL_TYPE_IGNORE:
 		/* nothing to do */
 		break;
@@ -189,10 +195,12 @@ static inline void clear_event_registration(struct k_poll_event *event)
 		__ASSERT(event->msgq != NULL, "invalid message queue\n");
 		remove_event = true;
 		break;
+#ifdef CONFIG_PIPES
 	case K_POLL_TYPE_PIPE_DATA_AVAILABLE:
 		__ASSERT(event->pipe != NULL, "invalid pipe\n");
 		remove_event = true;
 		break;
+#endif
 	case K_POLL_TYPE_IGNORE:
 		/* nothing to do */
 		break;
@@ -356,11 +364,11 @@ static inline int z_vrfy_k_poll(struct k_poll_event *events,
 	/* Validate the events buffer and make a copy of it in an
 	 * allocated kernel-side buffer.
 	 */
-	if (K_SYSCALL_VERIFY(num_events >= 0)) {
+	if (Z_SYSCALL_VERIFY(num_events >= 0)) {
 		ret = -EINVAL;
 		goto out;
 	}
-	if (K_SYSCALL_VERIFY_MSG(!u32_mul_overflow(num_events,
+	if (Z_SYSCALL_VERIFY_MSG(!u32_mul_overflow(num_events,
 						   sizeof(struct k_poll_event),
 						   &bounds),
 				 "num_events too large")) {
@@ -374,7 +382,7 @@ static inline int z_vrfy_k_poll(struct k_poll_event *events,
 	}
 
 	key = k_spin_lock(&lock);
-	if (K_SYSCALL_MEMORY_WRITE(events, bounds)) {
+	if (Z_SYSCALL_MEMORY_WRITE(events, bounds)) {
 		k_spin_unlock(&lock, key);
 		goto oops_free;
 	}
@@ -385,7 +393,7 @@ static inline int z_vrfy_k_poll(struct k_poll_event *events,
 	for (int i = 0; i < num_events; i++) {
 		struct k_poll_event *e = &events_copy[i];
 
-		if (K_SYSCALL_VERIFY(e->mode == K_POLL_MODE_NOTIFY_ONLY)) {
+		if (Z_SYSCALL_VERIFY(e->mode == K_POLL_MODE_NOTIFY_ONLY)) {
 			ret = -EINVAL;
 			goto out_free;
 		}
@@ -394,20 +402,22 @@ static inline int z_vrfy_k_poll(struct k_poll_event *events,
 		case K_POLL_TYPE_IGNORE:
 			break;
 		case K_POLL_TYPE_SIGNAL:
-			K_OOPS(K_SYSCALL_OBJ(e->signal, K_OBJ_POLL_SIGNAL));
+			Z_OOPS(Z_SYSCALL_OBJ(e->signal, K_OBJ_POLL_SIGNAL));
 			break;
 		case K_POLL_TYPE_SEM_AVAILABLE:
-			K_OOPS(K_SYSCALL_OBJ(e->sem, K_OBJ_SEM));
+			Z_OOPS(Z_SYSCALL_OBJ(e->sem, K_OBJ_SEM));
 			break;
 		case K_POLL_TYPE_DATA_AVAILABLE:
-			K_OOPS(K_SYSCALL_OBJ(e->queue, K_OBJ_QUEUE));
+			Z_OOPS(Z_SYSCALL_OBJ(e->queue, K_OBJ_QUEUE));
 			break;
 		case K_POLL_TYPE_MSGQ_DATA_AVAILABLE:
-			K_OOPS(K_SYSCALL_OBJ(e->msgq, K_OBJ_MSGQ));
+			Z_OOPS(Z_SYSCALL_OBJ(e->msgq, K_OBJ_MSGQ));
 			break;
+#ifdef CONFIG_PIPES
 		case K_POLL_TYPE_PIPE_DATA_AVAILABLE:
-			K_OOPS(K_SYSCALL_OBJ(e->pipe, K_OBJ_PIPE));
+			Z_OOPS(Z_SYSCALL_OBJ(e->pipe, K_OBJ_PIPE));
 			break;
+#endif
 		default:
 			ret = -EINVAL;
 			goto out_free;
@@ -422,10 +432,10 @@ out:
 	return ret;
 oops_free:
 	k_free(events_copy);
-	K_OOPS(1);
+	Z_OOPS(1);
 }
-#include <zephyr/syscalls/k_poll_mrsh.c>
-#endif /* CONFIG_USERSPACE */
+#include <syscalls/k_poll_mrsh.c>
+#endif
 
 /* must be called with interrupts locked */
 static int signal_poll_event(struct k_poll_event *event, uint32_t state)
@@ -454,7 +464,7 @@ static int signal_poll_event(struct k_poll_event *event, uint32_t state)
 	return retcode;
 }
 
-bool z_handle_obj_poll_events(sys_dlist_t *events, uint32_t state)
+void z_handle_obj_poll_events(sys_dlist_t *events, uint32_t state)
 {
 	struct k_poll_event *poll_event;
 	k_spinlock_key_t key = k_spin_lock(&lock);
@@ -465,8 +475,6 @@ bool z_handle_obj_poll_events(sys_dlist_t *events, uint32_t state)
 	}
 
 	k_spin_unlock(&lock, key);
-
-	return (poll_event != NULL);
 }
 
 void z_impl_k_poll_signal_init(struct k_poll_signal *sig)
@@ -474,7 +482,7 @@ void z_impl_k_poll_signal_init(struct k_poll_signal *sig)
 	sys_dlist_init(&sig->poll_events);
 	sig->signaled = 0U;
 	/* signal->result is left uninitialized */
-	k_object_init(sig);
+	z_object_init(sig);
 
 	SYS_PORT_TRACING_FUNC(k_poll_api, signal_init, sig);
 }
@@ -482,11 +490,11 @@ void z_impl_k_poll_signal_init(struct k_poll_signal *sig)
 #ifdef CONFIG_USERSPACE
 static inline void z_vrfy_k_poll_signal_init(struct k_poll_signal *sig)
 {
-	K_OOPS(K_SYSCALL_OBJ_INIT(sig, K_OBJ_POLL_SIGNAL));
+	Z_OOPS(Z_SYSCALL_OBJ_INIT(sig, K_OBJ_POLL_SIGNAL));
 	z_impl_k_poll_signal_init(sig);
 }
-#include <zephyr/syscalls/k_poll_signal_init_mrsh.c>
-#endif /* CONFIG_USERSPACE */
+#include <syscalls/k_poll_signal_init_mrsh.c>
+#endif
 
 void z_impl_k_poll_signal_reset(struct k_poll_signal *sig)
 {
@@ -508,13 +516,13 @@ void z_impl_k_poll_signal_check(struct k_poll_signal *sig,
 void z_vrfy_k_poll_signal_check(struct k_poll_signal *sig,
 			       unsigned int *signaled, int *result)
 {
-	K_OOPS(K_SYSCALL_OBJ(sig, K_OBJ_POLL_SIGNAL));
-	K_OOPS(K_SYSCALL_MEMORY_WRITE(signaled, sizeof(unsigned int)));
-	K_OOPS(K_SYSCALL_MEMORY_WRITE(result, sizeof(int)));
+	Z_OOPS(Z_SYSCALL_OBJ(sig, K_OBJ_POLL_SIGNAL));
+	Z_OOPS(Z_SYSCALL_MEMORY_WRITE(signaled, sizeof(unsigned int)));
+	Z_OOPS(Z_SYSCALL_MEMORY_WRITE(result, sizeof(int)));
 	z_impl_k_poll_signal_check(sig, signaled, result);
 }
-#include <zephyr/syscalls/k_poll_signal_check_mrsh.c>
-#endif /* CONFIG_USERSPACE */
+#include <syscalls/k_poll_signal_check_mrsh.c>
+#endif
 
 int z_impl_k_poll_signal_raise(struct k_poll_signal *sig, int result)
 {
@@ -545,19 +553,19 @@ int z_impl_k_poll_signal_raise(struct k_poll_signal *sig, int result)
 static inline int z_vrfy_k_poll_signal_raise(struct k_poll_signal *sig,
 					     int result)
 {
-	K_OOPS(K_SYSCALL_OBJ(sig, K_OBJ_POLL_SIGNAL));
+	Z_OOPS(Z_SYSCALL_OBJ(sig, K_OBJ_POLL_SIGNAL));
 	return z_impl_k_poll_signal_raise(sig, result);
 }
-#include <zephyr/syscalls/k_poll_signal_raise_mrsh.c>
+#include <syscalls/k_poll_signal_raise_mrsh.c>
 
 static inline void z_vrfy_k_poll_signal_reset(struct k_poll_signal *sig)
 {
-	K_OOPS(K_SYSCALL_OBJ(sig, K_OBJ_POLL_SIGNAL));
+	Z_OOPS(Z_SYSCALL_OBJ(sig, K_OBJ_POLL_SIGNAL));
 	z_impl_k_poll_signal_reset(sig);
 }
-#include <zephyr/syscalls/k_poll_signal_reset_mrsh.c>
+#include <syscalls/k_poll_signal_reset_mrsh.c>
 
-#endif /* CONFIG_USERSPACE */
+#endif
 
 static void triggered_work_handler(struct k_work *work)
 {
@@ -667,7 +675,7 @@ int k_work_poll_submit_to_queue(struct k_work_q *work_q,
 	__ASSERT(work_q != NULL, "NULL work_q\n");
 	__ASSERT(work != NULL, "NULL work\n");
 	__ASSERT(events != NULL, "NULL events\n");
-	__ASSERT(num_events >= 0, "<0 events\n");
+	__ASSERT(num_events > 0, "zero events\n");
 
 	SYS_PORT_TRACING_FUNC_ENTER(k_work_poll, submit_to_queue, work_q, work, timeout);
 

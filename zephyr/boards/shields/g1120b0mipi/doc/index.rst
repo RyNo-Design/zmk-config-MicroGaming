@@ -1,7 +1,7 @@
 .. _g1120b0mipi:
 
-NXP G1120B0MIPI MIPI Display
-############################
+G1120B0MIPI MIPI Display
+##########################
 
 Overview
 ********
@@ -50,17 +50,14 @@ for the 40 pin FPC interface
 Programming
 ***********
 
-Set ``--shield g1120b0mipi`` when you invoke ``west build``. For
+Set ``-DSHIELD=g1120b0mipi`` when you invoke ``west build``. For
 example:
 
 .. zephyr-app-commands::
    :zephyr-app: samples/drivers/display
-   :board: mimxrt595_evk/mimxrt595s/cm33
+   :board: mimxrt595_evk_cm33
    :shield: g1120b0mipi
    :goals: build
-
-.. include:: ../../../nxp/common/board-footer.rst
-   :start-after: nxp-board-footer
 
 References
 **********

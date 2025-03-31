@@ -5,6 +5,5 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(uart_emul)
 
 target_sources(app PRIVATE
-    src/bus.c
-    src/device.c
+    src/main.c
     )

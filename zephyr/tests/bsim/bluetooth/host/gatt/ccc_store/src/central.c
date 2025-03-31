@@ -22,17 +22,13 @@
 #include "settings.h"
 
 #include "argparse.h"
-
-#include "babblekit/testcase.h"
-#include "babblekit/flags.h"
-#include "babblekit/sync.h"
+#include "bs_pc_backchannel.h"
 
 #define SERVER_CHAN 0
 
-DEFINE_FLAG_STATIC(connected_flag);
-DEFINE_FLAG_STATIC(disconnected_flag);
-DEFINE_FLAG_STATIC(security_updated_flag);
-DEFINE_FLAG_STATIC(notification_received_flag);
+CREATE_FLAG(connected_flag);
+CREATE_FLAG(disconnected_flag);
+CREATE_FLAG(security_updated_flag);
 
 #define BT_UUID_DUMMY_SERVICE BT_UUID_DECLARE_128(DUMMY_SERVICE_TYPE)
 #define BT_UUID_DUMMY_SERVICE_NOTIFY BT_UUID_DECLARE_128(DUMMY_SERVICE_NOTIFY_TYPE)
@@ -41,60 +37,57 @@ static struct bt_conn *default_conn;
 
 static struct bt_conn_cb central_cb;
 
-DEFINE_FLAG_STATIC(gatt_subscribed_flag);
+CREATE_FLAG(gatt_write_flag);
+static uint8_t gatt_write_att_err;
 
-static uint8_t notify_cb(struct bt_conn *conn, struct bt_gatt_subscribe_params *params,
-			 const void *data, uint16_t length)
+static void gatt_write_cb(struct bt_conn *conn, uint8_t att_err,
+			  struct bt_gatt_write_params *params)
 {
-	uint8_t value;
+	gatt_write_att_err = att_err;
 
-	if (conn == NULL || data == NULL) {
-		/* Peer unpaired or subscription was removed */
-		UNSET_FLAG(gatt_subscribed_flag);
-
-		return BT_GATT_ITER_STOP;
-	}
-
-	__ASSERT_NO_MSG(length == sizeof(value));
-
-	value = *(uint8_t *)data;
-
-	LOG_DBG("#%d notification received", value);
-
-	SET_FLAG(notification_received_flag);
-
-	return BT_GATT_ITER_CONTINUE;
-}
-
-static void subscribe_cb(struct bt_conn *conn, uint8_t err, struct bt_gatt_subscribe_params *params)
-{
-	if (err) {
+	if (att_err) {
 		return;
 	}
 
-	SET_FLAG(gatt_subscribed_flag);
+	SET_FLAG(gatt_write_flag);
 }
 
-static struct bt_gatt_subscribe_params subscribe_params;
+static int gatt_write(struct bt_conn *conn, uint16_t handle, const uint8_t *write_buf,
+		      size_t write_size)
+{
+	int err;
+	struct bt_gatt_write_params params;
+
+	params.func = gatt_write_cb;
+	params.handle = handle;
+	params.offset = 0;
+	params.data = write_buf;
+	params.length = write_size;
+
+	UNSET_FLAG(gatt_write_flag);
+
+	/* `bt_gatt_write` is used instead of `bt_gatt_subscribe` and
+	 * `bt_gatt_unsubscribe` to bypass subscribtion checks of GATT client
+	 */
+	err = bt_gatt_write(conn, &params);
+	if (err) {
+		FAIL("GATT write failed (err %d)", err);
+	}
+
+	WAIT_FOR_FLAG(gatt_write_flag);
+
+	return gatt_write_att_err;
+}
 
 static void ccc_subscribe(void)
 {
 	int err;
+	uint8_t buf = 1;
 
-	UNSET_FLAG(gatt_subscribed_flag);
-
-	subscribe_params.notify = notify_cb;
-	subscribe_params.subscribe = subscribe_cb;
-	subscribe_params.ccc_handle = CCC_HANDLE;
-	subscribe_params.value_handle = VAL_HANDLE;
-	subscribe_params.value = BT_GATT_CCC_NOTIFY;
-
-	err = bt_gatt_subscribe(default_conn, &subscribe_params);
+	err = gatt_write(default_conn, CCC_HANDLE, &buf, sizeof(buf));
 	if (err) {
-		TEST_FAIL("Failed to subscribe (att err %d)", err);
+		FAIL("Failed to subscribe (att err %d)", err);
 	}
-
-	WAIT_FOR_FLAG(gatt_subscribed_flag);
 }
 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
@@ -109,13 +102,13 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 
 	err = bt_le_scan_stop();
 	if (err) {
-		TEST_FAIL("Failed to stop scanner (err %d)", err);
+		FAIL("Failed to stop scanner (err %d)\n", err);
 	}
 
 	err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN, BT_LE_CONN_PARAM_DEFAULT,
 				&default_conn);
 	if (err) {
-		TEST_FAIL("Could not connect to peer: %s (err %d)", addr_str, err);
+		FAIL("Could not connect to peer: %s (err %d)\n", addr_str, err);
 	}
 }
 
@@ -128,7 +121,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
 
 	if (err) {
-		TEST_FAIL("Failed to connect to %s (err %d)", addr_str, err);
+		FAIL("Failed to connect to %s (err %d)\n", addr_str, err);
 	}
 
 	LOG_DBG("Connected: %s", addr_str);
@@ -176,7 +169,7 @@ static void start_scan(void)
 
 	err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, device_found);
 	if (err) {
-		TEST_FAIL("Scanning failed to start (err %d)", err);
+		FAIL("Scanning failed to start (err %d)\n", err);
 	}
 
 	LOG_DBG("Scanning successfully started");
@@ -188,7 +181,7 @@ static void disconnect(void)
 
 	err = bt_conn_disconnect(default_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 	if (err) {
-		TEST_FAIL("Disconnection failed (err %d)", err);
+		FAIL("Disconnection failed (err %d)\n", err);
 	}
 
 	WAIT_FOR_FLAG(disconnected_flag);
@@ -208,7 +201,7 @@ static void connect_pair_subscribe(void)
 
 	err = bt_conn_set_security(default_conn, BT_SECURITY_L2);
 	if (err != 0) {
-		TEST_FAIL("Failed to set security (err %d)", err);
+		FAIL("Failed to set security (err %d)\n", err);
 	}
 
 	WAIT_FOR_FLAG(security_updated_flag);
@@ -218,12 +211,9 @@ static void connect_pair_subscribe(void)
 	ccc_subscribe();
 
 	/* confirm to server that we subscribed */
-	bk_sync_send();
+	backchannel_sync_send(SERVER_CHAN, SERVER_ID);
 	/* wait for server to check that the subscribtion is well registered */
-	bk_sync_wait();
-
-	WAIT_FOR_FLAG(notification_received_flag);
-	UNSET_FLAG(notification_received_flag);
+	backchannel_sync_wait(SERVER_CHAN, SERVER_ID);
 }
 
 static void connect_restore_sec(void)
@@ -237,27 +227,39 @@ static void connect_restore_sec(void)
 
 	err = bt_conn_set_security(default_conn, BT_SECURITY_L2);
 	if (err != 0) {
-		TEST_FAIL("Failed to set security (err %d)", err);
+		FAIL("Failed to set security (err %d)\n", err);
 	}
 
 	WAIT_FOR_FLAG(security_updated_flag);
 	UNSET_FLAG(security_updated_flag);
 
-	/* check local subscription state */
-	if (!IS_FLAG_SET(gatt_subscribed_flag)) {
-		TEST_FAIL("Not subscribed");
-	}
-
 	/* notify the end of security update to server */
-	bk_sync_send();
+	backchannel_sync_send(SERVER_CHAN, SERVER_ID);
 	/* wait for server to check that the subscribtion has been restored */
-	bk_sync_wait();
-
-	WAIT_FOR_FLAG(notification_received_flag);
-	UNSET_FLAG(notification_received_flag);
+	backchannel_sync_wait(SERVER_CHAN, SERVER_ID);
 }
 
 /* Util functions */
+
+void central_backchannel_init(void)
+{
+	uint device_number = get_device_nbr();
+	uint channel_numbers[1] = {
+		0,
+	};
+	uint device_numbers[1];
+	uint num_ch = 1;
+	uint *ch;
+
+	device_numbers[0] = SERVER_ID;
+
+	LOG_DBG("Opening back channels for device %d", device_number);
+	ch = bs_open_back_channel(device_number, device_numbers, channel_numbers, num_ch);
+	if (!ch) {
+		FAIL("Unable to open backchannel\n");
+	}
+	LOG_DBG("Back channels for device %d opened", device_number);
+}
 
 static void set_public_addr(void)
 {
@@ -268,7 +270,7 @@ static void set_public_addr(void)
 
 /* Main functions */
 
-void run_central(int times)
+void run_central(void)
 {
 	int err;
 
@@ -276,12 +278,12 @@ void run_central(int times)
 	central_cb.disconnected = disconnected;
 	central_cb.security_changed = security_changed;
 
-	TEST_ASSERT(bk_sync_init() == 0);
+	central_backchannel_init();
 	set_public_addr();
 
 	err = bt_enable(NULL);
 	if (err) {
-		TEST_FAIL("Bluetooth init failed (err %d)", err);
+		FAIL("Bluetooth init failed (err %d)\n", err);
 	}
 
 	LOG_DBG("Bluetooth initialized");
@@ -290,21 +292,19 @@ void run_central(int times)
 
 	err = settings_load();
 	if (err) {
-		TEST_FAIL("Settings load failed (err %d)", err);
+		FAIL("Settings load failed (err %d)\n", err);
 	}
 
 	err = bt_unpair(BT_ID_DEFAULT, BT_ADDR_LE_ANY);
 	if (err) {
-		TEST_FAIL("Unpairing failed (err %d)", err);
+		FAIL("Unpairing failed (err %d)\n", err);
 	}
 
 	connect_pair_subscribe();
 	disconnect();
 
-	for (int i = 0; i < times; i++) {
-		connect_restore_sec();
-		disconnect();
-	}
+	connect_restore_sec();
+	disconnect();
 
-	TEST_PASS("Central test passed");
+	PASS("Central test passed\n");
 }

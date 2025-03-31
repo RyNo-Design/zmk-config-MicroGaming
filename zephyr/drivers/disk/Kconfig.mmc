@@ -3,8 +3,7 @@
 
 config DISK_DRIVER_MMC
 	bool "MMC card driver"
-	depends on DT_HAS_ZEPHYR_MMC_DISK_ENABLED
-	default y
+	default y if DT_HAS_ZEPHYR_MMC_DISK_ENABLED
 	help
 	  MMC card driver.
 
@@ -15,6 +14,13 @@ config SD_INIT_PRIORITY
 	default 90
 	help
 	  MMC controller driver initialization priority.
+
+config MMC_VOLUME_NAME
+	string "MMC Disk mount point or drive name"
+	default "SD" if FAT_FILESYSTEM_ELM
+	default "MMC"
+	help
+	  Disk name as per file system naming guidelines.
 
 config MMC_SUBSYS
 	bool "MMC access via SD subsystem"

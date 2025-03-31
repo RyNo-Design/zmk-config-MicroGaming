@@ -7,16 +7,21 @@
 #ifndef ZEPHYR_INCLUDE_POSIX_SYS_EVENTFD_H_
 #define ZEPHYR_INCLUDE_POSIX_SYS_EVENTFD_H_
 
-#include <zephyr/zvfs/eventfd.h>
+#include <stdint.h>
+
+#include <zephyr/kernel.h>
+#include <zephyr/posix/fcntl.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define EFD_SEMAPHORE ZVFS_EFD_SEMAPHORE
-#define EFD_NONBLOCK  ZVFS_EFD_NONBLOCK
+#define EFD_IN_USE    0x1 __DEPRECATED_MACRO
+#define EFD_SEMAPHORE 0x2
+#define EFD_NONBLOCK  O_NONBLOCK
+#define EFD_FLAGS_SET (EFD_SEMAPHORE | EFD_NONBLOCK) __DEPRECATED_MACRO
 
-typedef zvfs_eventfd_t eventfd_t;
+typedef uint64_t eventfd_t;
 
 /**
  * @brief Create a file descriptor for event notification

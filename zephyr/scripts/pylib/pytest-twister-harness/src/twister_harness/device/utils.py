@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 import platform
@@ -42,10 +41,11 @@ def terminate_process(proc: subprocess.Popen) -> None:
     """
     Try to terminate provided process and all its subprocesses recursively.
     """
-    with contextlib.suppress(ProcessLookupError, psutil.NoSuchProcess):
-        for child in psutil.Process(proc.pid).children(recursive=True):
-            with contextlib.suppress(ProcessLookupError, psutil.NoSuchProcess):
-                os.kill(child.pid, signal.SIGTERM)
+    for child in psutil.Process(proc.pid).children(recursive=True):
+        try:
+            os.kill(child.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
     proc.terminate()
     # sleep for a while before attempting to kill
     time.sleep(0.5)

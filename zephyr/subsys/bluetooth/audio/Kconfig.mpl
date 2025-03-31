@@ -8,6 +8,8 @@
 
 config BT_MPL
 	bool "Support for media player"
+	select BT_CCID
+	select EXPERIMENTAL
 	help
 	  Enables support for media player
 	  Note that the provided media player is a sample that only provides a
@@ -26,7 +28,7 @@ config BT_MPL_MEDIA_PLAYER_NAME
 config BT_MPL_MEDIA_PLAYER_NAME_MAX
 	int "Max length of media player name"
 	default 20
-	range 1 $(UINT8_MAX)
+	range 1 255
 	help
 	  Sets the maximum number of bytes (including the null termination) of
 	  the name of the media player.
@@ -40,7 +42,7 @@ config BT_MPL_ICON_URL
 config BT_MPL_ICON_URL_MAX
 	int "Max length of media player icon URL"
 	default 40
-	range 1 $(UINT8_MAX)
+	range 1 255
 	help
 	  Sets the maximum number of bytes (including the null termination) of
 	  the media player icon URL.
@@ -48,7 +50,7 @@ config BT_MPL_ICON_URL_MAX
 config BT_MPL_TRACK_TITLE_MAX
 	int "Max length of the title of a track"
 	default 40
-	range 1 $(UINT8_MAX)
+	range 1 255
 	help
 	  Sets the maximum number of bytes (including the null termination) of
 	  the title of any track in the media player.
@@ -56,15 +58,15 @@ config BT_MPL_TRACK_TITLE_MAX
 config BT_MPL_SEGMENT_NAME_MAX
 	int "Max length of the name of a track segment"
 	default 25
-	range 1 $(UINT8_MAX)
+	range 1 255
 	help
-	  Sets the maximum number of bytes (including the null termination)
+	  Sets the the maximum number of bytes (including the null termination)
 	  of the name of any track segment in the media player.
 
 config BT_MPL_GROUP_TITLE_MAX
 	int "Max length of the title of a group of tracks"
 	default BT_MPL_TRACK_TITLE_MAX
-	range 1 $(UINT8_MAX)
+	range 1 255
 	help
 	  Sets the maximum number of bytes (including the null termination) of
 	  the title of any group in the media player.

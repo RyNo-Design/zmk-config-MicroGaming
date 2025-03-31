@@ -66,7 +66,8 @@ static int gpio_sam_port_configure(const struct device *dev, uint32_t mask,
 		pio->PIO_PUDR = mask;
 #if defined(CONFIG_SOC_SERIES_SAM4S) || \
 	defined(CONFIG_SOC_SERIES_SAM4E) || \
-	defined(CONFIG_SOC_SERIES_SAMX7X)
+	defined(CONFIG_SOC_SERIES_SAME70) || \
+	defined(CONFIG_SOC_SERIES_SAMV71)
 		/* Disable pull-down. */
 		pio->PIO_PPDDR = mask;
 #endif
@@ -107,7 +108,8 @@ static int gpio_sam_port_configure(const struct device *dev, uint32_t mask,
 	pio->PIO_PUDR = mask;
 #if defined(CONFIG_SOC_SERIES_SAM4S) || \
 	defined(CONFIG_SOC_SERIES_SAM4E) || \
-	defined(CONFIG_SOC_SERIES_SAMX7X)
+	defined(CONFIG_SOC_SERIES_SAME70) || \
+	defined(CONFIG_SOC_SERIES_SAMV71)
 	pio->PIO_PPDDR = mask;
 #endif
 	if (flags & GPIO_PULL_UP) {
@@ -115,7 +117,8 @@ static int gpio_sam_port_configure(const struct device *dev, uint32_t mask,
 		pio->PIO_PUER = mask;
 #if defined(CONFIG_SOC_SERIES_SAM4S) || \
 	defined(CONFIG_SOC_SERIES_SAM4E) || \
-	defined(CONFIG_SOC_SERIES_SAMX7X)
+	defined(CONFIG_SOC_SERIES_SAME70) || \
+	defined(CONFIG_SOC_SERIES_SAMV71)
 
 	/* Setup Pull-down resistor. */
 	} else if (flags & GPIO_PULL_DOWN) {
@@ -133,7 +136,8 @@ static int gpio_sam_port_configure(const struct device *dev, uint32_t mask,
 	}
 #elif defined(CONFIG_SOC_SERIES_SAM4S) || \
 	defined(CONFIG_SOC_SERIES_SAM4E) || \
-	defined(CONFIG_SOC_SERIES_SAMX7X)
+	defined(CONFIG_SOC_SERIES_SAME70) || \
+	defined(CONFIG_SOC_SERIES_SAMV71)
 
 	/* Setup debounce. */
 	if (flags & SAM_GPIO_DEBOUNCE) {
@@ -289,7 +293,7 @@ static int gpio_sam_manage_callback(const struct device *port,
 	return gpio_manage_callback(&context->cb, callback, set);
 }
 
-static DEVICE_API(gpio, gpio_sam_api) = {
+static const struct gpio_driver_api gpio_sam_api = {
 	.pin_configure = gpio_sam_config,
 	.port_get_raw = gpio_sam_port_get_raw,
 	.port_set_masked_raw = gpio_sam_port_set_masked_raw,

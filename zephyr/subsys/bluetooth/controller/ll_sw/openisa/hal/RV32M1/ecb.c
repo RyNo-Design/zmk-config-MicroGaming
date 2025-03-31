@@ -104,9 +104,9 @@ void ecb_encrypt(uint8_t const *const key_le, uint8_t const *const clear_text_le
 	}
 }
 
-void ecb_encrypt_nonblocking(struct ecb *e)
+uint32_t ecb_encrypt_nonblocking(struct ecb *ecb)
 {
-	return;
+	return 0;
 }
 
 void isr_ecb(void *param)
@@ -123,7 +123,7 @@ void isr_ecb(void *param)
 		    &conn->llcp.encryption.skd[0], NULL,
 		    &lll->ccm_rx.key[0]);
  */
-int ecb_ut(void)
+uint32_t ecb_ut(void)
 {
 	/*
 	 * LTK = 0x4C68384139F574D836BCF34E9DFB01BF (MSO to LSO)

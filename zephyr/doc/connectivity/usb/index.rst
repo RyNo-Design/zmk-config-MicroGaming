@@ -19,7 +19,6 @@ USB
    device_next/usb_device.rst
    device_next/api/index.rst
    host/api/index.rst
-   host/usbip.rst
 
 **USB Power Delivery support**
 

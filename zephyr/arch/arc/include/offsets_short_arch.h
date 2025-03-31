@@ -7,7 +7,7 @@
 #ifndef ZEPHYR_ARCH_ARC_INCLUDE_OFFSETS_SHORT_ARCH_H_
 #define ZEPHYR_ARCH_ARC_INCLUDE_OFFSETS_SHORT_ARCH_H_
 
-#include <zephyr/offsets.h>
+#include <offsets.h>
 
 /* kernel */
 

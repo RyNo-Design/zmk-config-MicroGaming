@@ -34,11 +34,6 @@ struct net_icmpv4_echo_req {
 	uint16_t sequence;
 } __packed;
 
-struct net_icmpv4_dest_unreach {
-	uint16_t unused;
-	uint16_t mtu;
-} __packed;
-
 /**
  * @brief Send ICMPv4 error message.
  * @param pkt Network packet that this error is related to.
@@ -53,7 +48,7 @@ enum net_verdict net_icmpv4_input(struct net_pkt *pkt,
 				  struct net_ipv4_hdr *ip_hdr);
 
 int net_icmpv4_create(struct net_pkt *pkt, uint8_t icmp_type, uint8_t icmp_code);
-int net_icmpv4_finalize(struct net_pkt *pkt, bool force_chksum);
+int net_icmpv4_finalize(struct net_pkt *pkt);
 
 void net_icmpv4_init(void);
 #else

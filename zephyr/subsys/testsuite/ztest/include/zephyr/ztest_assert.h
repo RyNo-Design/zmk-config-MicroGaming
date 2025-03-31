@@ -18,7 +18,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <zephyr/tc_util.h>
 #include <zephyr/ztest.h>
 
 #ifdef __cplusplus
@@ -35,8 +34,7 @@ void ztest_skip_failed_assumption(void);
 static inline bool z_zassert_(bool cond, const char *file, int line)
 {
 	if (cond == false) {
-		PRINT_DATA("\n    Assertion failed at %s:%d\n", ztest_relative_filename(file),
-			   line);
+		PRINT("\n    Assertion failed at %s:%d\n", ztest_relative_filename(file), line);
 		ztest_test_fail();
 		return false;
 	}
@@ -49,8 +47,7 @@ static inline bool z_zassert_(bool cond, const char *file, int line)
 static inline bool z_zassume_(bool cond, const char *file, int line)
 {
 	if (cond == false) {
-		PRINT_DATA("\n    Assumption failed at %s:%d\n", ztest_relative_filename(file),
-			   line);
+		PRINT("\n    Assumption failed at %s:%d\n", ztest_relative_filename(file), line);
 		ztest_skip_failed_assumption();
 		return false;
 	}
@@ -63,8 +60,7 @@ static inline bool z_zassume_(bool cond, const char *file, int line)
 static inline bool z_zexpect_(bool cond, const char *file, int line)
 {
 	if (cond == false) {
-		PRINT_DATA("\n    Expectation failed at %s:%d\n", ztest_relative_filename(file),
-			   line);
+		PRINT("\n    Expectation failed at %s:%d\n", ztest_relative_filename(file), line);
 		ztest_test_expect_fail();
 		return false;
 	}
@@ -83,8 +79,8 @@ static inline bool z_zassert(bool cond, const char *default_msg, const char *fil
 		va_list vargs;
 
 		va_start(vargs, msg);
-		PRINT_DATA("\n    Assertion failed at %s:%d: %s: %s\n",
-			   ztest_relative_filename(file), line, func, default_msg);
+		PRINT("\n    Assertion failed at %s:%d: %s: %s\n", ztest_relative_filename(file),
+		      line, func, default_msg);
 		vprintk(msg, vargs);
 		printk("\n");
 		va_end(vargs);
@@ -93,8 +89,8 @@ static inline bool z_zassert(bool cond, const char *default_msg, const char *fil
 	}
 #if CONFIG_ZTEST_ASSERT_VERBOSE == 2
 	else {
-		PRINT_DATA("\n   Assertion succeeded at %s:%d (%s)\n",
-			   ztest_relative_filename(file), line, func);
+		PRINT("\n   Assertion succeeded at %s:%d (%s)\n", ztest_relative_filename(file),
+		      line, func);
 	}
 #endif
 	return true;
@@ -107,8 +103,8 @@ static inline bool z_zassume(bool cond, const char *default_msg, const char *fil
 		va_list vargs;
 
 		va_start(vargs, msg);
-		PRINT_DATA("\n    Assumption failed at %s:%d: %s: %s\n",
-			   ztest_relative_filename(file), line, func, default_msg);
+		PRINT("\n    Assumption failed at %s:%d: %s: %s\n", ztest_relative_filename(file),
+		      line, func, default_msg);
 		vprintk(msg, vargs);
 		printk("\n");
 		va_end(vargs);
@@ -117,8 +113,8 @@ static inline bool z_zassume(bool cond, const char *default_msg, const char *fil
 	}
 #if CONFIG_ZTEST_ASSERT_VERBOSE == 2
 	else {
-		PRINT_DATA("\n   Assumption succeeded at %s:%d (%s)\n",
-			   ztest_relative_filename(file), line, func);
+		PRINT("\n   Assumption succeeded at %s:%d (%s)\n", ztest_relative_filename(file),
+		      line, func);
 	}
 #endif
 	return true;
@@ -131,8 +127,8 @@ static inline bool z_zexpect(bool cond, const char *default_msg, const char *fil
 		va_list vargs;
 
 		va_start(vargs, msg);
-		PRINT_DATA("\n    Expectation failed at %s:%d: %s: %s\n",
-			   ztest_relative_filename(file), line, func, default_msg);
+		PRINT("\n    Expectation failed at %s:%d: %s: %s\n", ztest_relative_filename(file),
+		      line, func, default_msg);
 		vprintk(msg, vargs);
 		printk("\n");
 		va_end(vargs);
@@ -141,8 +137,8 @@ static inline bool z_zexpect(bool cond, const char *default_msg, const char *fil
 	}
 #if CONFIG_ZTEST_ASSERT_VERBOSE == 2
 	else {
-		PRINT_DATA("\n   Expectation succeeded at %s:%d (%s)\n",
-			   ztest_relative_filename(file), line, func);
+		PRINT("\n   Expectation succeeded at %s:%d (%s)\n", ztest_relative_filename(file),
+		      line, func);
 	}
 #endif
 	return true;
@@ -176,9 +172,8 @@ static inline bool z_zexpect(bool cond, const char *default_msg, const char *fil
 #define _zassert_base(cond, default_msg, msg, ...)                                                 \
 	do {                                                                                       \
 		bool _msg = (msg != NULL);                                                         \
-		bool _ret =                                                                        \
-			z_zassert(cond, _msg ? ("(" default_msg ")") : (default_msg), __FILE__,    \
-				  __LINE__, __func__, _msg ? msg : "", ##__VA_ARGS__);             \
+		bool _ret = z_zassert(cond, _msg ? ("(" default_msg ")") : (default_msg), __FILE__,\
+				      __LINE__, __func__, _msg ? msg : "", ##__VA_ARGS__);         \
 		(void)_msg;                                                                        \
 		if (!_ret) {                                                                       \
 			/* If kernel but without multithreading return. */                         \
@@ -214,9 +209,8 @@ static inline bool z_zexpect(bool cond, const char *default_msg, const char *fil
 #define _zassume_base(cond, default_msg, msg, ...)                                                 \
 	do {                                                                                       \
 		bool _msg = (msg != NULL);                                                         \
-		bool _ret =                                                                        \
-			z_zassume(cond, _msg ? ("(" default_msg ")") : (default_msg), __FILE__,    \
-				  __LINE__, __func__, _msg ? msg : "", ##__VA_ARGS__);             \
+		bool _ret = z_zassume(cond, _msg ? ("(" default_msg ")") : (default_msg), __FILE__,\
+				      __LINE__, __func__, _msg ? msg : "", ##__VA_ARGS__);         \
 		(void)_msg;                                                                        \
 		if (!_ret) {                                                                       \
 			/* If kernel but without multithreading return. */                         \
@@ -287,13 +281,6 @@ static inline bool z_zexpect(bool cond, const char *default_msg, const char *fil
  * @param ... Optional message and variables to print if the assertion fails
  */
 #define zassert_ok(cond, ...) zassert(!(cond), #cond " is non-zero", ##__VA_ARGS__)
-
-/**
- * @brief Assert that @a cond is not 0 (failure)
- * @param cond Condition to check
- * @param ... Optional message and variables to print if the assertion fails
- */
-#define zassert_not_ok(cond, ...) zassert(!!(cond), #cond " is zero", ##__VA_ARGS__)
 
 /**
  * @brief Assert that @a ptr is NULL
@@ -396,16 +383,6 @@ static inline bool z_zexpect(bool cond, const char *default_msg, const char *fil
 	zassert(memcmp(buf, exp, size) == 0, #buf " not equal to " #exp, ##__VA_ARGS__)
 
 /**
- * @brief Assert that 2 strings have the same contents
- *
- * @param s1 The first string
- * @param s2 The second string
- * @param ... Optional message and variables to print if the expectation fails
- */
-#define zassert_str_equal(s1, s2, ...)                                                             \
-	zassert(strcmp(s1, s2) == 0, #s1 " not equal to " #s2, ##__VA_ARGS__)
-
-/**
  * @}
  */
 
@@ -447,16 +424,6 @@ static inline bool z_zexpect(bool cond, const char *default_msg, const char *fil
  * @param ... Optional message and variables to print if the assumption fails
  */
 #define zassume_ok(cond, ...) zassume(!(cond), #cond " is non-zero", ##__VA_ARGS__)
-
-/**
- * @brief Assume that @a cond is not 0 (failure)
- *
- * If the assumption fails, the test will be marked as "skipped".
- *
- * @param cond Condition to check
- * @param ... Optional message and variables to print if the assumption fails
- */
-#define zassume_not_ok(cond, ...) zassume(!!(cond), #cond " is zero", ##__VA_ARGS__)
 
 /**
  * @brief Assume that @a ptr is NULL
@@ -574,16 +541,6 @@ static inline bool z_zexpect(bool cond, const char *default_msg, const char *fil
 	zassume(memcmp(buf, exp, size) == 0, #buf " not equal to " #exp, ##__VA_ARGS__)
 
 /**
- * @brief Assumes that 2 strings have the same contents
- *
- * @param s1 The first string
- * @param s2 The second string
- * @param ... Optional message and variables to print if the expectation fails
- */
-#define zassume_str_equal(s1, s2, ...)                                                             \
-	zassume(strcmp(s1, s2) == 0, #s1 " not equal to " #s2, ##__VA_ARGS__)
-
-/**
  * @}
  */
 
@@ -622,15 +579,6 @@ static inline bool z_zexpect(bool cond, const char *default_msg, const char *fil
 #define zexpect_ok(cond, ...) zexpect(!(cond), #cond " is non-zero", ##__VA_ARGS__)
 
 /**
- * @brief Expect that @a cond is not 0 (failure), otherwise mark test as failed but continue its
- * execution.
- *
- * @param cond Condition to check
- * @param ... Optional message and variables to print if the expectation fails
- */
-#define zexpect_not_ok(cond, ...) zexpect(!!(cond), #cond " is zero", ##__VA_ARGS__)
-
-/**
  * @brief Expect that @a ptr is NULL, otherwise mark test as failed but continue its execution.
  *
  * @param ptr Pointer to compare
@@ -648,6 +596,7 @@ static inline bool z_zexpect(bool cond, const char *default_msg, const char *fil
 
 /**
  * @brief Expect that @a a equals @a b, otherwise mark test as failed but continue its execution.
+ * expectation fails, the test will be marked as "skipped".
  *
  * @param a Value to compare
  * @param b Value to compare
@@ -716,17 +665,6 @@ static inline bool z_zexpect(bool cond, const char *default_msg, const char *fil
  */
 #define zexpect_mem_equal(buf, exp, size, ...)                                                     \
 	zexpect(memcmp(buf, exp, size) == 0, #buf " not equal to " #exp, ##__VA_ARGS__)
-
-/**
- * @brief Expect that 2 strings have the same contents, otherwise mark test as failed but
- * continue its execution.
- *
- * @param s1 The first string
- * @param s2 The second string
- * @param ... Optional message and variables to print if the expectation fails
- */
-#define zexpect_str_equal(s1, s2, ...)                                                             \
-	zexpect(strcmp(s1, s2) == 0, #s1 " not equal to " #s2, ##__VA_ARGS__)
 
 /**
  * @}

@@ -3,23 +3,18 @@
 # Copyright (c) 2018-2022 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-import copy
-import warnings
-from typing import Any
-
 import scl
+import warnings
+from typing import Union
 from twisterlib.error import ConfigurationError
 
-
-def extract_fields_from_arg_list(
-    target_fields: set, arg_list: str | list
- ) -> tuple[dict[str, list[str]], list[str]]:
+def extract_fields_from_arg_list(target_fields: set, arg_list: Union[str, list]):
     """
     Given a list of "FIELD=VALUE" args, extract values of args with a
     given field name and return the remaining args separately.
     """
-    extracted_fields: dict[str, list[str]] = {f: list() for f in target_fields}
-    other_fields: list[str] = []
+    extracted_fields = {f : list() for f in target_fields}
+    other_fields = []
 
     if isinstance(arg_list, str):
         args = arg_list.strip().split()
@@ -40,80 +35,74 @@ def extract_fields_from_arg_list(
             # Move to other_fields
             other_fields.append(field)
 
-    return extracted_fields, other_fields
-
+    return extracted_fields, " ".join(other_fields)
 
 class TwisterConfigParser:
     """Class to read testsuite yaml files with semantic checking
     """
 
-    testsuite_valid_keys: dict[str, dict[str, Any]] = {
-        "tags": {"type": "set", "required": False},
-        "type": {"type": "str", "default": "integration"},
-        "extra_args": {"type": "list"},
-        "extra_configs": {"type": "list"},
-        "extra_conf_files": {"type": "list", "default": []},
-        "extra_overlay_confs": {"type": "list", "default": []},
-        "extra_dtc_overlay_files": {"type": "list", "default": []},
-        "required_snippets": {"type": "list"},
-        "build_only": {"type": "bool", "default": False},
-        "build_on_all": {"type": "bool", "default": False},
-        "skip": {"type": "bool", "default": False},
-        "slow": {"type": "bool", "default": False},
-        "timeout": {"type": "int", "default": 60},
-        "min_ram": {"type": "int", "default": 16},
-        "modules": {"type": "list", "default": []},
-        "depends_on": {"type": "set"},
-        "min_flash": {"type": "int", "default": 32},
-        "arch_allow": {"type": "set"},
-        "arch_exclude": {"type": "set"},
-        "vendor_allow": {"type": "set"},
-        "vendor_exclude": {"type": "set"},
-        "extra_sections": {"type": "list", "default": []},
-        "integration_platforms": {"type": "list", "default": []},
-        "integration_toolchains": {"type": "list", "default": []},
-        "ignore_faults": {"type": "bool", "default": False},
-        "ignore_qemu_crash": {"type": "bool", "default": False},
-        "testcases": {"type": "list", "default": []},
-        "platform_type": {"type": "list", "default": []},
-        "platform_exclude": {"type": "set"},
-        "platform_allow": {"type": "set"},
-        "platform_key": {"type": "list", "default": []},
-        "simulation_exclude": {"type": "list", "default": []},
-        "toolchain_exclude": {"type": "set"},
-        "toolchain_allow": {"type": "set"},
-        "filter": {"type": "str"},
-        "levels": {"type": "list", "default": []},
-        "harness": {"type": "str", "default": "test"},
-        "harness_config": {"type": "map", "default": {}},
-        "seed": {"type": "int", "default": 0},
-        "sysbuild": {"type": "bool", "default": False}
-    }
+    testsuite_valid_keys = {"tags": {"type": "set", "required": False},
+                       "type": {"type": "str", "default": "integration"},
+                       "extra_args": {"type": "list"},
+                       "extra_configs": {"type": "list"},
+                       "extra_conf_files": {"type": "list", "default": []},
+                       "extra_overlay_confs" : {"type": "list", "default": []},
+                       "extra_dtc_overlay_files": {"type": "list", "default": []},
+                       "required_snippets": {"type": "list"},
+                       "build_only": {"type": "bool", "default": False},
+                       "build_on_all": {"type": "bool", "default": False},
+                       "skip": {"type": "bool", "default": False},
+                       "slow": {"type": "bool", "default": False},
+                       "timeout": {"type": "int", "default": 60},
+                       "min_ram": {"type": "int", "default": 8},
+                       "modules": {"type": "list", "default": []},
+                       "depends_on": {"type": "set"},
+                       "min_flash": {"type": "int", "default": 32},
+                       "arch_allow": {"type": "set"},
+                       "arch_exclude": {"type": "set"},
+                       "extra_sections": {"type": "list", "default": []},
+                       "integration_platforms": {"type": "list", "default": []},
+                       "ignore_faults": {"type": "bool", "default": False },
+                       "ignore_qemu_crash": {"type": "bool", "default": False },
+                       "testcases": {"type": "list", "default": []},
+                       "platform_type": {"type": "list", "default": []},
+                       "platform_exclude": {"type": "set"},
+                       "platform_allow": {"type": "set"},
+                       "platform_key": {"type": "list", "default": []},
+                       "toolchain_exclude": {"type": "set"},
+                       "toolchain_allow": {"type": "set"},
+                       "filter": {"type": "str"},
+                       "levels": {"type": "list", "default": []},
+                       "harness": {"type": "str", "default": "test"},
+                       "harness_config": {"type": "map", "default": {}},
+                       "seed": {"type": "int", "default": 0},
+                       "sysbuild": {"type": "bool", "default": False}
+                       }
 
-    def __init__(self, filename: str, schema: dict[str, Any]) -> None:
+    def __init__(self, filename, schema):
         """Instantiate a new TwisterConfigParser object
 
         @param filename Source .yaml file to read
         """
+        self.data = {}
         self.schema = schema
         self.filename = filename
-        self.data: dict[str, Any] = {}
-        self.scenarios: dict[str, Any] = {}
-        self.common: dict[str, Any] = {}
+        self.scenarios = {}
+        self.common = {}
 
-    def load(self) -> dict[str, Any]:
-        data = scl.yaml_load_verify(self.filename, self.schema)
-        self.data = data
+    def load(self):
+        self.data = scl.yaml_load_verify(self.filename, self.schema)
 
         if 'tests' in self.data:
             self.scenarios = self.data['tests']
         if 'common' in self.data:
             self.common = self.data['common']
-        return data
 
-    def _cast_value(self, value: Any, typestr: str) -> Any:
+    def _cast_value(self, value, typestr):
+        if isinstance(value, str):
+            v = value.strip()
         if typestr == "str":
-            return value.strip()
+            return v
 
         elif typestr == "float":
             return float(value)
@@ -128,8 +117,17 @@ class TwisterConfigParser:
             if isinstance(value, list):
                 return value
             elif isinstance(value, str):
-                value = value.strip()
-                return [value] if value else list()
+                vs = v.split()
+
+                if len(vs) > 1:
+                    warnings.warn(
+                        "Space-separated lists are deprecated, use YAML lists instead",
+                        DeprecationWarning)
+
+                if len(typestr) > 4 and typestr[4] == ":":
+                    return [self._cast_value(vsi, typestr[5:]) for vsi in vs]
+                else:
+                    return vs
             else:
                 raise ValueError
 
@@ -137,17 +135,27 @@ class TwisterConfigParser:
             if isinstance(value, list):
                 return set(value)
             elif isinstance(value, str):
-                value = value.strip()
-                return {value} if value else set()
+                vs = v.split()
+
+                if len(vs) > 1:
+                    warnings.warn(
+                        "Space-separated lists are deprecated, use YAML lists instead",
+                        DeprecationWarning)
+
+                if len(typestr) > 3 and typestr[3] == ":":
+                    return {self._cast_value(vsi, typestr[4:]) for vsi in vs}
+                else:
+                    return set(vs)
             else:
                 raise ValueError
 
         elif typestr.startswith("map"):
             return value
         else:
-            raise ConfigurationError(self.filename, f"unknown type '{value}'")
+            raise ConfigurationError(
+                self.filename, "unknown type '%s'" % value)
 
-    def get_scenario(self, name: str) -> dict[str, Any]:
+    def get_scenario(self, name):
         """Get a dictionary representing the keys/values within a scenario
 
         @param name The scenario in the .yaml file to retrieve data from
@@ -157,10 +165,10 @@ class TwisterConfigParser:
 
         # "CONF_FILE", "OVERLAY_CONFIG", and "DTC_OVERLAY_FILE" fields from each
         # of the extra_args lines
-        extracted_common: dict = {}
-        extracted_testsuite: dict = {}
+        extracted_common = {}
+        extracted_testsuite = {}
 
-        d: dict[str, Any] = {}
+        d = {}
         for k, v in self.common.items():
             if k == "extra_args":
                 # Pull out these fields and leave the rest
@@ -168,8 +176,7 @@ class TwisterConfigParser:
                     {"CONF_FILE", "OVERLAY_CONFIG", "DTC_OVERLAY_FILE"}, v
                 )
             else:
-                # Copy common value to avoid mutating it with test specific values below
-                d[k] = copy.copy(v)
+                d[k] = v
 
         for k, v in self.scenarios[name].items():
             if k == "extra_args":
@@ -179,24 +186,17 @@ class TwisterConfigParser:
                 )
             if k in d:
                 if k == "filter":
-                    d[k] = f"({d[k]}) and ({v})"
+                    d[k] = "(%s) and (%s)" % (d[k], v)
                 elif k not in ("extra_conf_files", "extra_overlay_confs",
                                "extra_dtc_overlay_files"):
                     if isinstance(d[k], str) and isinstance(v, list):
-                        d[k] = [d[k]] + v
+                        d[k] = d[k].split() + v
                     elif isinstance(d[k], list) and isinstance(v, str):
-                        d[k] += [v]
+                        d[k] += v.split()
                     elif isinstance(d[k], list) and isinstance(v, list):
                         d[k] += v
                     elif isinstance(d[k], str) and isinstance(v, str):
-                        # overwrite if type is string, otherwise merge into a list
-                        type = self.testsuite_valid_keys[k]["type"]
-                        if type == "str":
-                            d[k] = v
-                        elif type in ("list", "set"):
-                            d[k] = [d[k], v]
-                        else:
-                            raise ValueError
+                        d[k] += " " + v
                     else:
                         # replace value if not str/list (e.g. integer)
                         d[k] = v
@@ -228,25 +228,27 @@ class TwisterConfigParser:
             self.scenarios[name].get("extra_dtc_overlay_files", [])
 
         if any({len(x) > 0 for x in extracted_common.values()}) or \
-            any({len(x) > 0 for x in extracted_testsuite.values()}):
+           any({len(x) > 0 for x in extracted_testsuite.values()}):
             warnings.warn(
                 "Do not specify CONF_FILE, OVERLAY_CONFIG, or DTC_OVERLAY_FILE "
                 "in extra_args. This feature is deprecated and will soon "
                 "result in an error. Use extra_conf_files, extra_overlay_confs "
                 "or extra_dtc_overlay_files YAML fields instead",
-                DeprecationWarning,
-                stacklevel=2
+                DeprecationWarning
             )
 
         for k, kinfo in self.testsuite_valid_keys.items():
             if k not in d:
-                required = kinfo.get("required", False)
+                if "required" in kinfo:
+                    required = kinfo["required"]
+                else:
+                    required = False
 
                 if required:
                     raise ConfigurationError(
                         self.filename,
-                        f"missing required value for '{k}' in test '{name}'"
-                    )
+                        "missing required value for '%s' in test '%s'" %
+                        (k, name))
                 else:
                     if "default" in kinfo:
                         default = kinfo["default"]
@@ -258,8 +260,7 @@ class TwisterConfigParser:
                     d[k] = self._cast_value(d[k], kinfo["type"])
                 except ValueError:
                     raise ConfigurationError(
-                        self.filename,
-                        f"bad {kinfo['type']} value '{d[k]}' for key '{k}' in name '{name}'"
-                    ) from None
+                        self.filename, "bad %s value '%s' for key '%s' in name '%s'" %
+                                       (kinfo["type"], d[k], k, name))
 
         return d

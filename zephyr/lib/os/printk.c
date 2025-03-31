@@ -14,11 +14,10 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
-#include <zephyr/sys/printk-hooks.h>
 #include <stdarg.h>
 #include <zephyr/toolchain.h>
 #include <zephyr/linker/sections.h>
-#include <zephyr/internal/syscall_handler.h>
+#include <zephyr/syscall_handler.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/cbprintf.h>
 #include <zephyr/llext/symbol.h>
@@ -53,14 +52,29 @@ __attribute__((weak)) int arch_printk_char_out(int c)
 }
 /* LCOV_EXCL_STOP */
 
-static printk_hook_fn_t _char_out = arch_printk_char_out;
+int (*_char_out)(int c) = arch_printk_char_out;
 
-void __printk_hook_install(printk_hook_fn_t fn)
+/**
+ * @brief Install the character output routine for printk
+ *
+ * To be called by the platform's console driver at init time. Installs a
+ * routine that outputs one ASCII character at a time.
+ * @param fn putc routine to install
+ */
+void __printk_hook_install(int (*fn)(int c))
 {
 	_char_out = fn;
 }
 
-printk_hook_fn_t __printk_get_hook(void)
+/**
+ * @brief Get the current character output routine for printk
+ *
+ * To be called by any console driver that would like to save
+ * current hook - if any - for later re-installation.
+ *
+ * @return a function pointer or NULL if no hook is set
+ */
+void *__printk_get_hook(void)
 {
 	return _char_out;
 }
@@ -83,8 +97,7 @@ static int buf_char_out(int c, void *ctx_p)
 {
 	struct buf_out_context *ctx = ctx_p;
 
-	ctx->buf[ctx->buf_count] = c;
-	++ctx->buf_count;
+	ctx->buf[ctx->buf_count++] = c;
 	if (ctx->buf_count == CONFIG_PRINTK_BUFFER_SIZE) {
 		buf_flush(ctx);
 	}
@@ -94,7 +107,7 @@ static int buf_char_out(int c, void *ctx_p)
 
 static int char_out(int c, void *ctx_p)
 {
-	ARG_UNUSED(ctx_p);
+	(void) ctx_p;
 	return _char_out(c);
 }
 
@@ -141,7 +154,6 @@ void vprintk(const char *fmt, va_list ap)
 #endif
 	}
 }
-EXPORT_SYMBOL(vprintk);
 
 void z_impl_k_str_out(char *c, size_t n)
 {
@@ -162,10 +174,10 @@ void z_impl_k_str_out(char *c, size_t n)
 #ifdef CONFIG_USERSPACE
 static inline void z_vrfy_k_str_out(char *c, size_t n)
 {
-	K_OOPS(K_SYSCALL_MEMORY_READ(c, n));
+	Z_OOPS(Z_SYSCALL_MEMORY_READ(c, n));
 	z_impl_k_str_out((char *)c, n);
 }
-#include <zephyr/syscalls/k_str_out_mrsh.c>
+#include <syscalls/k_str_out_mrsh.c>
 #endif /* CONFIG_USERSPACE */
 
 /**
@@ -212,17 +224,16 @@ struct str_context {
 
 static int str_out(int c, struct str_context *ctx)
 {
-	if ((ctx->str == NULL) || (ctx->count >= ctx->max)) {
-		++ctx->count;
+	if (ctx->str == NULL || ctx->count >= ctx->max) {
+		ctx->count++;
 		return c;
 	}
 
-	if (ctx->count == (ctx->max - 1)) {
-		ctx->str[ctx->count] = '\0';
+	if (ctx->count == ctx->max - 1) {
+		ctx->str[ctx->count++] = '\0';
 	} else {
-		ctx->str[ctx->count] = c;
+		ctx->str[ctx->count++] = c;
 	}
-	++ctx->count;
 
 	return c;
 }

@@ -9,5 +9,3 @@ API reference
 *************
 
 .. doxygengroup:: usbd_api
-
-.. doxygengroup:: usbd_msg_api

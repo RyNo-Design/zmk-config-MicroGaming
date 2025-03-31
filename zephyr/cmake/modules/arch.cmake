@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Copyright (c) 2023, Nordic Semiconductor ASA
+# Copyright (c) 2022, Nordic Semiconductor ASA
 
-#
-# Configure ARCH settings based on KConfig settings and arch root.
+# Configure ARCH settings based on board directory and arch root.
 #
 # This CMake module will set the following variables in the build system based
 # on board directory and arch root.
@@ -19,30 +18,31 @@
 #
 # Variable dependencies:
 # - ARCH_ROOT: CMake list of arch roots containing arch implementations
+# - BOARD_DIR: CMake variable specifying the directory of the selected BOARD
 #
 # Variables set by this module and not mentioned above are considered internal
 # use only and may be removed, renamed, or re-purposed without prior notice.
 
 include_guard(GLOBAL)
 
-if(HWMv2)
-  # HWMv2 obtains arch from Kconfig for the given Board / SoC variant because
-  # the Board / SoC path is no longer sufficient for determine the arch
-  # (read: multi-core and multi-arch SoC).
-  set(ARCH ${CONFIG_ARCH})
-  string(TOUPPER "${ARCH}" arch_upper)
+# 'ARCH_ROOT' is a prioritized list of directories where archs may be
+# found. It always includes ${ZEPHYR_BASE} at the lowest priority (except for unittesting).
+if(NOT unittest IN_LIST Zephyr_FIND_COMPONENTS)
+  list(APPEND ARCH_ROOT ${ZEPHYR_BASE})
+endif()
 
-  if(NOT ARCH)
-    message(FATAL_ERROR "ARCH not defined. Check that BOARD=${BOARD}, is selecting "
-            "an appropriate SoC in Kconfig, SoC=${CONFIG_SOC}, and that the SoC "
-            "is selecting the correct architecture."
-    )
+cmake_path(GET BOARD_DIR PARENT_PATH board_arch_dir)
+cmake_path(GET board_arch_dir FILENAME ARCH)
+
+foreach(root ${ARCH_ROOT})
+  if(EXISTS ${root}/arch/${ARCH}/CMakeLists.txt)
+    set(ARCH_DIR ${root}/arch)
+    break()
   endif()
+endforeach()
 
-  cmake_path(GET ARCH_V2_${arch_upper}_DIR PARENT_PATH ARCH_DIR)
-  if(NOT ARCH_DIR)
-    message(FATAL_ERROR "Could not find ARCH=${ARCH} for BOARD=${BOARD}, \
+if(NOT ARCH_DIR)
+  message(FATAL_ERROR "Could not find ARCH=${ARCH} for BOARD=${BOARD}, \
 please check your installation. ARCH roots searched: \n\
 ${ARCH_ROOT}")
-  endif()
 endif()

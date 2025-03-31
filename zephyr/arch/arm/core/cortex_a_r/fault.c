@@ -10,11 +10,6 @@
 #include <kernel_internal.h>
 #include <zephyr/arch/common/exc_handle.h>
 #include <zephyr/logging/log.h>
-#if defined(CONFIG_GDBSTUB)
-#include <zephyr/arch/arm/gdbstub.h>
-#include <zephyr/debug/gdbstub.h>
-#endif
-
 LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
 #define FAULT_DUMP_VERBOSE	(CONFIG_FAULT_DUMP == 2)
@@ -147,13 +142,12 @@ bool z_arm_fault_undef_instruction_fp(void)
 	 * the FP was already enabled then this was an actual undefined
 	 * instruction.
 	 */
-	if (__get_FPEXC() & FPEXC_EN) {
+	if (__get_FPEXC() & FPEXC_EN)
 		return true;
-	}
 
 	__set_FPEXC(FPEXC_EN);
 
-	if (_current_cpu->nested > 1) {
+	if (_kernel.cpus[0].nested > 1) {
 		/*
 		 * If the nested count is greater than 1, the undefined
 		 * instruction exception came from an irq/svc context.  (The
@@ -161,13 +155,12 @@ bool z_arm_fault_undef_instruction_fp(void)
 		 * the undef exception would increment it to 2).
 		 */
 		struct __fpu_sf *spill_esf =
-			(struct __fpu_sf *)_current_cpu->fp_ctx;
+			(struct __fpu_sf *)_kernel.cpus[0].fp_ctx;
 
-		if (spill_esf == NULL) {
+		if (spill_esf == NULL)
 			return false;
-		}
 
-		_current_cpu->fp_ctx = NULL;
+		_kernel.cpus[0].fp_ctx = NULL;
 
 		/*
 		 * If the nested count is 2 and the current thread has used the
@@ -177,9 +170,9 @@ bool z_arm_fault_undef_instruction_fp(void)
 		 * saved exception stack frame, then save the floating point
 		 * context because it is about to be overwritten.
 		 */
-		if (((_current_cpu->nested == 2)
+		if (((_kernel.cpus[0].nested == 2)
 				&& (_current->base.user_options & K_FP_REGS))
-			|| ((_current_cpu->nested > 2)
+			|| ((_kernel.cpus[0].nested > 2)
 				&& (spill_esf->undefined & FPEXC_EN))) {
 			/*
 			 * Spill VFP registers to specified exception stack
@@ -208,7 +201,7 @@ bool z_arm_fault_undef_instruction_fp(void)
  *
  * @return Returns true if the fault is fatal
  */
-bool z_arm_fault_undef_instruction(struct arch_esf *esf)
+bool z_arm_fault_undef_instruction(z_arch_esf_t *esf)
 {
 #if defined(CONFIG_FPU_SHARING)
 	/*
@@ -218,12 +211,6 @@ bool z_arm_fault_undef_instruction(struct arch_esf *esf)
 	esf->fpu.undefined = __get_FPEXC();
 	esf->fpu.fpscr = __get_FPSCR();
 	z_arm_fpu_caller_save(&esf->fpu);
-#endif
-
-#if defined(CONFIG_GDBSTUB)
-	z_gdb_entry(esf, GDB_EXCEPTION_INVALID_INSTRUCTION);
-	/* Might not be fatal if GDB stub placed it in the code. */
-	return false;
 #endif
 
 	/* Print fault information */
@@ -245,7 +232,7 @@ bool z_arm_fault_undef_instruction(struct arch_esf *esf)
  *
  * @return Returns true if the fault is fatal
  */
-bool z_arm_fault_prefetch(struct arch_esf *esf)
+bool z_arm_fault_prefetch(z_arch_esf_t *esf)
 {
 	uint32_t reason = K_ERR_CPU_EXCEPTION;
 
@@ -260,17 +247,6 @@ bool z_arm_fault_prefetch(struct arch_esf *esf)
 	/* Read Instruction Fault Address Register (IFAR) */
 	uint32_t ifar = __get_IFAR();
 
-#if defined(CONFIG_GDBSTUB)
-	/* The BKPT instruction could have caused a software breakpoint */
-	if (fs == IFSR_DEBUG_EVENT) {
-		/* Debug event, call the gdbstub handler */
-		z_gdb_entry(esf, GDB_EXCEPTION_BREAKPOINT);
-	} else {
-		/* Fatal */
-		z_gdb_entry(esf, GDB_EXCEPTION_MEMORY_FAULT);
-	}
-	return false;
-#endif
 	/* Print fault information*/
 	LOG_ERR("***** PREFETCH ABORT *****");
 	if (FAULT_DUMP_VERBOSE) {
@@ -301,7 +277,7 @@ static const struct z_exc_handle exceptions[] = {
  *
  * @return true if error is recoverable, otherwise return false.
  */
-static bool memory_fault_recoverable(struct arch_esf *esf)
+static bool memory_fault_recoverable(z_arch_esf_t *esf)
 {
 	for (int i = 0; i < ARRAY_SIZE(exceptions); i++) {
 		/* Mask out instruction mode */
@@ -323,7 +299,7 @@ static bool memory_fault_recoverable(struct arch_esf *esf)
  *
  * @return Returns true if the fault is fatal
  */
-bool z_arm_fault_data(struct arch_esf *esf)
+bool z_arm_fault_data(z_arch_esf_t *esf)
 {
 	uint32_t reason = K_ERR_CPU_EXCEPTION;
 
@@ -337,12 +313,6 @@ bool z_arm_fault_data(struct arch_esf *esf)
 
 	/* Read Data Fault Address Register (DFAR) */
 	uint32_t dfar = __get_DFAR();
-
-#if defined(CONFIG_GDBSTUB)
-	z_gdb_entry(esf, GDB_EXCEPTION_MEMORY_FAULT);
-	/* return false - non-fatal error */
-	return false;
-#endif
 
 #if defined(CONFIG_USERSPACE)
 	if ((fs == COND_CODE_1(CONFIG_AARCH32_ARMV8_R,

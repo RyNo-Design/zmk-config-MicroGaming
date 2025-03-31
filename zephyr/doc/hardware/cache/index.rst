@@ -1,9 +1,9 @@
-.. _cache_config:
+.. _cache-guide:
 
-Cache Control Configuration
-###########################
+Cache Interface
+###############
 
-This is a high-level guide to Zephyr's cache interface and Kconfig options related to
+This is a high-level guide to cache interface and Kconfig options related to
 cache controllers. See :ref:`cache_api` for API reference material.
 
 Zephyr has different Kconfig options to control how the cache controller is
@@ -15,14 +15,12 @@ implemented and controlled.
   instruction cache. The cache controller can be in the core or can be an
   external cache controller for which a driver is provided.
 
-  These options have the goal to document an available hardware feature and
-  should be set whether we plan to support and use the cache control in Zephyr
-  or not.
+  These options have the goal to document an available feature and should be
+  set whether we plan to support and use the caches in Zephyr or not.
 
 * :kconfig:option:`CONFIG_DCACHE` / :kconfig:option:`CONFIG_ICACHE`: these
   options must be selected when support for data or instruction cache is
-  present and working in zephyr. Note that if these options are disabled,
-  caching may still be enabled depending on the hardware defaults.
+  present and working in zephyr.
 
   All the code paths related to cache control must be conditionally enabled
   depending on these symbols. When the symbol is set the cache is considered
@@ -41,15 +39,6 @@ implemented and controlled.
   implemented in the architectural code or in an external cache controller
   driver.
 
-* :kconfig:option:`CONFIG_MEM_ATTR`: this option allows the user to
-  specify (using :ref:`memory region attributes<mem_mgmt_api>`) a fixed region
-  in memory that will have caching disabled once the kernel has initialized.
-
-* :kconfig:option:`CONFIG_NOCACHE_MEMORY`: this option allows the user to
-  specify individual global variables as uncached using ``__nocache``. This will
-  instruct the linker to place any marked variables into a special ``nocache``
-  region in memory and the MPU driver will configure that region as uncached.
-
 * :kconfig:option:`CONFIG_ARCH_CACHE`/:kconfig:option:`CONFIG_EXTERNAL_CACHE`:
   mutually exclusive options for :kconfig:option:`CACHE_TYPE` used to define
   whether the cache operations are implemented at arch level or using an
@@ -65,6 +54,6 @@ implemented and controlled.
 .. _cache_api:
 
 Cache API
-#########
+*********
 
 .. doxygengroup:: cache_interface

@@ -5,17 +5,7 @@ cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
 project(bsim_test_bis)
 
-if(CONFIG_BT_PER_ADV_SYNC_TRANSFER_SENDER)
-target_sources(app PRIVATE
-	src/main.c
-	src/test_past.c
-)
-else()
-target_sources(app PRIVATE
-	src/main.c
-	src/test_bis.c
-)
-endif()
+target_sources(app PRIVATE src/main.c)
 
 zephyr_include_directories(
   ${ZEPHYR_BASE}

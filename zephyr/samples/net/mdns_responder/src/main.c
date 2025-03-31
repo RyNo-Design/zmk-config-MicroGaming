@@ -12,8 +12,6 @@ LOG_MODULE_REGISTER(net_mdns_responder_sample, LOG_LEVEL_DBG);
 #include <zephyr/kernel.h>
 #include <zephyr/net/net_core.h>
 
-#include "net_sample_common.h"
-
 extern void service(void);
 
 /*
@@ -27,10 +25,6 @@ extern void service(void);
  */
 int main(void)
 {
-	init_vlan();
-
-	wait_for_network();
-
 	LOG_INF("Waiting mDNS queries...");
 	service();
 	return 0;

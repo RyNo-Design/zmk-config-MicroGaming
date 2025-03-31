@@ -22,7 +22,6 @@ struct timeval {
 #endif
 
 #else
-#include <sys/types.h>
 #include <sys/_timeval.h>
 #endif /* CONFIG_NEWLIB_LIBC */
 

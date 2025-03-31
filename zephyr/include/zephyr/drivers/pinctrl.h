@@ -14,8 +14,6 @@
 /**
  * @brief Pin Controller Interface
  * @defgroup pinctrl_interface Pin Controller Interface
- * @since 3.0
- * @version 0.1.0
  * @ingroup io_interfaces
  * @{
  */
@@ -78,8 +76,8 @@ struct pinctrl_dev_config {
 
 /** @cond INTERNAL_HIDDEN */
 
-#if !defined(CONFIG_PM) && !defined(CONFIG_PM_DEVICE)
-/** Out of power management configurations, ignore "sleep" state. */
+#ifndef CONFIG_PM_DEVICE
+/** If device power management is not enabled, "sleep" state will be ignored. */
 #define PINCTRL_SKIP_SLEEP 1
 #endif
 
@@ -157,10 +155,10 @@ struct pinctrl_dev_config {
 #define Z_PINCTRL_STATE_INIT(state_idx, node_id)			       \
 	COND_CODE_1(Z_PINCTRL_SKIP_STATE(state_idx, node_id), (),	       \
 	({								       \
+		.id = Z_PINCTRL_STATE_ID(state_idx, node_id),		       \
 		.pins = Z_PINCTRL_STATE_PINS_NAME(state_idx, node_id),	       \
 		.pin_cnt = ARRAY_SIZE(Z_PINCTRL_STATE_PINS_NAME(state_idx,     \
-								node_id)),      \
-		.id = Z_PINCTRL_STATE_ID(state_idx, node_id)		       \
+								node_id))      \
 	}))
 
 /**
@@ -414,9 +412,9 @@ static inline int pinctrl_apply_state(const struct pinctrl_dev_config *config,
  */
 #define PINCTRL_DT_STATE_INIT(prop, state)				       \
 	{								       \
+		.id = state,						       \
 		.pins = prop ## _pins,					       \
-		.pin_cnt = ARRAY_SIZE(prop ## _pins),			       \
-		.id = state						       \
+		.pin_cnt = ARRAY_SIZE(prop ## _pins)			       \
 	}
 
 /**

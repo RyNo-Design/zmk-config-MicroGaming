@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 description: |
-    STM32F1 Pin controller.
-
+    STM32F1 Pin controller Node
     Based on pincfg-node.yaml binding.
 
     Note: `bias-disable` and `drive-push-pull` are default pin configurations.
@@ -42,7 +41,7 @@ properties:
 child-binding:
   description: |
       This binding gives a base representation of the STM32F1 pins
-      configuration
+      configration
 
   include:
     - name: pincfg-node.yaml
@@ -62,8 +61,8 @@ child-binding:
       description: |
         Adapted from
         https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/pinctrl/st,stm32-pinctrl.yaml
-        Integer represents gpio pin number and mux setting.
-        Each integer encodes a port, line, alternate function and remap.
+        Integer array, represents gpio pin number and mux setting.
+        These defines are calculated as: ((port * 16 + line) << 8) | (function << 6) | remap)
         With:
         - port: The gpio port index (PA = 0, PB = 1, ..., PK = 11)
         - line: The line offset within the port (PA0 = 0, PA1 = 1, ..., PA15 = 15)
@@ -86,11 +85,11 @@ child-binding:
         This macro is available here:
           -include/zephyr/dt-bindings/pinctrl/stm32f1-pinctrl.h
         Some examples of macro usage:
-           GPIO A9 set as alternate with no remap
+           GPIO A9 set as alernate with no remap
         ... {
                  pinmux = <STM32F1_PINMUX('A', 9, ALTERNATE, REMAP_NO)>;
         };
-           GPIO A9 set as alternate with full remap
+           GPIO A9 set as alernate with full remap
         ... {
                  pinmux = <STM32F1_PINMUX('A', 9, ALTERNATE, REMAP_FULL)>;
         };

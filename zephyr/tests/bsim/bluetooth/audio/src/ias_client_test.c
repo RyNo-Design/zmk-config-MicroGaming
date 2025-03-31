@@ -4,19 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <stddef.h>
 #include <stdint.h>
-
-#include <zephyr/autoconf.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/services/ias.h>
-#include <zephyr/kernel.h>
-#include <zephyr/sys/printk.h>
-
-#include "bstests.h"
-#include "common.h"
-
 #ifdef CONFIG_BT_IAS_CLIENT
+
+#include <zephyr/bluetooth/services/ias.h>
+#include "common.h"
 
 extern enum bst_result_t bst_result;
 
@@ -73,21 +65,6 @@ static void test_alert_stop(struct bt_conn *conn)
 	}
 }
 
-static void discover_ias(void)
-{
-	int err;
-
-	UNSET_FLAG(g_service_discovered);
-
-	err = bt_ias_discover(default_conn);
-	if (err < 0) {
-		FAIL("Failed to discover IAS (err %d)\n", err);
-		return;
-	}
-
-	WAIT_FOR_FLAG(g_service_discovered);
-}
-
 static void test_main(void)
 {
 	int err;
@@ -118,8 +95,13 @@ static void test_main(void)
 
 	WAIT_FOR_FLAG(flag_connected);
 
-	discover_ias();
-	discover_ias(); /* test that we can discover twice */
+	err = bt_ias_discover(default_conn);
+	if (err < 0) {
+		FAIL("Failed to discover IAS (err %d)\n", err);
+		return;
+	}
+
+	WAIT_FOR_FLAG(g_service_discovered);
 
 	/* Set alert levels with a delay to let the server handle any changes it want */
 	test_alert_high(default_conn);
@@ -137,7 +119,7 @@ static void test_main(void)
 static const struct bst_test_instance test_ias[] = {
 	{
 		.test_id = "ias_client",
-		.test_pre_init_f = test_init,
+		.test_post_init_f = test_init,
 		.test_tick_f = test_tick,
 		.test_main_f = test_main,
 	},

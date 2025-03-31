@@ -111,6 +111,7 @@ static uint32_t verify_gf_2_128_double(uint8_t *K1, uint8_t *K2, struct tc_cmac_
 		return TC_FAIL;
 	}
 
+	TC_END_RESULT(result);
 	return result;
 }
 
@@ -137,6 +138,7 @@ static uint32_t verify_cmac_null_msg(TCCmacState_t s)
 		return TC_FAIL;
 	}
 
+	TC_END_RESULT(result);
 	return result;
 }
 
@@ -168,6 +170,7 @@ static uint32_t verify_cmac_1_block_msg(TCCmacState_t s)
 		return TC_FAIL;
 	}
 
+	TC_END_RESULT(result);
 	return result;
 }
 
@@ -202,6 +205,7 @@ static uint32_t verify_cmac_320_bit_msg(TCCmacState_t s)
 		return TC_FAIL;
 	}
 
+	TC_END_RESULT(result);
 	return result;
 }
 
@@ -239,6 +243,7 @@ static uint32_t verify_cmac_512_bit_msg(TCCmacState_t s)
 		return TC_FAIL;
 	}
 
+	TC_END_RESULT(result);
 	return result;
 }
 

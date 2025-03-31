@@ -96,7 +96,6 @@ helper_pdu_encode_func_t *const helper_pdu_encode[] = {
 	[LL_CIS_RSP] = helper_pdu_encode_cis_rsp,
 	[LL_CIS_IND] = helper_pdu_encode_cis_ind,
 	[LL_CIS_TERMINATE_IND] = helper_pdu_encode_cis_terminate_ind,
-	[LL_PERIODIC_SYNC_IND] = helper_pdu_encode_periodic_sync_ind,
 	[LL_ZERO] = helper_pdu_encode_zero,
 };
 
@@ -135,7 +134,6 @@ helper_pdu_verify_func_t *const helper_pdu_verify[] = {
 	[LL_CIS_RSP] = helper_pdu_verify_cis_rsp,
 	[LL_CIS_IND] = helper_pdu_verify_cis_ind,
 	[LL_CIS_TERMINATE_IND] = helper_pdu_verify_cis_terminate_ind,
-	[LL_PERIODIC_SYNC_IND] = helper_pdu_verify_periodic_sync_ind,
 };
 
 helper_pdu_ntf_verify_func_t *const helper_pdu_ntf_verify[] = {
@@ -172,7 +170,6 @@ helper_pdu_ntf_verify_func_t *const helper_pdu_ntf_verify[] = {
 	[LL_CIS_RSP] = NULL,
 	[LL_CIS_IND] = NULL,
 	[LL_CIS_TERMINATE_IND] = NULL,
-	[LL_PERIODIC_SYNC_IND] = NULL,
 };
 
 helper_node_encode_func_t *const helper_node_encode[] = {
@@ -206,7 +203,6 @@ helper_node_encode_func_t *const helper_node_encode[] = {
 	[LL_CIS_RSP] = NULL,
 	[LL_CIS_IND] = NULL,
 	[LL_CIS_TERMINATE_IND] = NULL,
-	[LL_PERIODIC_SYNC_IND] = NULL,
 };
 
 helper_node_verify_func_t *const helper_node_verify[] = {
@@ -393,9 +389,8 @@ uint16_t event_counter(struct ll_conn *conn)
 	 * return the current event counter value (i.e. -1);
 	 * otherwise return the next event counter value
 	 */
-	if (*evt_active) {
+	if (*evt_active)
 		event_counter--;
-	}
 
 	return event_counter;
 }

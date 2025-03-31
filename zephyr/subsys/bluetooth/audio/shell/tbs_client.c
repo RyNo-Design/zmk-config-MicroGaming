@@ -9,24 +9,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <errno.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-
-#include <zephyr/autoconf.h>
-#include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/gatt.h>
-#include <zephyr/bluetooth/audio/tbs.h>
+#include <stdlib.h>
+#include <ctype.h>
 #include <zephyr/kernel.h>
-#include <zephyr/shell/shell_string_conv.h>
+#include <zephyr/types.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/types.h>
 
-#include "host/shell/bt.h"
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/audio/tbs.h>
+
+#include "shell/bt.h"
 
 static int cmd_tbs_client_discover(const struct shell *sh, size_t argc,
 				   char *argv[])

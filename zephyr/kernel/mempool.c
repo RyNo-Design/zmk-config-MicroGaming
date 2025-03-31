@@ -46,8 +46,7 @@ void k_free(void *ptr)
 
 	if (ptr != NULL) {
 		heap_ref = ptr;
-		--heap_ref;
-		ptr = heap_ref;
+		ptr = --heap_ref;
 
 		SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_heap_sys, k_free, *heap_ref, heap_ref);
 
@@ -57,9 +56,9 @@ void k_free(void *ptr)
 	}
 }
 
-#if (K_HEAP_MEM_POOL_SIZE > 0)
+#if (CONFIG_HEAP_MEM_POOL_SIZE > 0)
 
-K_HEAP_DEFINE(_system_heap, K_HEAP_MEM_POOL_SIZE);
+K_HEAP_DEFINE(_system_heap, CONFIG_HEAP_MEM_POOL_SIZE);
 #define _SYSTEM_HEAP (&_system_heap)
 
 void *k_aligned_alloc(size_t align, size_t size)
@@ -114,48 +113,13 @@ void *k_calloc(size_t nmemb, size_t size)
 	return ret;
 }
 
-void *k_realloc(void *ptr, size_t size)
-{
-	struct k_heap *heap, **heap_ref;
-	void *ret;
-
-	if (size == 0) {
-		k_free(ptr);
-		return NULL;
-	}
-	if (ptr == NULL) {
-		return k_malloc(size);
-	}
-	heap_ref = ptr;
-	ptr = --heap_ref;
-	heap = *heap_ref;
-
-	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_heap_sys, k_realloc, heap, ptr);
-
-	if (size_add_overflow(size, sizeof(heap_ref), &size)) {
-		SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_heap_sys, k_realloc, heap, ptr, NULL);
-		return NULL;
-	}
-
-	ret = k_heap_realloc(heap, ptr, size, K_NO_WAIT);
-
-	if (ret != NULL) {
-		heap_ref = ret;
-		ret = ++heap_ref;
-	}
-
-	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_heap_sys, k_realloc, heap, ptr, ret);
-
-	return ret;
-}
-
 void k_thread_system_pool_assign(struct k_thread *thread)
 {
 	thread->resource_pool = _SYSTEM_HEAP;
 }
 #else
 #define _SYSTEM_HEAP	NULL
-#endif /* K_HEAP_MEM_POOL_SIZE */
+#endif
 
 void *z_thread_aligned_alloc(size_t align, size_t size)
 {

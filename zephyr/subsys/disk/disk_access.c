@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2018 Intel Corporation.
- * Copyright 2024 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -22,15 +21,15 @@ LOG_MODULE_REGISTER(disk);
 static sys_dlist_t disk_access_list = SYS_DLIST_STATIC_INIT(&disk_access_list);
 
 /* lock to protect storage layer registration */
-static struct k_spinlock lock;
+static K_MUTEX_DEFINE(mutex);
 
 struct disk_info *disk_access_get_di(const char *name)
 {
 	struct disk_info *disk = NULL, *itr;
 	size_t name_len = strlen(name);
 	sys_dnode_t *node;
-	k_spinlock_key_t spinlock_key = k_spin_lock(&lock);
 
+	k_mutex_lock(&mutex, K_FOREVER);
 	SYS_DLIST_FOR_EACH_NODE(&disk_access_list, node) {
 		itr = CONTAINER_OF(node, struct disk_info, node);
 
@@ -49,7 +48,7 @@ struct disk_info *disk_access_get_di(const char *name)
 			break;
 		}
 	}
-	k_spin_unlock(&lock, spinlock_key);
+	k_mutex_unlock(&mutex);
 
 	return disk;
 }
@@ -59,19 +58,9 @@ int disk_access_init(const char *pdrv)
 	struct disk_info *disk = disk_access_get_di(pdrv);
 	int rc = -EINVAL;
 
-	if ((disk != NULL) && (disk->refcnt == 0U)) {
-		/* Disk has not been initialized, start it */
-		if ((disk->ops != NULL) && (disk->ops->init != NULL)) {
-			rc = disk->ops->init(disk);
-			if (rc == 0) {
-				/* Increment reference count */
-				disk->refcnt++;
-			}
-		}
-	} else if ((disk != NULL) && (disk->refcnt < UINT16_MAX)) {
-		/* Disk reference count is nonzero, simply increment it */
-		disk->refcnt++;
-		rc = 0;
+	if ((disk != NULL) && (disk->ops != NULL) &&
+				(disk->ops->init != NULL)) {
+		rc = disk->ops->init(disk);
 	}
 
 	return rc;
@@ -125,41 +114,7 @@ int disk_access_ioctl(const char *pdrv, uint8_t cmd, void *buf)
 
 	if ((disk != NULL) && (disk->ops != NULL) &&
 				(disk->ops->ioctl != NULL)) {
-		switch (cmd) {
-		case DISK_IOCTL_CTRL_INIT:
-			if (disk->refcnt == 0U) {
-				rc = disk->ops->ioctl(disk, cmd, buf);
-				if (rc == 0) {
-					disk->refcnt++;
-				}
-			} else if (disk->refcnt < UINT16_MAX) {
-				disk->refcnt++;
-				rc = 0;
-			} else {
-				LOG_ERR("Disk reference count at max value");
-			}
-			break;
-		case DISK_IOCTL_CTRL_DEINIT:
-			if ((buf != NULL) && (*((bool *)buf))) {
-				/* Force deinit disk */
-				disk->refcnt = 0U;
-				disk->ops->ioctl(disk, cmd, buf);
-				rc = 0;
-			} else if (disk->refcnt == 1U) {
-				rc = disk->ops->ioctl(disk, cmd, buf);
-				if (rc == 0) {
-					disk->refcnt--;
-				}
-			} else if (disk->refcnt > 0) {
-				disk->refcnt--;
-				rc = 0;
-			} else {
-				LOG_WRN("Disk is already deinitialized");
-			}
-			break;
-		default:
-			rc = disk->ops->ioctl(disk, cmd, buf);
-		}
+		rc = disk->ops->ioctl(disk, cmd, buf);
 	}
 
 	return rc;
@@ -167,47 +122,49 @@ int disk_access_ioctl(const char *pdrv, uint8_t cmd, void *buf)
 
 int disk_access_register(struct disk_info *disk)
 {
-	k_spinlock_key_t spinlock_key;
+	int rc = 0;
 
+	k_mutex_lock(&mutex, K_FOREVER);
 	if ((disk == NULL) || (disk->name == NULL)) {
 		LOG_ERR("invalid disk interface!!");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto reg_err;
 	}
 
 	if (disk_access_get_di(disk->name) != NULL) {
 		LOG_ERR("disk interface already registered!!");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto reg_err;
 	}
 
-	/* Initialize reference count to zero */
-	disk->refcnt = 0U;
-
-	spinlock_key = k_spin_lock(&lock);
 	/*  append to the disk list */
 	sys_dlist_append(&disk_access_list, &disk->node);
 	LOG_DBG("disk interface(%s) registered", disk->name);
-	k_spin_unlock(&lock, spinlock_key);
-	return 0;
+reg_err:
+	k_mutex_unlock(&mutex);
+	return rc;
 }
 
 int disk_access_unregister(struct disk_info *disk)
 {
-	k_spinlock_key_t spinlock_key;
+	int rc = 0;
 
+	k_mutex_lock(&mutex, K_FOREVER);
 	if ((disk == NULL) || (disk->name == NULL)) {
 		LOG_ERR("invalid disk interface!!");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto unreg_err;
 	}
 
 	if (disk_access_get_di(disk->name) == NULL) {
 		LOG_ERR("disk interface not registered!!");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto unreg_err;
 	}
-
-	spinlock_key = k_spin_lock(&lock);
 	/* remove disk node from the list */
 	sys_dlist_remove(&disk->node);
-	k_spin_unlock(&lock, spinlock_key);
 	LOG_DBG("disk interface(%s) unregistered", disk->name);
-	return 0;
+unreg_err:
+	k_mutex_unlock(&mutex);
+	return rc;
 }

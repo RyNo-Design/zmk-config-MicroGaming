@@ -1,7 +1,7 @@
 # Copyright (c) 2021 Nordic Semiconductor ASA
 # SPDX-License-Identifier: Apache-2.0
 
-description: native_posix CPU
+description: A representation for native_posix CPU.
 
 compatible: "zephyr,native-posix-cpu"
 

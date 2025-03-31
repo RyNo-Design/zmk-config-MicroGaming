@@ -16,8 +16,7 @@
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
-#include <zephyr/bluetooth/classic/hfp_hf.h>
-#include <zephyr/settings/settings.h>
+#include <zephyr/bluetooth/hfp_hf.h>
 
 static void connected(struct bt_conn *conn)
 {
@@ -89,10 +88,6 @@ static void bt_ready(int err)
 		return;
 	}
 
-	if (IS_ENABLED(CONFIG_SETTINGS)) {
-		settings_load();
-	}
-
 	printk("Bluetooth initialized\n");
 
 	err = bt_br_set_connectable(true);
@@ -100,7 +95,7 @@ static void bt_ready(int err)
 		printk("BR/EDR set/rest connectable failed (err %d)\n", err);
 		return;
 	}
-	err = bt_br_set_discoverable(true, false);
+	err = bt_br_set_discoverable(true);
 	if (err) {
 		printk("BR/EDR set discoverable failed (err %d)\n", err);
 		return;

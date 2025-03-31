@@ -74,7 +74,7 @@ To build without toolchain bundled Picolibc, the toolchain must
 enable :kconfig:option:`CONFIG_PICOLIBC_SUPPORTED`. For example,
 this needs to be added to the toolchain Kconfig file:
 
-.. code-block:: kconfig
+.. code-block:: none
 
    config TOOLCHAIN_<name>_PICOLIBC_SUPPORTED
       def_bool y
@@ -133,7 +133,7 @@ Thread Local Storage
 
 Picolibc uses Thread Local Storage (TLS) (where supported) for data
 which is supposed to remain local to each thread, like
-:c:macro:`errno`. This means that TLS support is enabled when using
+:c:var:`errno`. This means that TLS support is enabled when using
 Picolibc. As all TLS variables are allocated out of the thread stack
 area, this can affect stack size requirements by a few bytes.
 

@@ -16,9 +16,10 @@ SPDX-License-Identifier: Apache-2.0
 """
 
 import argparse
+from pathlib import Path
 import re
 import sys
-from pathlib import Path
+
 
 ZEPHYR_BASE = Path(__file__).parents[2]
 

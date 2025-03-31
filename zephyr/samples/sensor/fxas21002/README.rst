@@ -1,8 +1,7 @@
-.. zephyr:code-sample:: fxas21002
-   :name: FXAS21002 Gyroscope Sensor
-   :relevant-api: sensor_interface
+.. _fxas21002:
 
-   Get gyroscope data synchronously from an FXAS21002 sensor.
+FXAS21002 Gyroscope Sensor
+##########################
 
 Overview
 ********
@@ -14,12 +13,12 @@ Building and Running
 ********************
 
 This project outputs sensor data to the console. It requires an fxas21002
-sensor, which is present on the :ref:`hexiwear` board. It does not work on
+sensor, which is present on the :ref:`hexiwear_k64` board. It does not work on
 QEMU.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/sensor/fxas21002
-   :board: hexiwear/mk64f12
+   :board: hexiwear_k64
    :goals: build
    :compact:
 

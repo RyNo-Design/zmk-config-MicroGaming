@@ -10,12 +10,6 @@
 #include <zephyr/irq.h>
 #include <zephyr/sys/barrier.h>
 #include <DA1469xAB.h>
-#include <zephyr/pm/device.h>
-#include <zephyr/pm/policy.h>
-#include <zephyr/sys/util.h>
-
-#include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(smartbond_entropy, CONFIG_ENTROPY_LOG_LEVEL);
 
 #define DT_DRV_COMPAT renesas_smartbond_trng
 
@@ -28,7 +22,7 @@ struct rng_pool {
 	uint8_t last;
 	uint8_t mask;
 	uint8_t threshold;
-	FLEXIBLE_ARRAY_DECLARE(uint8_t, buffer);
+	uint8_t buffer[0];
 };
 
 #define RNG_POOL_DEFINE(name, len) uint8_t name[sizeof(struct rng_pool) + (len)]
@@ -58,25 +52,6 @@ static struct entropy_smartbond_dev_data entropy_smartbond_data;
 #define FIFO_COUNT_MASK                                                                            \
 	(TRNG_TRNG_FIFOLVL_REG_TRNG_FIFOFULL_Msk | TRNG_TRNG_FIFOLVL_REG_TRNG_FIFOLVL_Msk)
 
-static inline void entropy_smartbond_pm_policy_state_lock_get(void)
-{
-#if defined(CONFIG_PM_DEVICE)
-	/*
-	 * Prevent the SoC from etering the normal sleep state as PDC does not support
-	 * waking up the application core following TRNG events.
-	 */
-	pm_policy_state_lock_get(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
-#endif
-}
-
-static inline void entropy_smartbond_pm_policy_state_lock_put(void)
-{
-#if defined(CONFIG_PM_DEVICE)
-	/* Allow the SoC to enter the nornmal sleep state once TRNG is inactive */
-	pm_policy_state_lock_put(PM_STATE_STANDBY, PM_ALL_SUBSTATES);
-#endif
-}
-
 static void trng_enable(bool enable)
 {
 	unsigned int key;
@@ -85,18 +60,9 @@ static void trng_enable(bool enable)
 	if (enable) {
 		CRG_TOP->CLK_AMBA_REG |= CRG_TOP_CLK_AMBA_REG_TRNG_CLK_ENABLE_Msk;
 		TRNG->TRNG_CTRL_REG = TRNG_TRNG_CTRL_REG_TRNG_ENABLE_Msk;
-
-		/*
-		 * Sleep is not allowed as long as the ISR and thread SW FIFOs
-		 * are being filled with random numbers.
-		 */
-		entropy_smartbond_pm_policy_state_lock_get();
 	} else {
 		CRG_TOP->CLK_AMBA_REG &= ~CRG_TOP_CLK_AMBA_REG_TRNG_CLK_ENABLE_Msk;
 		TRNG->TRNG_CTRL_REG = 0;
-		NVIC_ClearPendingIRQ(IRQN);
-
-		entropy_smartbond_pm_policy_state_lock_put();
 	}
 	irq_unlock(key);
 }
@@ -346,11 +312,11 @@ static int entropy_smartbond_get_entropy_isr(const struct device *dev, uint8_t *
 			}
 
 			NVIC_ClearPendingIRQ(IRQN);
-			if (random_word_get(bytes) != 0) {
+			if (random_word_get(buf) != 0) {
 				continue;
 			}
 
-			while (ptr < limit && len) {
+			while (ptr < limit) {
 				buf[--len] = *ptr++;
 			}
 			/* Store remaining data for later use */
@@ -368,34 +334,7 @@ static int entropy_smartbond_get_entropy_isr(const struct device *dev, uint8_t *
 	return cnt;
 }
 
-#if defined(CONFIG_PM_DEVICE)
-static int entropy_smartbond_pm_action(const struct device *dev, enum pm_device_action action)
-{
-	int ret = 0;
-
-	switch (action) {
-	case PM_DEVICE_ACTION_RESUME:
-		/*
-		 * No need to turn on TRNG. It should be done when we the space in the FIFOs
-		 * are below the defined ISR and thread FIFO's thresholds.
-		 *
-		 * \sa CONFIG_ENTROPY_SMARTBOND_THR_THRESHOLD
-		 * \sa CONFIG_ENTROPY_SMARTBOND_ISR_THRESHOLD
-		 *
-		 */
-		break;
-	case PM_DEVICE_ACTION_SUSPEND:
-		/* At this point TRNG should be disabled; no need to turn it off. */
-		break;
-	default:
-		ret = -ENOTSUP;
-	}
-
-	return ret;
-}
-#endif
-
-static DEVICE_API(entropy, entropy_smartbond_api_funcs) = {
+static const struct entropy_driver_api entropy_smartbond_api_funcs = {
 	.get_entropy = entropy_smartbond_get_entropy,
 	.get_entropy_isr = entropy_smartbond_get_entropy_isr};
 
@@ -425,8 +364,5 @@ static int entropy_smartbond_init(const struct device *dev)
 	return 0;
 }
 
-PM_DEVICE_DT_INST_DEFINE(0, entropy_smartbond_pm_action);
-
-DEVICE_DT_INST_DEFINE(0, entropy_smartbond_init, PM_DEVICE_DT_INST_GET(0),
-			&entropy_smartbond_data, NULL, PRE_KERNEL_1,
-			CONFIG_ENTROPY_INIT_PRIORITY, &entropy_smartbond_api_funcs);
+DEVICE_DT_INST_DEFINE(0, entropy_smartbond_init, NULL, &entropy_smartbond_data, NULL, PRE_KERNEL_1,
+		      CONFIG_ENTROPY_INIT_PRIORITY, &entropy_smartbond_api_funcs);

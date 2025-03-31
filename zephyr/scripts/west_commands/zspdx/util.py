@@ -6,7 +6,6 @@ import hashlib
 
 from west import log
 
-
 def getHashes(filePath):
     """
     Scan for and return hashes.
@@ -16,9 +15,9 @@ def getHashes(filePath):
     Returns: tuple of (SHA1, SHA256, MD5) hashes for filePath, or
              None if file is not found.
     """
-    hSHA1 = hashlib.sha1(usedforsecurity=False)
+    hSHA1 = hashlib.sha1()
     hSHA256 = hashlib.sha256()
-    hMD5 = hashlib.md5(usedforsecurity=False)
+    hMD5 = hashlib.md5()
 
     log.dbg(f"  - getting hashes for {filePath}")
 

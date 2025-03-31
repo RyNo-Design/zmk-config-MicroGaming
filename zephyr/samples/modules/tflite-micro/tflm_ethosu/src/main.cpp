@@ -108,7 +108,7 @@ void *allocateHeap(const size_t size)
 	uint8_t *buf = static_cast<uint8_t *>(k_malloc(size));
 
 	if ((buf == nullptr) || (heap == nullptr)) {
-		printf("Heap allocation failed. heap=%p, buf=%p, size=%zu\n", heap, buf, size);
+		printk("Heap allocation failed. heap=%p, buf=%p, size=%zu\n", heap, buf, size);
 		exit(1);
 	}
 
@@ -133,24 +133,22 @@ void inferenceProcessTask(void *_name, void *heap, void *_params)
 		xInferenceJob *job =
 			static_cast<xInferenceJob *>(k_queue_get(params->queueHandle, Z_FOREVER));
 
-		printf("%s: Received inference job. job=%p\n", name->c_str(), job);
+		printk("%s: Received inference job. job=%p\n", name->c_str(), job);
 
 		/* Run inference */
 		job->status = inferenceProcess.runJob(*job);
 
-		printf("%s: Sending inference response. job=%p\n", name->c_str(), job);
+		printk("%s: Sending inference response. job=%p\n", name->c_str(), job);
 
 		/* Return inference message */
 		int ret = k_queue_alloc_append(job->responseQueue, job);
 		if (0 != ret) {
-			printf("%s: Failed to send message\n", name->c_str());
+			printk("%s: Failed to send message\n", name->c_str());
 			exit(1);
 		}
 	}
 
 	k_thread_abort(k_current_get());
-
-	CODE_UNREACHABLE;
 }
 
 /* inferenceSenderTask - Creates NUM_INFERENCE_JOBS jobs, queues them, and then
@@ -177,13 +175,13 @@ void inferenceSenderTask(void *_name, void *heap, void *_queue)
 				    { DataPtr(expectedOutputData, sizeof(expectedOutputData)) },
 				    &senderQueue);
 
-		printf("%s: Sending inference. job=%p, name=%s\n", name->c_str(), &job,
+		printk("%s: Sending inference. job=%p, name=%s\n", name->c_str(), &job,
 		       job.name.c_str());
 
 		/* Queue job */
 		ret = k_queue_alloc_append(inferenceQueue, &job);
 		if (0 != ret) {
-			printf("%s: Failed to send message\n", name->c_str());
+			printk("%s: Failed to send message\n", name->c_str());
 			exit(1);
 		}
 	}
@@ -193,7 +191,7 @@ void inferenceSenderTask(void *_name, void *heap, void *_queue)
 		xInferenceJob *job =
 			static_cast<xInferenceJob *>(k_queue_get(&senderQueue, Z_FOREVER));
 
-		printf("%s: Received job response. job=%p, status=%u\n", name->c_str(), job,
+		printk("%s: Received job response. job=%p, status=%u\n", name->c_str(), job,
 		       job->status);
 
 		totalCompletedJobs++;
@@ -229,7 +227,7 @@ int main()
 		const size_t stackSize = 2048;
 		k_thread_stack_t *stack = static_cast<k_thread_stack_t *>(k_malloc(stackSize));
 		if (stack == nullptr) {
-			printf("Failed to allocate stack to 'inferenceSenderTask%i'\n", n);
+			printk("Failed to allocate stack to 'inferenceSenderTask%i'\n", n);
 			exit(1);
 		}
 
@@ -239,7 +237,7 @@ int main()
 		thread.id = k_thread_create(&thread.thread, stack, stackSize, inferenceSenderTask,
 					    name, heapPtr, &inferenceQueue, 3, 0, K_FOREVER);
 		if (thread.id == 0) {
-			printf("Failed to create 'inferenceSenderTask%i'\n", n);
+			printk("Failed to create 'inferenceSenderTask%i'\n", n);
 			exit(1);
 		}
 
@@ -252,7 +250,7 @@ int main()
 		const size_t stackSize = 8192;
 		k_thread_stack_t *stack = static_cast<k_thread_stack_t *>(k_malloc(stackSize));
 		if (stack == nullptr) {
-			printf("Failed to allocate stack to 'inferenceSenderTask%i'\n", n);
+			printk("Failed to allocate stack to 'inferenceSenderTask%i'\n", n);
 			exit(1);
 		}
 
@@ -265,7 +263,7 @@ int main()
 		thread.id = k_thread_create(&thread.thread, stack, stackSize, inferenceProcessTask,
 					    name, heapPtr, &taskParam, 2, 0, K_FOREVER);
 		if (thread.id == 0) {
-			printf("Failed to create 'inferenceProcessTask%i'\n", n);
+			printk("Failed to create 'inferenceProcessTask%i'\n", n);
 			exit(1);
 		}
 
@@ -283,7 +281,7 @@ int main()
 	/* Safety belt */
 	k_thread_suspend(k_current_get());
 
-	printf("Zephyr application failed to initialise \n");
+	printk("Zephyr application failed to initialise \n");
 
 	return 1;
 }

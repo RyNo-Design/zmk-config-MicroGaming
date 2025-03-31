@@ -18,8 +18,6 @@
 #include <kernel_arch_data.h>
 #include <pmp.h>
 
-#include <zephyr/platform/hooks.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -55,9 +53,6 @@ static ALWAYS_INLINE void arch_kernel_init(void)
 #ifdef CONFIG_RISCV_PMP
 	z_riscv_pmp_init();
 #endif
-#ifdef CONFIG_SOC_PER_CORE_INIT_HOOK
-	soc_per_core_init_hook();
-#endif /* CONFIG_SOC_PER_CORE_INIT_HOOK */
 }
 
 static ALWAYS_INLINE void
@@ -74,12 +69,8 @@ arch_switch(void *switch_to, void **switched_from)
 #endif
 }
 
-/* Thin wrapper around z_riscv_fatal_error_csf */
 FUNC_NORETURN void z_riscv_fatal_error(unsigned int reason,
-				       const struct arch_esf *esf);
-
-FUNC_NORETURN void z_riscv_fatal_error_csf(unsigned int reason, const struct arch_esf *esf,
-					   const _callee_saved_t *csf);
+				       const z_arch_esf_t *esf);
 
 static inline bool arch_is_in_isr(void)
 {
@@ -104,8 +95,8 @@ int z_irq_do_offload(void);
 #endif
 
 #ifdef CONFIG_FPU_SHARING
-void arch_flush_local_fpu(void);
-void arch_flush_fpu_ipi(unsigned int cpu);
+void z_riscv_flush_local_fpu(void);
+void z_riscv_flush_fpu_ipi(unsigned int cpu);
 #endif
 
 #ifndef CONFIG_MULTITHREADING

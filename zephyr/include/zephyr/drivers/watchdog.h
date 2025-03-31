@@ -11,8 +11,6 @@
 /**
  * @brief Watchdog Interface
  * @defgroup watchdog_interface Watchdog Interface
- * @since 1.0
- * @version 1.0.0
  * @ingroup io_interfaces
  * @{
  */
@@ -253,6 +251,6 @@ static inline int z_impl_wdt_feed(const struct device *dev, int channel_id)
 
 /** @} */
 
-#include <zephyr/syscalls/watchdog.h>
+#include <syscalls/watchdog.h>
 
 #endif /* ZEPHYR_INCLUDE_DRIVERS_WATCHDOG_H_ */

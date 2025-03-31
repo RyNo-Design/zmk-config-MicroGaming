@@ -12,9 +12,8 @@
 LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
 FUNC_NORETURN void z_nios2_fatal_error(unsigned int reason,
-				       const struct arch_esf *esf)
+				       const z_arch_esf_t *esf)
 {
-#if CONFIG_EXCEPTION_DEBUG
 	if (esf != NULL) {
 		/* Subtract 4 from EA since we added 4 earlier so that the
 		 * faulting instruction isn't retried.
@@ -34,7 +33,6 @@ FUNC_NORETURN void z_nios2_fatal_error(unsigned int reason,
 			esf->r13, esf->r14, esf->r15, esf->ra);
 		LOG_ERR("estatus: %08x", esf->estatus);
 	}
-#endif /* CONFIG_EXCEPTION_DEBUG */
 
 	z_fatal_error(reason, esf);
 	CODE_UNREACHABLE;
@@ -102,7 +100,7 @@ static char *cause_str(uint32_t cause_code)
 }
 #endif
 
-FUNC_NORETURN void z_nios2_fault(const struct arch_esf *esf)
+FUNC_NORETURN void _Fault(const z_arch_esf_t *esf)
 {
 #if defined(CONFIG_PRINTK) || defined(CONFIG_LOG)
 	/* Unfortunately, completely unavailable on Nios II/e cores */

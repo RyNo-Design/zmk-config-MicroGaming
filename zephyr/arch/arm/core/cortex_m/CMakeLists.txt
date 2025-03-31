@@ -3,23 +3,24 @@
 zephyr_library()
 
 zephyr_library_sources(
-  exc_exit.c
+  exc_exit.S
   fault.c
   fault_s.S
   fpu.c
+  irq_init.c
   reset.S
   scb.c
   thread_abort.c
   vector_table.S
+  swap.c
   swap_helper.S
   irq_manage.c
   prep_c.c
   thread.c
-  cpu_idle.c
+  cpu_idle.S
   )
 
-zephyr_library_sources_ifndef(CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER irq_init.c)
-zephyr_library_sources_ifdef(CONFIG_GEN_SW_ISR_TABLE isr_wrapper.c)
+zephyr_library_sources_ifdef(CONFIG_GEN_SW_ISR_TABLE isr_wrapper.S)
 zephyr_library_sources_ifdef(CONFIG_DEBUG_COREDUMP coredump.c)
 zephyr_library_sources_ifdef(CONFIG_THREAD_LOCAL_STORAGE __aeabi_read_tp.S)
 zephyr_library_sources_ifdef(CONFIG_SEMIHOST semihost.c)

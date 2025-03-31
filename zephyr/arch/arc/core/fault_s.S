@@ -19,7 +19,7 @@
 #include <zephyr/syscall.h>
 #include <zephyr/arch/arc/asm-compat/assembler.h>
 
-GTEXT(z_arc_fault)
+GTEXT(_Fault)
 GTEXT(__reset)
 GTEXT(__memory_error)
 GTEXT(__instruction_error)
@@ -99,11 +99,11 @@ _exc_entry:
 
 	_save_exc_regs_into_stack
 
-	/* sp is parameter of z_arc_fault */
+	/* sp is parameter of _Fault */
 	MOVR r0, sp
 	/* ilink is the thread's original sp */
 	MOVR r1, ilink
-	jl z_arc_fault
+	jl _Fault
 
 _exc_return:
 /* the exception cause must be fixed in exception handler when exception returns

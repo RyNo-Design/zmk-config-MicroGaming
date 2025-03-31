@@ -1,5 +1,5 @@
 /*
- * Copyright 2023-2024 NXP
+ * Copyright 2023 NXP
  * Copyright (c) 2020 Toby Firth
  *
  * Based on adc_mcux_adc16.c and adc_mcux_adc12.c, which are:
@@ -14,14 +14,14 @@
 #include <errno.h>
 #include <zephyr/drivers/adc.h>
 #include <zephyr/sys/util.h>
+#include <fsl_lpadc.h>
 #include <zephyr/drivers/regulator.h>
-#include <zephyr/drivers/clock_control.h>
+
 #include <zephyr/drivers/pinctrl.h>
 
 #define LOG_LEVEL CONFIG_ADC_LOG_LEVEL
 #include <zephyr/logging/log.h>
 #include <zephyr/irq.h>
-#include <fsl_lpadc.h>
 LOG_MODULE_REGISTER(nxp_mcux_lpadc);
 
 /*
@@ -35,6 +35,7 @@ LOG_MODULE_REGISTER(nxp_mcux_lpadc);
 #define ADC_CONTEXT_USES_KERNEL_TIMER
 #include "adc_context.h"
 
+
 struct mcux_lpadc_config {
 	ADC_Type *base;
 	lpadc_reference_voltage_source_t voltage_ref;
@@ -44,10 +45,7 @@ struct mcux_lpadc_config {
 	uint32_t offset_b;
 	void (*irq_config_func)(const struct device *dev);
 	const struct pinctrl_dev_config *pincfg;
-	const struct device *ref_supplies;
-	const struct device *clock_dev;
-	clock_control_subsys_t clock_subsys;
-	int32_t ref_supply_val;
+	const struct device **ref_supplies;
 };
 
 struct mcux_lpadc_data {
@@ -59,82 +57,26 @@ struct mcux_lpadc_data {
 	lpadc_conv_command_config_t cmd_config[CONFIG_LPADC_CHANNEL_COUNT];
 };
 
-static int mcux_lpadc_acquisition_time_setup(const struct device *dev, uint16_t acq_time,
-					     lpadc_conv_command_config_t *cmd)
-{
-	const struct mcux_lpadc_config *config = dev->config;
-	uint32_t adc_freq_hz = 0;
-	uint32_t conversion_factor = 0;
-	uint32_t acquisition_time_value = ADC_ACQ_TIME_VALUE(acq_time);
-	uint8_t acquisition_time_unit = ADC_ACQ_TIME_UNIT(acq_time);
 
-	if (ADC_ACQ_TIME_DEFAULT == acquisition_time_value) {
-		return 0;
-	}
-
-	/* If the acquisition time is expressed in ADC ticks, then directly compare
-	 * the acquisition time with configuration items (3, 5, 7, etc. ADC ticks)
-	 * supported by the LPADC. The conversion factor is set to 1 (means do not need
-	 * to convert configuration items from ADC ticks to nanoseconds).
-	 * If the acquisition time is expressed in microseconds or nanoseconds, First
-	 * calculate the ADC cycle based on the ADC clock, then convert the configuration
-	 * items supported by LPADC into nanoseconds, and finally compare the acquisition
-	 * time with configuration items. The conversion factor is equal to the ADC cycle
-	 * (means convert configuration items from ADC ticks to nanoseconds).
-	 */
-	if (ADC_ACQ_TIME_TICKS == acquisition_time_unit) {
-		conversion_factor = 1;
-	} else {
-		if (clock_control_get_rate(config->clock_dev, config->clock_subsys, &adc_freq_hz)) {
-			LOG_ERR("Get clock rate failed");
-			return -EINVAL;
-		}
-
-		conversion_factor = 1000000000 / adc_freq_hz;
-
-		if (ADC_ACQ_TIME_MICROSECONDS == acquisition_time_unit) {
-			acquisition_time_value *= 1000;
-		}
-	}
-
-	if ((3 * conversion_factor) >= acquisition_time_value) {
-		cmd->sampleTimeMode = kLPADC_SampleTimeADCK3;
-	} else if ((5 * conversion_factor) >= acquisition_time_value) {
-		cmd->sampleTimeMode = kLPADC_SampleTimeADCK5;
-	} else if ((7 * conversion_factor) >= acquisition_time_value) {
-		cmd->sampleTimeMode = kLPADC_SampleTimeADCK7;
-	} else if ((11 * conversion_factor) >= acquisition_time_value) {
-		cmd->sampleTimeMode = kLPADC_SampleTimeADCK11;
-	} else if ((19 * conversion_factor) >= acquisition_time_value) {
-		cmd->sampleTimeMode = kLPADC_SampleTimeADCK19;
-	} else if ((35 * conversion_factor) >= acquisition_time_value) {
-		cmd->sampleTimeMode = kLPADC_SampleTimeADCK35;
-	} else if ((67 * conversion_factor) >= acquisition_time_value) {
-		cmd->sampleTimeMode = kLPADC_SampleTimeADCK67;
-	} else if ((131 * conversion_factor) >= acquisition_time_value) {
-		cmd->sampleTimeMode = kLPADC_SampleTimeADCK131;
-	} else {
-		return -EINVAL;
-	}
-
-	return 0;
-}
 
 static int mcux_lpadc_channel_setup(const struct device *dev,
 				const struct adc_channel_cfg *channel_cfg)
 {
-	const struct mcux_lpadc_config *config = dev->config;
-	const struct device *regulator = config->ref_supplies;
-	int32_t vref_uv = config->ref_supply_val * 1000;
+
+
 	struct mcux_lpadc_data *data = dev->data;
 	lpadc_conv_command_config_t *cmd;
 	uint8_t channel_side;
 	uint8_t channel_num;
-	int err;
 
 	/* User may configure maximum number of active channels */
 	if (channel_cfg->channel_id >= CONFIG_LPADC_CHANNEL_COUNT) {
 		LOG_ERR("Channel %d is not valid", channel_cfg->channel_id);
+		return -EINVAL;
+	}
+
+	if (channel_cfg->acquisition_time != ADC_ACQ_TIME_DEFAULT) {
+		LOG_ERR("Invalid channel acquisition time");
 		return -EINVAL;
 	}
 
@@ -151,14 +93,6 @@ static int mcux_lpadc_channel_setup(const struct device *dev,
 
 	LPADC_GetDefaultConvCommandConfig(cmd);
 
-	/* Configure LPADC acquisition time. */
-	if (mcux_lpadc_acquisition_time_setup(dev, channel_cfg->acquisition_time, cmd)) {
-		LOG_ERR("LPADC acquisition time setting failed");
-		return -EINVAL;
-	}
-
-#if !(defined(FSL_FEATURE_LPADC_HAS_B_SIDE_CHANNELS) && \
-	(FSL_FEATURE_LPADC_HAS_B_SIDE_CHANNELS == 0U))
 	if (channel_cfg->differential) {
 		/* Channel pairs must match in differential mode */
 		if ((ADC_CMDL_ADCH(channel_cfg->input_positive)) !=
@@ -185,7 +119,6 @@ static int mcux_lpadc_channel_setup(const struct device *dev,
 	} else {
 		/* Default value for sampleChannelMode is SideA */
 	}
-#endif
 #if defined(FSL_FEATURE_LPADC_HAS_CMDL_CSCALE) && FSL_FEATURE_LPADC_HAS_CMDL_CSCALE
 	/*
 	 * The true scaling factor used by the LPADC is 30/64, instead of
@@ -208,25 +141,8 @@ static int mcux_lpadc_channel_setup(const struct device *dev,
 	}
 #endif
 
-	/*
-	 * ADC_REF_EXTERNAL1: Use SoC internal regulator as LPADC reference voltage.
-	 * ADC_REF_EXTERNAL0: Use other voltage source (maybe also within the SoCs)
-	 * as LPADC reference voltage, like VREFH, VDDA, etc.
-	 */
-	if (channel_cfg->reference == ADC_REF_EXTERNAL1) {
-		LOG_DBG("ref external1");
-		if (regulator != NULL) {
-			err = regulator_set_voltage(regulator, vref_uv, vref_uv);
-			if (err < 0) {
-				return err;
-			}
-		} else {
-			return -EINVAL;
-		}
-	} else if (channel_cfg->reference == ADC_REF_EXTERNAL0) {
-		LOG_DBG("ref external0");
-	} else {
-		LOG_DBG("ref not support");
+	if (channel_cfg->reference != ADC_REF_EXTERNAL0) {
+		LOG_ERR("Invalid channel reference");
 		return -EINVAL;
 	}
 
@@ -427,7 +343,7 @@ static void mcux_lpadc_isr(const struct device *dev)
 	LOG_DBG("Finished channel %d. Raw result is 0x%04x",
 		channel, conv_result.convValue);
 	/*
-	 * For 12 or 13 bit resolution the LSBs will be 0, so a bit shift
+	 * For 12 or 13 bit resolution the the LSBs will be 0, so a bit shift
 	 * is needed. For differential modes, the ADC conversion to
 	 * millivolts expects to use a shift one less than the resolution.
 	 *
@@ -438,8 +354,6 @@ static void mcux_lpadc_isr(const struct device *dev)
 	conv_mode = data->cmd_config[channel].sampleChannelMode;
 	if (data->ctx.sequence.resolution < 15) {
 		result = ((conv_result.convValue >> 3) & 0xFFF);
-#if !(defined(FSL_FEATURE_LPADC_HAS_B_SIDE_CHANNELS) && \
-	(FSL_FEATURE_LPADC_HAS_B_SIDE_CHANNELS == 0U))
 #if defined(FSL_FEATURE_LPADC_HAS_CMDL_DIFF) && FSL_FEATURE_LPADC_HAS_CMDL_DIFF
 		if (conv_mode == kLPADC_SampleChannelDiffBothSideAB ||
 		    conv_mode == kLPADC_SampleChannelDiffBothSideBA) {
@@ -452,7 +366,6 @@ static void mcux_lpadc_isr(const struct device *dev)
 			}
 		}
 		*data->buffer++ = result;
-#endif
 	} else {
 		*data->buffer++ = conv_result.convValue;
 	}
@@ -483,10 +396,10 @@ static int mcux_lpadc_init(const struct device *dev)
 	}
 
 	/* Enable necessary regulators */
-	const struct device *regulator = config->ref_supplies;
+	const struct device **regulator = config->ref_supplies;
 
-	if (regulator != NULL) {
-		err = regulator_enable(regulator);
+	while (*regulator != NULL) {
+		err = regulator_enable(*(regulator++));
 		if (err) {
 			return err;
 		}
@@ -502,9 +415,7 @@ static int mcux_lpadc_init(const struct device *dev)
 	adc_config.conversionAverageMode = config->calibration_average;
 #endif /* FSL_FEATURE_LPADC_HAS_CTRL_CAL_AVGS */
 
-#if !(DT_ANY_INST_HAS_PROP_STATUS_OKAY(no_power_level))
-		adc_config.powerLevelMode = config->power_level;
-#endif
+	adc_config.powerLevelMode = config->power_level;
 
 	LPADC_Init(base, &adc_config);
 
@@ -549,7 +460,7 @@ static int mcux_lpadc_init(const struct device *dev)
 	return 0;
 }
 
-static DEVICE_API(adc, mcux_lpadc_driver_api) = {
+static const struct adc_driver_api mcux_lpadc_driver_api = {
 	.channel_setup = mcux_lpadc_channel_setup,
 	.read = mcux_lpadc_read,
 #ifdef CONFIG_ADC_ASYNC
@@ -557,7 +468,17 @@ static DEVICE_API(adc, mcux_lpadc_driver_api) = {
 #endif
 };
 
+#define LPADC_REGULATOR_DEPENDENCY(node_id, prop, idx) \
+	DEVICE_DT_GET(DT_PHANDLE_BY_IDX(node_id, prop, idx)),
+
+#define LPADC_REGULATORS_DEFINE(inst)				\
+	static const struct device *mcux_lpadc_ref_supplies_##inst[] = {	\
+		COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, nxp_reference_supply),	\
+			(DT_INST_FOREACH_PROP_ELEM(inst, nxp_reference_supply,	\
+				LPADC_REGULATOR_DEPENDENCY)), ()) NULL};
+
 #define LPADC_MCUX_INIT(n)						\
+	LPADC_REGULATORS_DEFINE(n)						\
 									\
 	static void mcux_lpadc_config_func_##n(const struct device *dev);	\
 									\
@@ -566,20 +487,12 @@ static DEVICE_API(adc, mcux_lpadc_driver_api) = {
 		.base = (ADC_Type *)DT_INST_REG_ADDR(n),	\
 		.voltage_ref =	DT_INST_PROP(n, voltage_ref),	\
 		.calibration_average = DT_INST_ENUM_IDX_OR(n, calibration_average, 0),	\
-		.power_level = DT_INST_PROP_OR(n, power_level, 0),	\
+		.power_level = DT_INST_PROP(n, power_level),	\
 		.offset_a = DT_INST_PROP(n, offset_value_a),	\
 		.offset_b = DT_INST_PROP(n, offset_value_b),	\
 		.irq_config_func = mcux_lpadc_config_func_##n,				\
 		.pincfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),			\
-		.ref_supplies = COND_CODE_1(DT_INST_NODE_HAS_PROP(n, nxp_references),\
-						(DEVICE_DT_GET(DT_PHANDLE(DT_DRV_INST(n),\
-						nxp_references))), (NULL)),\
-		.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),                                \
-		.clock_subsys = (clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, name),\
-		.ref_supply_val = COND_CODE_1(\
-						DT_INST_NODE_HAS_PROP(n, nxp_references),\
-						(DT_PHA(DT_DRV_INST(n), nxp_references, vref_mv)), \
-						(0)),\
+		.ref_supplies = mcux_lpadc_ref_supplies_##n, \
 	};									\
 	static struct mcux_lpadc_data mcux_lpadc_data_##n = {	\
 		ADC_CONTEXT_INIT_TIMER(mcux_lpadc_data_##n, ctx),	\
@@ -600,9 +513,6 @@ static DEVICE_API(adc, mcux_lpadc_driver_api) = {
 			DEVICE_DT_INST_GET(n), 0);				\
 										\
 		irq_enable(DT_INST_IRQN(n));					\
-	}	\
-										\
-	BUILD_ASSERT((DT_INST_PROP_OR(n, power_level, 0) >= 0) && \
-		(DT_INST_PROP_OR(n, power_level, 0) <= 3), "power_level: wrong value");
+	}
 
 DT_INST_FOREACH_STATUS_OKAY(LPADC_MCUX_INIT)

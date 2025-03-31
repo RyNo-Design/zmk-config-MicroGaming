@@ -233,7 +233,7 @@ static void update_protocol_header_lengths(struct net_pkt *pkt, uint16_t size)
 
 	ipv6 = (struct net_ipv6_hdr *)net_pkt_get_data(pkt, &ipv6_access);
 	if (!ipv6) {
-		NET_ERR("Could not get IPv6 header");
+		NET_ERR("could not get IPv6 header");
 		return;
 	}
 
@@ -251,7 +251,7 @@ static void update_protocol_header_lengths(struct net_pkt *pkt, uint16_t size)
 			udp->len = htons(size - NET_IPV6H_LEN);
 			net_pkt_set_data(pkt, &udp_access);
 		} else {
-			NET_ERR("Could not get UDP header");
+			NET_ERR("could not get UDP header");
 		}
 	}
 }
@@ -492,7 +492,6 @@ static inline enum net_verdict fragment_add_to_cache(struct net_pkt *pkt)
 
 	if ((type == NET_6LO_DISPATCH_FRAG1 && frag->len < NET_6LO_FRAG1_HDR_LEN) ||
 	    (type == NET_6LO_DISPATCH_FRAGN && frag->len < NET_6LO_FRAGN_HDR_LEN)) {
-		NET_ERR("Fragment too short (%u): fragment dropped", frag->len);
 		return NET_DROP;
 	}
 
@@ -511,9 +510,7 @@ static inline enum net_verdict fragment_add_to_cache(struct net_pkt *pkt)
 	if (!fcache) {
 		fcache = set_reass_cache(pkt, size, tag);
 		if (!fcache) {
-			NET_ERR("Could not allocate fragment cache, consider increasing "
-				"CONFIG_NET_L2_IEEE802154_FRAGMENT_REASS_CACHE_SIZE: packet "
-				"dropped");
+			NET_ERR("Could not get a cache entry");
 			pkt->buffer = frag;
 			return NET_DROP;
 		}
@@ -524,15 +521,13 @@ static inline enum net_verdict fragment_add_to_cache(struct net_pkt *pkt)
 	fragment_append(fcache->pkt, frag);
 
 	if (fragment_cached_pkt_len(fcache->pkt) == fcache->size) {
-		/* All fragments received - reassemble packet. */
-
 		if (!first_frag) {
 			/* Assign buffer back to input packet. */
 			pkt->buffer = fcache->pkt->buffer;
 			fcache->pkt->buffer = NULL;
 		} else {
-			/* In case pkt == fcache->pkt, we don't want
-			 * to unref it while clearing the cache.
+			/* in case pkt == fcache->pkt, we don't want
+			 * to unref it while clearing the cach.
 			 */
 			fcache->pkt = NULL;
 		}
@@ -540,14 +535,14 @@ static inline enum net_verdict fragment_add_to_cache(struct net_pkt *pkt)
 		clear_reass_cache(size, tag);
 
 		if (!fragment_packet_valid(pkt)) {
-			NET_ERR("Invalid fragment type: packet dropped");
+			NET_ERR("Invalid fragmented packet");
 			return NET_DROP;
 		}
 
 		fragment_reconstruct_packet(pkt);
 
 		if (!net_6lo_uncompress(pkt)) {
-			NET_ERR("Invalid 6LoWPAN header: packet dropped");
+			NET_ERR("Could not uncompress. Bogus packet?");
 			return NET_DROP;
 		}
 
@@ -573,7 +568,7 @@ static inline enum net_verdict fragment_add_to_cache(struct net_pkt *pkt)
 enum net_verdict ieee802154_6lo_reassemble(struct net_pkt *pkt)
 {
 	if (!pkt || !pkt->buffer) {
-		NET_WARN("Empty payload: packet dropped");
+		NET_ERR("Nothing to reassemble");
 		return NET_DROP;
 	}
 
@@ -586,7 +581,7 @@ enum net_verdict ieee802154_6lo_reassemble(struct net_pkt *pkt)
 			return NET_CONTINUE;
 		}
 
-		NET_ERR("Invalid header: packet dropped");
+		NET_ERR("Could not uncompress. Bogus packet?");
 	}
 
 	return NET_DROP;

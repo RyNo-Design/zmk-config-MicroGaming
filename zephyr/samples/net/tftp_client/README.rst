@@ -19,7 +19,7 @@ The source code for this sample application can be found at:
 Requirements
 ************
 
-- :ref:`networking_with_eth_qemu`, :ref:`networking_with_qemu` or :ref:`networking_with_native_sim`
+- :ref:`networking_with_eth_qemu`, :ref:`networking_with_qemu` or :ref:`networking_with_native_posix`
 - Linux machine
 
 Building and Running
@@ -41,32 +41,28 @@ Build the tftp-client sample application like this:
    :compact:
 
 The easiest way to setup this sample application is to build and run it
-as a native_sim application or as a QEMU target using the default configuration :file:`prj.conf`.
-This requires a small amount of setup described in :ref:`networking_with_eth_qemu`, :ref:`networking_with_qemu` and :ref:`networking_with_native_sim`.
+as native POSIX application or as a QEMU target using the default configuration :file:`prj.conf`.
+This requires a small amount of setup described in :ref:`networking_with_eth_qemu`, :ref:`networking_with_qemu` and :ref:`networking_with_native_posix`.
 
-Build the tftp-client sample application for :ref:`native_sim <native_sim>` like this:
+Build the tftp-client sample application for native_posix like this:
 
 .. zephyr-app-commands::
    :zephyr-app: samples/net/tftp_client
    :host-os: unix
-   :board: native_sim
+   :board: native_posix
    :goals: run
    :compact:
 
 Download and run a TFTP server (like TFTPd), then create file1.bin (with data) and newfile.bin.
 
 Please note that default IP server address is 192.0.2.2 and default port is 69.
-To specify an IP server address and/or port, change these configurations in ``prj.conf``:
-
-.. code-block:: cfg
+To specify an IP server address and/or port, change configurations in ``prj.conf``::
 
     CONFIG_TFTP_APP_SERVER="10.0.0.10"
     CONFIG_TFTP_APP_PORT="70"
 
 To connect to server using hostname, enable DNS resolver by changing these two
-configurations in ``prj.conf``:
-
-.. code-block:: cfg
+configurations in ``prj.conf``::
 
     CONFIG_DNS_RESOLVER=y
     CONFIG_TFTP_APP_SERVER="my-tftp-server.org"
@@ -74,16 +70,13 @@ configurations in ``prj.conf``:
 Sample output
 ==================================
 
-This sample can be run on :ref:`native_sim<native_sim>` while running a TFTP server on the host
-machine.
-
-Launch :command:`net-setup.sh` in net-tools:
-
-.. code-block:: bash
+Sample run on native_posix platform with TFTP server on host machine
+Launch net-setup.sh in net-tools
+.. code-block:: console
 
    net-setup.sh
 
-.. code-block:: bash
+.. code-block:: console
 
     <inf> net_config: Initializing network
     <inf> net_config: IPv4 address: 192.0.2.1

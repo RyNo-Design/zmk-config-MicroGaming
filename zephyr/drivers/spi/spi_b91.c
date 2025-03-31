@@ -19,7 +19,6 @@
 LOG_MODULE_REGISTER(spi_telink);
 
 #include <zephyr/drivers/spi.h>
-#include <zephyr/drivers/spi/rtio.h>
 #include "spi_context.h"
 #include <zephyr/drivers/pinctrl.h>
 
@@ -229,7 +228,7 @@ static void spi_b91_txrx(const struct device *dev, uint32_t len)
 		BM_SET(reg_spi_fifo_state(cfg->peripheral_id), FLD_SPI_RXF_CLR);
 	}
 
-	/* wait for SPI is ready */
+	/* wait fot SPI is ready */
 	while (spi_is_busy(cfg->peripheral_id)) {
 	};
 
@@ -453,15 +452,12 @@ static int spi_b91_release(const struct device *dev,
 }
 
 /* SPI driver APIs structure */
-static DEVICE_API(spi, spi_b91_api) = {
+static struct spi_driver_api spi_b91_api = {
 	.transceive = spi_b91_transceive,
 	.release = spi_b91_release,
 #ifdef CONFIG_SPI_ASYNC
 	.transceive_async = spi_b91_transceive_async,
 #endif /* CONFIG_SPI_ASYNC */
-#ifdef CONFIG_SPI_RTIO
-	.iodev_submit = spi_rtio_iodev_default_submit,
-#endif
 };
 
 /* SPI driver registration */
@@ -483,7 +479,7 @@ static DEVICE_API(spi, spi_b91_api) = {
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),		  \
 	};								  \
 									  \
-	SPI_DEVICE_DT_INST_DEFINE(inst, spi_b91_init,			  \
+	DEVICE_DT_INST_DEFINE(inst, spi_b91_init,			  \
 			      NULL,					  \
 			      &spi_b91_data_##inst,			  \
 			      &spi_b91_cfg_##inst,			  \

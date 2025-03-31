@@ -22,7 +22,6 @@
 #include <zephyr/tracing/tracing_macros.h>
 #include <zephyr/sys/mem_stats.h>
 #include <zephyr/sys/iterable_sections.h>
-#include <zephyr/sys/ring_buffer.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,15 +38,13 @@ BUILD_ASSERT(sizeof(intptr_t) == sizeof(long));
 /**
  * @brief Kernel APIs
  * @defgroup kernel_apis Kernel APIs
- * @since 1.0
- * @version 1.0.0
  * @{
  * @}
  */
 
 #define K_ANY NULL
 
-#if (CONFIG_NUM_COOP_PRIORITIES + CONFIG_NUM_PREEMPT_PRIORITIES) == 0
+#if CONFIG_NUM_COOP_PRIORITIES + CONFIG_NUM_PREEMPT_PRIORITIES == 0
 #error Zero available thread priorities defined!
 #endif
 
@@ -61,12 +58,12 @@ BUILD_ASSERT(sizeof(intptr_t) == sizeof(long));
 #define K_LOWEST_APPLICATION_THREAD_PRIO (K_LOWEST_THREAD_PRIO - 1)
 
 #ifdef CONFIG_POLL
-#define Z_POLL_EVENT_OBJ_INIT(obj) \
+#define _POLL_EVENT_OBJ_INIT(obj) \
 	.poll_events = SYS_DLIST_STATIC_INIT(&obj.poll_events),
-#define Z_DECL_POLL_EVENT sys_dlist_t poll_events;
+#define _POLL_EVENT sys_dlist_t poll_events
 #else
-#define Z_POLL_EVENT_OBJ_INIT(obj)
-#define Z_DECL_POLL_EVENT
+#define _POLL_EVENT_OBJ_INIT(obj)
+#define _POLL_EVENT
 #endif
 
 struct k_thread;
@@ -121,39 +118,7 @@ typedef void (*k_thread_user_cb_t)(const struct k_thread *thread,
  * list which means creation of new threads and terminations of existing
  * threads are blocked until this API returns.
  */
-void k_thread_foreach(k_thread_user_cb_t user_cb, void *user_data);
-
-/**
- * @brief Iterate over all the threads in running on specified cpu.
- *
- * This function is does otherwise the same thing as k_thread_foreach(),
- * but it only loops through the threads running on specified cpu only.
- * If CONFIG_SMP is not defined the implementation this is the same as
- * k_thread_foreach(), with an assert cpu == 0.
- *
- * @param cpu The filtered cpu number
- * @param user_cb Pointer to the user callback function.
- * @param user_data Pointer to user data.
- *
- * @note @kconfig{CONFIG_THREAD_MONITOR} must be set for this function
- * to be effective.
- * @note This API uses @ref k_spin_lock to protect the _kernel.threads
- * list which means creation of new threads and terminations of existing
- * threads are blocked until this API returns.
- */
-#ifdef CONFIG_SMP
-void k_thread_foreach_filter_by_cpu(unsigned int cpu,
-				    k_thread_user_cb_t user_cb, void *user_data);
-#else
-static inline
-void k_thread_foreach_filter_by_cpu(unsigned int cpu,
-				    k_thread_user_cb_t user_cb, void *user_data)
-{
-	__ASSERT(cpu == 0, "cpu filter out of bounds");
-	ARG_UNUSED(cpu);
-	k_thread_foreach(user_cb, user_data);
-}
-#endif
+extern void k_thread_foreach(k_thread_user_cb_t user_cb, void *user_data);
 
 /**
  * @brief Iterate over all the threads in the system without locking.
@@ -182,53 +147,8 @@ void k_thread_foreach_filter_by_cpu(unsigned int cpu,
  * Do not reuse the memory that was occupied by k_thread structure of aborted
  * task if it was aborted after this function was called in any context.
  */
-void k_thread_foreach_unlocked(
+extern void k_thread_foreach_unlocked(
 	k_thread_user_cb_t user_cb, void *user_data);
-
-/**
- * @brief Iterate over the threads in running on current cpu without locking.
- *
- * This function does otherwise the same thing as
- * k_thread_foreach_unlocked(), but it only loops through the threads
- * running on specified cpu. If CONFIG_SMP is not defined the
- * implementation this is the same as k_thread_foreach_unlocked(), with an
- * assert requiring cpu == 0.
- *
- * @param cpu The filtered cpu number
- * @param user_cb Pointer to the user callback function.
- * @param user_data Pointer to user data.
- *
- * @note @kconfig{CONFIG_THREAD_MONITOR} must be set for this function
- * to be effective.
- * @note This API uses @ref k_spin_lock only when accessing the _kernel.threads
- * queue elements. It unlocks it during user callback function processing.
- * If a new task is created when this @c foreach function is in progress,
- * the added new task would not be included in the enumeration.
- * If a task is aborted during this enumeration, there would be a race here
- * and there is a possibility that this aborted task would be included in the
- * enumeration.
- * @note If the task is aborted and the memory occupied by its @c k_thread
- * structure is reused when this @c k_thread_foreach_unlocked is in progress
- * it might even lead to the system behave unstable.
- * This function may never return, as it would follow some @c next task
- * pointers treating given pointer as a pointer to the k_thread structure
- * while it is something different right now.
- * Do not reuse the memory that was occupied by k_thread structure of aborted
- * task if it was aborted after this function was called in any context.
- */
-#ifdef CONFIG_SMP
-void k_thread_foreach_unlocked_filter_by_cpu(unsigned int cpu,
-					     k_thread_user_cb_t user_cb, void *user_data);
-#else
-static inline
-void k_thread_foreach_unlocked_filter_by_cpu(unsigned int cpu,
-					     k_thread_user_cb_t user_cb, void *user_data)
-{
-	__ASSERT(cpu == 0, "cpu filter out of bounds");
-	ARG_UNUSED(cpu);
-	k_thread_foreach_unlocked(user_cb, user_data);
-}
-#endif
 
 /** @} */
 
@@ -251,7 +171,7 @@ void k_thread_foreach_unlocked_filter_by_cpu(unsigned int cpu,
  * */
 #define K_ESSENTIAL (BIT(0))
 
-#define K_FP_IDX 1
+#if defined(CONFIG_FPU_SHARING)
 /**
  * @brief FPU registers are managed by context switch
  *
@@ -261,7 +181,9 @@ void k_thread_foreach_unlocked_filter_by_cpu(unsigned int cpu,
  * and restore the contents of these registers when scheduling the thread.
  * No effect if @kconfig{CONFIG_FPU_SHARING} is not enabled.
  */
+#define K_FP_IDX 1
 #define K_FP_REGS (BIT(K_FP_IDX))
+#endif
 
 /**
  * @brief user mode thread
@@ -292,6 +214,10 @@ void k_thread_foreach_unlocked_filter_by_cpu(unsigned int cpu,
  */
 #define K_CALLBACK_STATE (BIT(4))
 
+#ifdef CONFIG_ARC
+/* ARC processor Bitmask definitions for threads user options */
+
+#if defined(CONFIG_ARC_DSP_SHARING)
 /**
  * @brief DSP registers are managed by context switch
  *
@@ -299,11 +225,13 @@ void k_thread_foreach_unlocked_filter_by_cpu(unsigned int cpu,
  * This option indicates that the thread uses the CPU's DSP registers.
  * This instructs the kernel to take additional steps to save and
  * restore the contents of these registers when scheduling the thread.
- * No effect if @kconfig{CONFIG_DSP_SHARING} is not enabled.
+ * No effect if @kconfig{CONFIG_ARC_DSP_SHARING} is not enabled.
  */
 #define K_DSP_IDX 6
-#define K_DSP_REGS (BIT(K_DSP_IDX))
+#define K_ARC_DSP_REGS (BIT(K_DSP_IDX))
+#endif
 
+#if defined(CONFIG_ARC_AGU_SHARING)
 /**
  * @brief AGU registers are managed by context switch
  *
@@ -313,8 +241,14 @@ void k_thread_foreach_unlocked_filter_by_cpu(unsigned int cpu,
  * No effect if @kconfig{CONFIG_ARC_AGU_SHARING} is not enabled.
  */
 #define K_AGU_IDX 7
-#define K_AGU_REGS (BIT(K_AGU_IDX))
+#define K_ARC_AGU_REGS (BIT(K_AGU_IDX))
+#endif
+#endif
 
+#ifdef CONFIG_X86
+/* x86 Bitmask definitions for threads user options */
+
+#if defined(CONFIG_FPU_SHARING) && defined(CONFIG_X86_SSE)
 /**
  * @brief FP and SSE registers are managed by context switch on x86
  *
@@ -325,6 +259,8 @@ void k_thread_foreach_unlocked_filter_by_cpu(unsigned int cpu,
  * the thread. No effect if @kconfig{CONFIG_X86_SSE} is not enabled.
  */
 #define K_SSE_REGS (BIT(7))
+#endif
+#endif
 
 /* end - thread options */
 
@@ -435,7 +371,7 @@ __syscall k_tid_t k_thread_create(struct k_thread *new_thread,
  * @param p2 2nd entry point parameter
  * @param p3 3rd entry point parameter
  */
-FUNC_NORETURN void k_thread_user_mode_enter(k_thread_entry_t entry,
+extern FUNC_NORETURN void k_thread_user_mode_enter(k_thread_entry_t entry,
 						   void *p1, void *p2,
 						   void *p3);
 
@@ -453,7 +389,7 @@ FUNC_NORETURN void k_thread_user_mode_enter(k_thread_entry_t entry,
  * @param ... list of kernel object pointers
  */
 #define k_thread_access_grant(thread, ...) \
-	FOR_EACH_FIXED_ARG(k_object_access_grant, (;), (thread), __VA_ARGS__)
+	FOR_EACH_FIXED_ARG(k_object_access_grant, (;), thread, __VA_ARGS__)
 
 /**
  * @brief Assign a resource memory pool to a thread
@@ -500,7 +436,7 @@ __syscall int k_thread_stack_space_get(const struct k_thread *thread,
 				       size_t *unused_ptr);
 #endif
 
-#if (K_HEAP_MEM_POOL_SIZE > 0)
+#if (CONFIG_HEAP_MEM_POOL_SIZE > 0)
 /**
  * @brief Assign the system heap as a thread's resource pool
  *
@@ -514,7 +450,7 @@ __syscall int k_thread_stack_space_get(const struct k_thread *thread,
  *
  */
 void k_thread_system_pool_assign(struct k_thread *thread);
-#endif /* (K_HEAP_MEM_POOL_SIZE > 0) */
+#endif /* (CONFIG_HEAP_MEM_POOL_SIZE > 0) */
 
 /**
  * @brief Sleep until a thread exits
@@ -543,12 +479,12 @@ __syscall int k_thread_join(struct k_thread *thread, k_timeout_t timeout);
  * This routine puts the current thread to sleep for @a duration,
  * specified as a k_timeout_t object.
  *
+ * @note if @a timeout is set to K_FOREVER then the thread is suspended.
+ *
  * @param timeout Desired duration of sleep.
  *
- * @return Zero if the requested time has elapsed or the time left to
- * sleep rounded up to the nearest millisecond (e.g. if the thread was
- * awoken by the \ref k_wakeup call).  Will be clamped to INT_MAX in
- * the case where the remaining time is unrepresentable in an int32_t.
+ * @return Zero if the requested time has elapsed or the number of milliseconds
+ * left to sleep, if thread was woken up by \ref k_wakeup call.
  */
 __syscall int32_t k_sleep(k_timeout_t timeout);
 
@@ -559,9 +495,8 @@ __syscall int32_t k_sleep(k_timeout_t timeout);
  *
  * @param ms Number of milliseconds to sleep.
  *
- * @return Zero if the requested time has elapsed or if the thread was woken up
- * by the \ref k_wakeup call, the time left to sleep rounded up to the nearest
- * millisecond.
+ * @return Zero if the requested time has elapsed or the number of milliseconds
+ * left to sleep, if thread was woken up by \ref k_wakeup call.
  */
 static inline int32_t k_msleep(int32_t ms)
 {
@@ -580,9 +515,8 @@ static inline int32_t k_msleep(int32_t ms)
  *
  * @param us Number of microseconds to sleep.
  *
- * @return Zero if the requested time has elapsed or if the thread was woken up
- * by the \ref k_wakeup call, the time left to sleep rounded up to the nearest
- * microsecond.
+ * @return Zero if the requested time has elapsed or the number of microseconds
+ * left to sleep, if thread was woken up by \ref k_wakeup call.
  */
 __syscall int32_t k_usleep(int32_t us);
 
@@ -662,10 +596,9 @@ __syscall k_tid_t k_sched_current_thread_query(void);
 __attribute_const__
 static inline k_tid_t k_current_get(void)
 {
-#ifdef CONFIG_CURRENT_THREAD_USE_TLS
-
+#ifdef CONFIG_THREAD_LOCAL_STORAGE
 	/* Thread-local cache of current thread ID, set in z_thread_entry() */
-	extern Z_THREAD_LOCAL k_tid_t z_tls_current;
+	extern __thread k_tid_t z_tls_current;
 
 	return z_tls_current;
 #else
@@ -688,14 +621,30 @@ static inline k_tid_t k_current_get(void)
  * this is done via blocking the caller (in the same manner as
  * k_thread_join()), but in interrupt context on SMP systems the
  * implementation is required to spin for threads that are running on
- * other CPUs.
+ * other CPUs.  Note that as specified, this means that on SMP
+ * platforms it is possible for application code to create a deadlock
+ * condition by simultaneously aborting a cycle of threads using at
+ * least one termination from interrupt context.  Zephyr cannot detect
+ * all such conditions.
  *
  * @param thread ID of thread to abort.
  */
 __syscall void k_thread_abort(k_tid_t thread);
 
-k_ticks_t z_timeout_expires(const struct _timeout *timeout);
-k_ticks_t z_timeout_remaining(const struct _timeout *timeout);
+
+/**
+ * @brief Start an inactive thread
+ *
+ * If a thread was created with K_FOREVER in the delay parameter, it will
+ * not be added to the scheduling queue until this function is called
+ * on it.
+ *
+ * @param thread thread to start
+ */
+__syscall void k_thread_start(k_tid_t thread);
+
+extern k_ticks_t z_timeout_expires(const struct _timeout *timeout);
+extern k_ticks_t z_timeout_remaining(const struct _timeout *timeout);
 
 #ifdef CONFIG_SYS_CLOCK_EXISTS
 
@@ -706,12 +655,12 @@ k_ticks_t z_timeout_remaining(const struct _timeout *timeout);
  * executes, in units of system ticks.  If the thread is not waiting,
  * it returns current system time.
  */
-__syscall k_ticks_t k_thread_timeout_expires_ticks(const struct k_thread *thread);
+__syscall k_ticks_t k_thread_timeout_expires_ticks(const struct k_thread *t);
 
 static inline k_ticks_t z_impl_k_thread_timeout_expires_ticks(
-						const struct k_thread *thread)
+						const struct k_thread *t)
 {
-	return z_timeout_expires(&thread->base.timeout);
+	return z_timeout_expires(&t->base.timeout);
 }
 
 /**
@@ -721,12 +670,12 @@ static inline k_ticks_t z_impl_k_thread_timeout_expires_ticks(
  * next executes, in units of system ticks.  If the thread is not
  * waiting, it returns zero.
  */
-__syscall k_ticks_t k_thread_timeout_remaining_ticks(const struct k_thread *thread);
+__syscall k_ticks_t k_thread_timeout_remaining_ticks(const struct k_thread *t);
 
 static inline k_ticks_t z_impl_k_thread_timeout_remaining_ticks(
-						const struct k_thread *thread)
+						const struct k_thread *t)
 {
-	return z_timeout_remaining(&thread->base.timeout);
+	return z_timeout_remaining(&t->base.timeout);
 }
 
 #endif /* CONFIG_SYS_CLOCK_EXISTS */
@@ -757,7 +706,7 @@ struct _static_thread_data {
 #define Z_THREAD_INIT_DELAY_INITIALIZER(ms) .init_delay_ms = (ms)
 #define Z_THREAD_INIT_DELAY(thread) SYS_TIMEOUT_MS((thread)->init_delay_ms)
 #else
-#define Z_THREAD_INIT_DELAY_INITIALIZER(ms) .init_delay = SYS_TIMEOUT_MS_INIT(ms)
+#define Z_THREAD_INIT_DELAY_INITIALIZER(ms) .init_delay = SYS_TIMEOUT_MS(ms)
 #define Z_THREAD_INIT_DELAY(thread) (thread)->init_delay
 #endif
 
@@ -892,12 +841,12 @@ __syscall int k_thread_priority_get(k_tid_t thread);
  * Rescheduling can occur immediately depending on the priority @a thread is
  * set to:
  *
- * - If its priority is raised above the priority of a currently scheduled
- * preemptible thread, @a thread will be scheduled in.
+ * - If its priority is raised above the priority of the caller of this
+ * function, and the caller is preemptible, @a thread will be scheduled in.
  *
- * - If the caller lowers the priority of a currently scheduled preemptible
- * thread below that of other threads in the system, the thread of the highest
- * priority will be scheduled in.
+ * - If the caller operates on itself, it lowers its priority below that of
+ * other threads in the system, and the caller is preemptible, the thread of
+ * highest priority will be scheduled in.
  *
  * Priority can be assigned in the range of -CONFIG_NUM_COOP_PRIORITIES to
  * CONFIG_NUM_PREEMPT_PRIORITIES-1, where -CONFIG_NUM_COOP_PRIORITIES is the
@@ -930,7 +879,7 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  * may result in scheduled threads running in an incorrect deadline
  * order.
  *
- * @note Despite the API naming, the scheduler makes no guarantees
+ * @note Despite the API naming, the scheduler makes no guarantees the
  * the thread WILL be scheduled within that deadline, nor does it take
  * extra metadata (like e.g. the "runtime" and "period" parameters in
  * Linux sched_setattr()) that allows the kernel to validate the
@@ -947,26 +896,6 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  */
 __syscall void k_thread_deadline_set(k_tid_t thread, int deadline);
 #endif
-
-/**
- * @brief Invoke the scheduler
- *
- * This routine invokes the scheduler to force a schedule point on the current
- * CPU. If invoked from within a thread, the scheduler will be invoked
- * immediately (provided interrupts were not locked when invoked). If invoked
- * from within an ISR, the scheduler will be invoked upon exiting the ISR.
- *
- * Invoking the scheduler allows the kernel to make an immediate determination
- * as to what the next thread to execute should be. Unlike yielding, this
- * routine is not guaranteed to switch to a thread of equal or higher priority
- * if any are available. For example, if the current thread is cooperative and
- * there is a still higher priority cooperative thread that is ready, then
- * yielding will switch to that higher priority thread whereas this routine
- * will not.
- *
- * Most applications will never use this routine.
- */
-__syscall void k_reschedule(void);
 
 #ifdef CONFIG_SCHED_CPU_MASK
 /**
@@ -1044,16 +973,10 @@ int k_thread_cpu_pin(k_tid_t thread, int cpu);
  * This routine prevents the kernel scheduler from making @a thread
  * the current thread. All other internal operations on @a thread are
  * still performed; for example, kernel objects it is waiting on are
- * still handed to it. Thread suspension does not impact any timeout
- * upon which the thread may be waiting (such as a timeout from a call
- * to k_sem_take() or k_sleep()). Thus if the timeout expires while the
- * thread is suspended, it is still suspended until k_thread_resume()
- * is called.
- *
- * When the target thread is active on another CPU, the caller will block until
- * the target thread is halted (suspended or aborted).  But if the caller is in
- * an interrupt context, it will spin waiting for that target thread active on
- * another CPU to halt.
+ * still handed to it.  Note that any existing timeouts
+ * (e.g. k_sleep(), or a timeout argument to k_sem_take() et. al.)
+ * will be canceled.  On resume, the thread will begin running
+ * immediately and return from the blocked call.
  *
  * If @a thread is already suspended, the routine has no effect.
  *
@@ -1064,33 +987,14 @@ __syscall void k_thread_suspend(k_tid_t thread);
 /**
  * @brief Resume a suspended thread.
  *
- * This routine reverses the thread suspension from k_thread_suspend()
- * and allows the kernel scheduler to make @a thread the current thread
- * when it is next eligible for that role.
+ * This routine allows the kernel scheduler to make @a thread the current
+ * thread, when it is next eligible for that role.
  *
  * If @a thread is not currently suspended, the routine has no effect.
  *
  * @param thread ID of thread to resume.
  */
 __syscall void k_thread_resume(k_tid_t thread);
-
-/**
- * @brief Start an inactive thread
- *
- * If a thread was created with K_FOREVER in the delay parameter, it will
- * not be added to the scheduling queue until this function is called
- * on it.
- *
- * @note This is a legacy API for compatibility.  Modern Zephyr
- * threads are initialized in the "sleeping" state and do not need
- * special handling for "start".
- *
- * @param thread thread to start
- */
-static inline void k_thread_start(k_tid_t thread)
-{
-	k_wakeup(thread);
-}
 
 /**
  * @brief Set time-slicing period and scope.
@@ -1118,7 +1022,7 @@ static inline void k_thread_start(k_tid_t thread)
  * @param slice Maximum time slice length (in milliseconds).
  * @param prio Highest thread priority level eligible for time slicing.
  */
-void k_sched_time_slice_set(int32_t slice, int prio);
+extern void k_sched_time_slice_set(int32_t slice, int prio);
 
 /**
  * @brief Set thread time slice
@@ -1179,7 +1083,7 @@ void k_thread_time_slice_set(struct k_thread *th, int32_t slice_ticks,
  * @return false if invoked by a thread.
  * @return true if invoked by an ISR.
  */
-bool k_is_in_isr(void);
+extern bool k_is_in_isr(void);
 
 /**
  * @brief Determine if code is running in a preemptible thread.
@@ -1251,7 +1155,7 @@ static inline bool k_is_pre_kernel(void)
  * In general this is a historical API not well-suited to modern
  * applications, use with care.
  */
-void k_sched_lock(void);
+extern void k_sched_lock(void);
 
 /**
  * @brief Unlock the scheduler.
@@ -1260,7 +1164,7 @@ void k_sched_lock(void);
  * A thread must call the routine once for each time it called k_sched_lock()
  * before the thread becomes preemptible.
  */
-void k_sched_unlock(void);
+extern void k_sched_unlock(void);
 
 /**
  * @brief Set current thread's custom data.
@@ -1591,7 +1495,6 @@ struct k_timer {
 	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q), \
 	.expiry_fn = expiry, \
 	.stop_fn = stop, \
-	.period = {}, \
 	.status = 0, \
 	.user_data = 0, \
 	}
@@ -1658,7 +1561,7 @@ typedef void (*k_timer_stop_t)(struct k_timer *timer);
  * @param expiry_fn Function to invoke each time the timer expires.
  * @param stop_fn   Function to invoke if the timer is stopped while running.
  */
-void k_timer_init(struct k_timer *timer,
+extern void k_timer_init(struct k_timer *timer,
 			 k_timer_expiry_t expiry_fn,
 			 k_timer_stop_t stop_fn);
 
@@ -1756,9 +1659,6 @@ static inline k_ticks_t z_impl_k_timer_expires_ticks(
  * This routine computes the time remaining before a running timer
  * next expires, in units of system ticks.  If the timer is not
  * running, it returns zero.
- *
- * @param timer The timer object
- * @return Remaining time until expiration, in ticks
  */
 __syscall k_ticks_t k_timer_remaining_ticks(const struct k_timer *timer);
 
@@ -1884,19 +1784,6 @@ static inline uint32_t k_uptime_get_32(void)
 }
 
 /**
- * @brief Get system uptime in seconds.
- *
- * This routine returns the elapsed time since the system booted,
- * in seconds.
- *
- * @return Current uptime in seconds.
- */
-static inline uint32_t k_uptime_seconds(void)
-{
-	return k_ticks_to_sec_floor32(k_uptime_ticks());
-}
-
-/**
  * @brief Get elapsed time.
  *
  * This routine computes the elapsed time between the current system uptime
@@ -1961,7 +1848,7 @@ struct k_queue {
 	struct k_spinlock lock;
 	_wait_q_t wait_q;
 
-	Z_DECL_POLL_EVENT
+	_POLL_EVENT;
 
 	SYS_PORT_TRACING_TRACKING_FIELD(k_queue)
 };
@@ -1975,7 +1862,7 @@ struct k_queue {
 	.data_q = SYS_SFLIST_STATIC_INIT(&obj.data_q), \
 	.lock = { }, \
 	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q),	\
-	Z_POLL_EVENT_OBJ_INIT(obj)		\
+	_POLL_EVENT_OBJ_INIT(obj)		\
 	}
 
 /**
@@ -2024,7 +1911,7 @@ __syscall void k_queue_cancel_wait(struct k_queue *queue);
  * @param queue Address of the queue.
  * @param data Address of the data item.
  */
-void k_queue_append(struct k_queue *queue, void *data);
+extern void k_queue_append(struct k_queue *queue, void *data);
 
 /**
  * @brief Append an element to a queue.
@@ -2056,7 +1943,7 @@ __syscall int32_t k_queue_alloc_append(struct k_queue *queue, void *data);
  * @param queue Address of the queue.
  * @param data Address of the data item.
  */
-void k_queue_prepend(struct k_queue *queue, void *data);
+extern void k_queue_prepend(struct k_queue *queue, void *data);
 
 /**
  * @brief Prepend an element to a queue.
@@ -2089,7 +1976,7 @@ __syscall int32_t k_queue_alloc_prepend(struct k_queue *queue, void *data);
  * @param prev Address of the previous data item.
  * @param data Address of the data item.
  */
-void k_queue_insert(struct k_queue *queue, void *prev, void *data);
+extern void k_queue_insert(struct k_queue *queue, void *prev, void *data);
 
 /**
  * @brief Atomically append a list of elements to a queue.
@@ -2109,7 +1996,7 @@ void k_queue_insert(struct k_queue *queue, void *prev, void *data);
  * @retval -EINVAL on invalid supplied data
  *
  */
-int k_queue_append_list(struct k_queue *queue, void *head, void *tail);
+extern int k_queue_append_list(struct k_queue *queue, void *head, void *tail);
 
 /**
  * @brief Atomically add a list of elements to a queue.
@@ -2126,7 +2013,7 @@ int k_queue_append_list(struct k_queue *queue, void *head, void *tail);
  * @retval 0 on success
  * @retval -EINVAL on invalid data
  */
-int k_queue_merge_slist(struct k_queue *queue, sys_slist_t *list);
+extern int k_queue_merge_slist(struct k_queue *queue, sys_slist_t *list);
 
 /**
  * @brief Get an element from a queue.
@@ -2139,8 +2026,9 @@ int k_queue_merge_slist(struct k_queue *queue, sys_slist_t *list);
  * @funcprops \isr_ok
  *
  * @param queue Address of the queue.
- * @param timeout Waiting period to obtain a data item, or one of the special
- *                values K_NO_WAIT and K_FOREVER.
+ * @param timeout Non-negative waiting period to obtain a data item
+ *                or one of the special values K_NO_WAIT and
+ *                K_FOREVER.
  *
  * @return Address of the data item if successful; NULL if returned
  * without waiting, or waiting period timed out.
@@ -2198,7 +2086,7 @@ __syscall int k_queue_is_empty(struct k_queue *queue);
 
 static inline int z_impl_k_queue_is_empty(struct k_queue *queue)
 {
-	return sys_sflist_is_empty(&queue->data_q) ? 1 : 0;
+	return (int)sys_sflist_is_empty(&queue->data_q);
 }
 
 /**
@@ -2284,8 +2172,8 @@ struct z_futex_data {
  * @param futex Address of the futex.
  * @param expected Expected value of the futex, if it is different the caller
  *		   will not wait on it.
- * @param timeout Waiting period on the futex, or one of the special values
- *                K_NO_WAIT or K_FOREVER.
+ * @param timeout Non-negative waiting period on the futex, or
+ *		  one of the special values K_NO_WAIT or K_FOREVER.
  * @retval -EACCES Caller does not have read access to futex address.
  * @retval -EAGAIN If the futex value did not match the expected parameter.
  * @retval -EINVAL Futex parameter address not recognized by the kernel.
@@ -2343,8 +2231,7 @@ struct k_event {
 #define Z_EVENT_INITIALIZER(obj) \
 	{ \
 	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q), \
-	.events = 0, \
-	.lock = {}, \
+	.events = 0 \
 	}
 
 /**
@@ -2568,10 +2455,9 @@ struct k_fifo {
  */
 #define k_fifo_put(fifo, data) \
 	({ \
-	void *_data = data; \
-	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_fifo, put, fifo, _data); \
-	k_queue_append(&(fifo)->_queue, _data); \
-	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_fifo, put, fifo, _data); \
+	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_fifo, put, fifo, data); \
+	k_queue_append(&(fifo)->_queue, data); \
+	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_fifo, put, fifo, data); \
 	})
 
 /**
@@ -2592,10 +2478,9 @@ struct k_fifo {
  */
 #define k_fifo_alloc_put(fifo, data) \
 	({ \
-	void *_data = data; \
-	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_fifo, alloc_put, fifo, _data); \
-	int fap_ret = k_queue_alloc_append(&(fifo)->_queue, _data); \
-	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_fifo, alloc_put, fifo, _data, fap_ret); \
+	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_fifo, alloc_put, fifo, data); \
+	int fap_ret = k_queue_alloc_append(&(fifo)->_queue, data); \
+	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_fifo, alloc_put, fifo, data, fap_ret); \
 	fap_ret; \
 	})
 
@@ -2792,10 +2677,9 @@ struct k_lifo {
  */
 #define k_lifo_put(lifo, data) \
 	({ \
-	void *_data = data; \
-	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_lifo, put, lifo, _data); \
-	k_queue_prepend(&(lifo)->_queue, _data); \
-	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_lifo, put, lifo, _data); \
+	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_lifo, put, lifo, data); \
+	k_queue_prepend(&(lifo)->_queue, data); \
+	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_lifo, put, lifo, data); \
 	})
 
 /**
@@ -2816,10 +2700,9 @@ struct k_lifo {
  */
 #define k_lifo_alloc_put(lifo, data) \
 	({ \
-	void *_data = data; \
-	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_lifo, alloc_put, lifo, _data); \
-	int lap_ret = k_queue_alloc_prepend(&(lifo)->_queue, _data); \
-	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_lifo, alloc_put, lifo, _data, lap_ret); \
+	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_lifo, alloc_put, lifo, data); \
+	int lap_ret = k_queue_alloc_prepend(&(lifo)->_queue, data); \
+	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_lifo, alloc_put, lifo, data, lap_ret); \
 	lap_ret; \
 	})
 
@@ -2886,10 +2769,10 @@ struct k_stack {
 
 #define Z_STACK_INITIALIZER(obj, stack_buffer, stack_num_entries) \
 	{ \
-	.wait_q = Z_WAIT_Q_INIT(&(obj).wait_q),	\
-	.base = (stack_buffer), \
-	.next = (stack_buffer), \
-	.top = (stack_buffer) + (stack_num_entries), \
+	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q),	\
+	.base = stack_buffer, \
+	.next = stack_buffer, \
+	.top = stack_buffer + stack_num_entries, \
 	}
 
 /**
@@ -3049,7 +2932,7 @@ struct k_mutex {
  */
 #define Z_MUTEX_INITIALIZER(obj) \
 	{ \
-	.wait_q = Z_WAIT_Q_INIT(&(obj).wait_q), \
+	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q), \
 	.owner = NULL, \
 	.lock_count = 0, \
 	.owner_orig_prio = K_LOWEST_APPLICATION_THREAD_PRIO, \
@@ -3227,7 +3110,7 @@ struct k_sem {
 	unsigned int count;
 	unsigned int limit;
 
-	Z_DECL_POLL_EVENT
+	_POLL_EVENT;
 
 	SYS_PORT_TRACING_TRACKING_FIELD(k_sem)
 
@@ -3238,10 +3121,10 @@ struct k_sem {
 
 #define Z_SEM_INITIALIZER(obj, initial_count, count_limit) \
 	{ \
-	.wait_q = Z_WAIT_Q_INIT(&(obj).wait_q), \
-	.count = (initial_count), \
-	.limit = (count_limit), \
-	Z_POLL_EVENT_OBJ_INIT(obj) \
+	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q), \
+	.count = initial_count, \
+	.limit = count_limit, \
+	_POLL_EVENT_OBJ_INIT(obj) \
 	}
 
 /**
@@ -3355,12 +3238,12 @@ static inline unsigned int z_impl_k_sem_count_get(struct k_sem *sem)
  * @param initial_count Initial semaphore count.
  * @param count_limit Maximum permitted semaphore count.
  */
-#define K_SEM_DEFINE(name, initial_count, count_limit)                                             \
-	STRUCT_SECTION_ITERABLE(k_sem, name) =                                                     \
-		Z_SEM_INITIALIZER(name, initial_count, count_limit);                               \
-	BUILD_ASSERT(((count_limit) != 0) &&                                                       \
-		     (((initial_count) < (count_limit)) || ((initial_count) == (count_limit))) &&  \
-		     ((count_limit) <= K_SEM_MAX_LIMIT));
+#define K_SEM_DEFINE(name, initial_count, count_limit) \
+	STRUCT_SECTION_ITERABLE(k_sem, name) = \
+		Z_SEM_INITIALIZER(name, initial_count, count_limit); \
+	BUILD_ASSERT(((count_limit) != 0) && \
+		     ((initial_count) <= (count_limit)) && \
+			 ((count_limit) <= K_SEM_MAX_LIMIT));
 
 /** @} */
 
@@ -3417,13 +3300,13 @@ void k_work_init(struct k_work *work,
  * @param work pointer to the work item.
  *
  * @return a mask of flags K_WORK_DELAYED, K_WORK_QUEUED,
- * K_WORK_RUNNING, K_WORK_CANCELING, and K_WORK_FLUSHING.
+ * K_WORK_RUNNING, and K_WORK_CANCELING.
  */
 int k_work_busy_get(const struct k_work *work);
 
 /** @brief Test whether a work item is currently pending.
  *
- * Wrapper to determine whether a work item is in a non-idle state.
+ * Wrapper to determine whether a work item is in a non-idle dstate.
  *
  * @note This is a live snapshot of state, which may change before the result
  * is checked.  Use locks where appropriate.
@@ -3467,7 +3350,7 @@ int k_work_submit_to_queue(struct k_work_q *queue,
  *
  * @return as with k_work_submit_to_queue().
  */
-int k_work_submit(struct k_work *work);
+extern int k_work_submit(struct k_work *work);
 
 /** @brief Wait for last-submitted instance to complete.
  *
@@ -3571,7 +3454,7 @@ void k_work_queue_init(struct k_work_q *queue);
  *
  * @param stack pointer to the work thread stack area.
  *
- * @param stack_size size of the work thread stack area, in bytes.
+ * @param stack_size size of the the work thread stack area, in bytes.
  *
  * @param prio initial thread priority
  *
@@ -3634,22 +3517,6 @@ int k_work_queue_drain(struct k_work_q *queue, bool plug);
  */
 int k_work_queue_unplug(struct k_work_q *queue);
 
-/** @brief Stop a work queue.
- *
- * Stops the work queue thread and ensures that no further work will be processed.
- * This call is blocking and guarantees that the work queue thread has terminated
- * cleanly if successful, no work will be processed past this point.
- *
- * @param queue Pointer to the queue structure.
- * @param timeout Maximum time to wait for the work queue to stop.
- *
- * @retval 0 if the work queue was stopped
- * @retval -EALREADY if the work queue was not started (or already stopped)
- * @retval -EBUSY if the work queue is actively processing work items
- * @retval -ETIMEDOUT if the work queue did not stop within the stipulated timeout
- */
-int k_work_queue_stop(struct k_work_q *queue, k_timeout_t timeout);
-
 /** @brief Initialize a delayable work structure.
  *
  * This must be invoked before scheduling a delayable work structure for the
@@ -3689,9 +3556,9 @@ k_work_delayable_from_work(struct k_work *work);
  *
  * @param dwork pointer to the delayable work item.
  *
- * @return a mask of flags K_WORK_DELAYED, K_WORK_QUEUED, K_WORK_RUNNING,
- * K_WORK_CANCELING, and K_WORK_FLUSHING.  A zero return value indicates the
- * work item appears to be idle.
+ * @return a mask of flags K_WORK_DELAYED, K_WORK_QUEUED, K_WORK_RUNNING, and
+ * K_WORK_CANCELING.  A zero return value indicates the work item appears to
+ * be idle.
  */
 int k_work_delayable_busy_get(const struct k_work_delayable *dwork);
 
@@ -3762,8 +3629,6 @@ static inline k_ticks_t k_work_delayable_remaining_get(
  *
  * @retval 0 if work was already scheduled or submitted.
  * @retval 1 if work has been scheduled.
- * @retval 2 if @p delay is @c K_NO_WAIT and work
- *         was running and has been queued to the queue that was running it.
  * @retval -EBUSY if @p delay is @c K_NO_WAIT and
  *         k_work_submit_to_queue() fails with this code.
  * @retval -EINVAL if @p delay is @c K_NO_WAIT and
@@ -3788,7 +3653,7 @@ int k_work_schedule_for_queue(struct k_work_q *queue,
  *
  * @return as with k_work_schedule_for_queue().
  */
-int k_work_schedule(struct k_work_delayable *dwork,
+extern int k_work_schedule(struct k_work_delayable *dwork,
 				   k_timeout_t delay);
 
 /** @brief Reschedule a work item to a queue after a delay.
@@ -3842,7 +3707,7 @@ int k_work_reschedule_for_queue(struct k_work_q *queue,
  *
  * @return as with k_work_reschedule_for_queue().
  */
-int k_work_reschedule(struct k_work_delayable *dwork,
+extern int k_work_reschedule(struct k_work_delayable *dwork,
 				     k_timeout_t delay);
 
 /** @brief Flush delayable work.
@@ -3941,10 +3806,9 @@ enum {
 	K_WORK_CANCELING_BIT = 1,
 	K_WORK_QUEUED_BIT = 2,
 	K_WORK_DELAYED_BIT = 3,
-	K_WORK_FLUSHING_BIT = 4,
 
 	K_WORK_MASK = BIT(K_WORK_DELAYED_BIT) | BIT(K_WORK_QUEUED_BIT)
-		| BIT(K_WORK_RUNNING_BIT) | BIT(K_WORK_CANCELING_BIT) | BIT(K_WORK_FLUSHING_BIT),
+		| BIT(K_WORK_RUNNING_BIT) | BIT(K_WORK_CANCELING_BIT),
 
 	/* Static work flags */
 	K_WORK_DELAYABLE_BIT = 8,
@@ -3959,8 +3823,6 @@ enum {
 	K_WORK_QUEUE_DRAIN = BIT(K_WORK_QUEUE_DRAIN_BIT),
 	K_WORK_QUEUE_PLUGGED_BIT = 3,
 	K_WORK_QUEUE_PLUGGED = BIT(K_WORK_QUEUE_PLUGGED_BIT),
-	K_WORK_QUEUE_STOP_BIT = 4,
-	K_WORK_QUEUE_STOP = BIT(K_WORK_QUEUE_STOP_BIT),
 
 	/* Static work queue flags */
 	K_WORK_QUEUE_NO_YIELD_BIT = 8,
@@ -3997,12 +3859,6 @@ enum {
 	 * Accessed via k_work_busy_get().  May co-occur with other flags.
 	 */
 	K_WORK_DELAYED = BIT(K_WORK_DELAYED_BIT),
-
-	/** @brief Flag indicating a synced work item that is being flushed.
-	 *
-	 * Accessed via k_work_busy_get().  May co-occur with other flags.
-	 */
-	K_WORK_FLUSHING = BIT(K_WORK_FLUSHING_BIT),
 };
 
 /** @brief A structure used to submit work. */
@@ -4030,7 +3886,7 @@ struct k_work {
 };
 
 #define Z_WORK_INITIALIZER(work_handler) { \
-	.handler = (work_handler), \
+	.handler = work_handler, \
 }
 
 /** @brief A structure used to submit work after a delay. */
@@ -4047,7 +3903,7 @@ struct k_work_delayable {
 
 #define Z_WORK_DELAYABLE_INITIALIZER(work_handler) { \
 	.work = { \
-		.handler = (work_handler), \
+		.handler = work_handler, \
 		.flags = K_WORK_DELAYABLE, \
 	}, \
 }
@@ -4150,11 +4006,6 @@ struct k_work_queue_config {
 	 * control.
 	 */
 	bool no_yield;
-
-	/** Control whether the work queue thread should be marked as
-	 * essential thread.
-	 */
-	bool essential;
 };
 
 /** @brief A structure used to hold work until it can be processed. */
@@ -4264,7 +4115,7 @@ struct k_work_user {
 #define Z_WORK_USER_INITIALIZER(work_handler) \
 	{ \
 	._reserved = NULL, \
-	.handler = (work_handler), \
+	.handler = work_handler, \
 	.flags = 0 \
 	}
 #endif
@@ -4377,7 +4228,7 @@ static inline int k_work_user_submit_to_queue(struct k_work_user_q *work_q,
  * @param name optional thread name.  If not null a copy is made into the
  *		thread's name buffer.
  */
-void k_work_user_queue_start(struct k_work_user_q *work_q,
+extern void k_work_user_queue_start(struct k_work_user_q *work_q,
 				    k_thread_stack_t *stack,
 				    size_t stack_size, int prio,
 				    const char *name);
@@ -4446,7 +4297,7 @@ struct k_work_poll {
  * @param work Address of triggered work item.
  * @param handler Function to invoke each time work item is processed.
  */
-void k_work_poll_init(struct k_work_poll *work,
+extern void k_work_poll_init(struct k_work_poll *work,
 			     k_work_handler_t handler);
 
 /**
@@ -4483,7 +4334,7 @@ void k_work_poll_init(struct k_work_poll *work,
  * @retval -EINVAL Work item is being processed or has completed its work.
  * @retval -EADDRINUSE Work item is pending on a different workqueue.
  */
-int k_work_poll_submit_to_queue(struct k_work_q *work_q,
+extern int k_work_poll_submit_to_queue(struct k_work_q *work_q,
 				       struct k_work_poll *work,
 				       struct k_poll_event *events,
 				       int num_events,
@@ -4520,7 +4371,7 @@ int k_work_poll_submit_to_queue(struct k_work_q *work_q,
  * @retval -EINVAL Work item is being processed or has completed its work.
  * @retval -EADDRINUSE Work item is pending on a different workqueue.
  */
-int k_work_poll_submit(struct k_work_poll *work,
+extern int k_work_poll_submit(struct k_work_poll *work,
 				     struct k_poll_event *events,
 				     int num_events,
 				     k_timeout_t timeout);
@@ -4539,7 +4390,7 @@ int k_work_poll_submit(struct k_work_poll *work,
  * @retval 0 Work item canceled.
  * @retval -EINVAL Work item is being processed or has completed its work.
  */
-int k_work_poll_cancel(struct k_work_poll *work);
+extern int k_work_poll_cancel(struct k_work_poll *work);
 
 /** @} */
 
@@ -4572,7 +4423,7 @@ struct k_msgq {
 	/** Number of used messages */
 	uint32_t used_msgs;
 
-	Z_DECL_POLL_EVENT
+	_POLL_EVENT;
 
 	/** Message queue */
 	uint8_t flags;
@@ -4591,7 +4442,6 @@ struct k_msgq {
 #define Z_MSGQ_INITIALIZER(obj, q_buffer, q_msg_size, q_max_msgs) \
 	{ \
 	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q), \
-	.lock = {}, \
 	.msg_size = q_msg_size, \
 	.max_msgs = q_max_msgs, \
 	.buffer_start = q_buffer, \
@@ -4599,8 +4449,7 @@ struct k_msgq {
 	.read_ptr = q_buffer, \
 	.write_ptr = q_buffer, \
 	.used_msgs = 0, \
-	Z_POLL_EVENT_OBJ_INIT(obj) \
-	.flags = 0, \
+	_POLL_EVENT_OBJ_INIT(obj) \
 	}
 
 /**
@@ -4712,8 +4561,9 @@ int k_msgq_cleanup(struct k_msgq *msgq);
  *
  * @param msgq Address of the message queue.
  * @param data Pointer to the message.
- * @param timeout Waiting period to add the message, or one of the special
- *                values K_NO_WAIT and K_FOREVER.
+ * @param timeout Non-negative waiting period to add the message,
+ *                or one of the special values K_NO_WAIT and
+ *                K_FOREVER.
  *
  * @retval 0 Message sent.
  * @retval -ENOMSG Returned without waiting or queue purged.
@@ -4738,7 +4588,7 @@ __syscall int k_msgq_put(struct k_msgq *msgq, const void *data, k_timeout_t time
  *                K_FOREVER.
  *
  * @retval 0 Message received.
- * @retval -ENOMSG Returned without waiting or queue purged.
+ * @retval -ENOMSG Returned without waiting.
  * @retval -EAGAIN Waiting period timed out.
  */
 __syscall int k_msgq_get(struct k_msgq *msgq, void *data, k_timeout_t timeout);
@@ -4846,6 +4696,8 @@ static inline uint32_t z_impl_k_msgq_num_used_get(struct k_msgq *msgq)
  *
  */
 struct k_mbox_msg {
+	/** internal use only - needed for legacy API support */
+	uint32_t _mailbox;
 	/** size of message (in bytes) */
 	size_t size;
 	/** application-defined information value */
@@ -4914,7 +4766,7 @@ struct k_mbox {
  *
  * @param mbox Address of the mailbox.
  */
-void k_mbox_init(struct k_mbox *mbox);
+extern void k_mbox_init(struct k_mbox *mbox);
 
 /**
  * @brief Send a mailbox message in a synchronous manner.
@@ -4935,7 +4787,7 @@ void k_mbox_init(struct k_mbox *mbox);
  * @retval -ENOMSG Returned without waiting.
  * @retval -EAGAIN Waiting period timed out.
  */
-int k_mbox_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg,
+extern int k_mbox_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg,
 		      k_timeout_t timeout);
 
 /**
@@ -4951,7 +4803,7 @@ int k_mbox_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg,
  * @param tx_msg Address of the transmit message descriptor.
  * @param sem Address of a semaphore, or NULL if none is needed.
  */
-void k_mbox_async_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg,
+extern void k_mbox_async_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg,
 			     struct k_sem *sem);
 
 /**
@@ -4971,7 +4823,7 @@ void k_mbox_async_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg,
  * @retval -ENOMSG Returned without waiting.
  * @retval -EAGAIN Waiting period timed out.
  */
-int k_mbox_get(struct k_mbox *mbox, struct k_mbox_msg *rx_msg,
+extern int k_mbox_get(struct k_mbox *mbox, struct k_mbox_msg *rx_msg,
 		      void *buffer, k_timeout_t timeout);
 
 /**
@@ -4987,7 +4839,7 @@ int k_mbox_get(struct k_mbox *mbox, struct k_mbox_msg *rx_msg,
  * @param buffer Address of the buffer to receive data, or NULL to discard
  *               the data.
  */
-void k_mbox_data_get(struct k_mbox_msg *rx_msg, void *buffer);
+extern void k_mbox_data_get(struct k_mbox_msg *rx_msg, void *buffer);
 
 /** @} */
 
@@ -4997,23 +4849,11 @@ void k_mbox_data_get(struct k_mbox_msg *rx_msg, void *buffer);
  * @{
  */
 
-/**
- * @brief initialize a pipe
- *
- * This routine initializes a pipe object, prior to its first use.
- *
- * @param pipe Address of the pipe.
- * @param buffer Address of the pipe's buffer, or NULL if no ring buffer is used.
- * @param buffer_size Size of the pipe's buffer, or zero if no ring buffer is used.
- */
-__syscall void k_pipe_init(struct k_pipe *pipe, uint8_t *buffer, size_t buffer_size);
-
-#ifdef CONFIG_PIPES
 /** Pipe Structure */
 struct k_pipe {
 	unsigned char *buffer;          /**< Pipe buffer: may be NULL */
 	size_t         size;            /**< Buffer size */
-	size_t         bytes_used;      /**< Number of bytes used in buffer */
+	size_t         bytes_used;      /**< # bytes used in buffer */
 	size_t         read_index;      /**< Where in buffer to read from */
 	size_t         write_index;     /**< Where in buffer to write */
 	struct k_spinlock lock;		/**< Synchronization lock */
@@ -5023,7 +4863,7 @@ struct k_pipe {
 		_wait_q_t      writers; /**< Writer wait queue */
 	} wait_q;			/** Wait queue */
 
-	Z_DECL_POLL_EVENT
+	_POLL_EVENT;
 
 	uint8_t	       flags;		/**< Flags */
 
@@ -5051,7 +4891,7 @@ struct k_pipe {
 		.readers = Z_WAIT_Q_INIT(&obj.wait_q.readers),       \
 		.writers = Z_WAIT_Q_INIT(&obj.wait_q.writers)        \
 	},                                                          \
-	Z_POLL_EVENT_OBJ_INIT(obj)                                   \
+	_POLL_EVENT_OBJ_INIT(obj)                                   \
 	.flags = 0,                                                 \
 	}
 
@@ -5079,7 +4919,19 @@ struct k_pipe {
 		Z_PIPE_INITIALIZER(name, _k_pipe_buf_##name, pipe_buffer_size)
 
 /**
- * @deprecated Dynamic allocation of pipe buffers will be removed in the new k_pipe API.
+ * @brief Initialize a pipe.
+ *
+ * This routine initializes a pipe object, prior to its first use.
+ *
+ * @param pipe Address of the pipe.
+ * @param buffer Address of the pipe's ring buffer, or NULL if no ring buffer
+ *               is used.
+ * @param size Size of the pipe's ring buffer (in bytes), or zero if no ring
+ *             buffer is used.
+ */
+void k_pipe_init(struct k_pipe *pipe, unsigned char *buffer, size_t size);
+
+/**
  * @brief Release a pipe's allocated buffer
  *
  * If a pipe object was given a dynamically allocated buffer via
@@ -5090,10 +4942,9 @@ struct k_pipe {
  * @retval 0 on success
  * @retval -EAGAIN nothing to cleanup
  */
-__deprecated int k_pipe_cleanup(struct k_pipe *pipe);
+int k_pipe_cleanup(struct k_pipe *pipe);
 
 /**
- * @deprecated Dynamic allocation of pipe buffers will be removed in the new k_pipe API.
  * @brief Initialize a pipe and allocate a buffer for it
  *
  * Storage for the buffer region will be allocated from the calling thread's
@@ -5108,10 +4959,9 @@ __deprecated int k_pipe_cleanup(struct k_pipe *pipe);
  * @retval 0 on success
  * @retval -ENOMEM if memory couldn't be allocated
  */
-__deprecated __syscall int k_pipe_alloc_init(struct k_pipe *pipe, size_t size);
+__syscall int k_pipe_alloc_init(struct k_pipe *pipe, size_t size);
 
 /**
- * @deprecated k_pipe_put() is replaced by k_pipe_write(...) in the new k_pipe API.
  * @brief Write data to a pipe.
  *
  * This routine writes up to @a bytes_to_write bytes of data to @a pipe.
@@ -5129,12 +4979,11 @@ __deprecated __syscall int k_pipe_alloc_init(struct k_pipe *pipe, size_t size);
  * @retval -EAGAIN Waiting period timed out; between zero and @a min_xfer
  *                 minus one data bytes were written.
  */
-__deprecated __syscall int k_pipe_put(struct k_pipe *pipe, const void *data,
+__syscall int k_pipe_put(struct k_pipe *pipe, void *data,
 			 size_t bytes_to_write, size_t *bytes_written,
 			 size_t min_xfer, k_timeout_t timeout);
 
 /**
- * @deprecated k_pipe_get() is replaced by k_pipe_read(...) in the new k_pipe API.
  * @brief Read data from a pipe.
  *
  * This routine reads up to @a bytes_to_read bytes of data from @a pipe.
@@ -5153,12 +5002,11 @@ __deprecated __syscall int k_pipe_put(struct k_pipe *pipe, const void *data,
  * @retval -EAGAIN Waiting period timed out; between zero and @a min_xfer
  *                 minus one data bytes were read.
  */
-__deprecated  __syscall int k_pipe_get(struct k_pipe *pipe, void *data,
+__syscall int k_pipe_get(struct k_pipe *pipe, void *data,
 			 size_t bytes_to_read, size_t *bytes_read,
 			 size_t min_xfer, k_timeout_t timeout);
 
 /**
- * @deprecated k_pipe_read_avail() will be removed in the new k_pipe API.
  * @brief Query the number of bytes that may be read from @a pipe.
  *
  * @param pipe Address of the pipe.
@@ -5166,10 +5014,9 @@ __deprecated  __syscall int k_pipe_get(struct k_pipe *pipe, void *data,
  * @retval a number n such that 0 <= n <= @ref k_pipe.size; the
  *         result is zero for unbuffered pipes.
  */
-__deprecated  __syscall size_t k_pipe_read_avail(struct k_pipe *pipe);
+__syscall size_t k_pipe_read_avail(struct k_pipe *pipe);
 
 /**
- * @deprecated k_pipe_write_avail() will be removed in the new k_pipe API.
  * @brief Query the number of bytes that may be written to @a pipe
  *
  * @param pipe Address of the pipe.
@@ -5177,10 +5024,9 @@ __deprecated  __syscall size_t k_pipe_read_avail(struct k_pipe *pipe);
  * @retval a number n such that 0 <= n <= @ref k_pipe.size; the
  *         result is zero for unbuffered pipes.
  */
-__deprecated __syscall size_t k_pipe_write_avail(struct k_pipe *pipe);
+__syscall size_t k_pipe_write_avail(struct k_pipe *pipe);
 
 /**
- * @deprecated k_pipe_flush() will be removed in the new k_pipe API.
  * @brief Flush the pipe of write data
  *
  * This routine flushes the pipe. Flushing the pipe is equivalent to reading
@@ -5190,10 +5036,9 @@ __deprecated __syscall size_t k_pipe_write_avail(struct k_pipe *pipe);
  *
  * @param pipe Address of the pipe.
  */
-__deprecated __syscall void k_pipe_flush(struct k_pipe *pipe);
+__syscall void k_pipe_flush(struct k_pipe *pipe);
 
 /**
- * @deprecated k_pipe_buffer_flush will be removed in the new k_pipe API.
  * @brief Flush the pipe's internal buffer
  *
  * This routine flushes the pipe's internal buffer. This is equivalent to
@@ -5204,129 +5049,14 @@ __deprecated __syscall void k_pipe_flush(struct k_pipe *pipe);
  *
  * @param pipe Address of the pipe.
  */
-__deprecated __syscall void k_pipe_buffer_flush(struct k_pipe *pipe);
+__syscall void k_pipe_buffer_flush(struct k_pipe *pipe);
 
-#else /* CONFIG_PIPES */
-
-enum pipe_flags {
-	PIPE_FLAG_OPEN = BIT(0),
-	PIPE_FLAG_RESET = BIT(1),
-};
-
-struct k_pipe {
-	size_t waiting;
-	struct ring_buf buf;
-	struct k_spinlock lock;
-	_wait_q_t data;
-	_wait_q_t space;
-	uint8_t flags;
-
-	Z_DECL_POLL_EVENT
-#ifdef CONFIG_OBJ_CORE_PIPE
-	struct k_obj_core  obj_core;
-#endif
-	SYS_PORT_TRACING_TRACKING_FIELD(k_pipe)
-};
-
-/**
- * @cond INTERNAL_HIDDEN
- */
-#define Z_PIPE_INITIALIZER(obj, pipe_buffer, pipe_buffer_size)	\
-{								\
-	.buf = RING_BUF_INIT(pipe_buffer, pipe_buffer_size),	\
-	.data = Z_WAIT_Q_INIT(&obj.data),			\
-	.space = Z_WAIT_Q_INIT(&obj.space),			\
-	.flags = PIPE_FLAG_OPEN,				\
-	.waiting = 0,						\
-	Z_POLL_EVENT_OBJ_INIT(obj)				\
-}
-/**
- * INTERNAL_HIDDEN @endcond
- */
-
-/**
- * @brief Statically define and initialize a pipe.
- *
- * The pipe can be accessed outside the module where it is defined using:
- *
- * @code extern struct k_pipe <name>; @endcode
- *
- * @param name Name of the pipe.
- * @param pipe_buffer_size Size of the pipe's ring buffer (in bytes)
- *                         or zero if no ring buffer is used.
- * @param pipe_align Alignment of the pipe's ring buffer (power of 2).
- *
- */
-#define K_PIPE_DEFINE(name, pipe_buffer_size, pipe_align)		\
-	static unsigned char __noinit __aligned(pipe_align)		\
-		_k_pipe_buf_##name[pipe_buffer_size];			\
-	STRUCT_SECTION_ITERABLE(k_pipe, name) =				\
-		Z_PIPE_INITIALIZER(name, _k_pipe_buf_##name, pipe_buffer_size)
-
-
-/**
- * @brief Write data to a pipe
- *
- * This routine writes up to @a len bytes of data to @a pipe.
- * If the pipe is full, the routine will block until the data can be written or the timeout expires.
- *
- * @param pipe Address of the pipe.
- * @param data Address of data to write.
- * @param len Size of data (in bytes).
- * @param timeout Waiting period to wait for the data to be written.
- *
- * @retval number of bytes written on success
- * @retval -EAGAIN if no data could be written before the timeout expired
- * @retval -ECANCELED if the write was interrupted by k_pipe_reset(..)
- * @retval -EPIPE if the pipe was closed
- */
-__syscall int k_pipe_write(struct k_pipe *pipe, const uint8_t *data, size_t len,
-			   k_timeout_t timeout);
-
-/**
- * @brief Read data from a pipe
- * This routine reads up to @a len bytes of data from @a pipe.
- * If the pipe is empty, the routine will block until the data can be read or the timeout expires.
- *
- * @param pipe Address of the pipe.
- * @param data Address to place the data read from pipe.
- * @param len Requested number of bytes to read.
- * @param timeout Waiting period to wait for the data to be read.
- *
- * @retval number of bytes read on success
- * @retval -EAGAIN if no data could be read before the timeout expired
- * @retval -ECANCELED if the read was interrupted by k_pipe_reset(..)
- * @retval -EPIPE if the pipe was closed
- */
-__syscall int k_pipe_read(struct k_pipe *pipe, uint8_t *data, size_t len,
-			  k_timeout_t timeout);
-
-/**
- * @brief Reset a pipe
- * This routine resets the pipe, discarding any unread data and unblocking any threads waiting to
- * write or read, causing the waiting threads to return with -ECANCELED. Calling k_pipe_read(..) or
- * k_pipe_write(..) when the pipe is resetting but not yet reset will return -ECANCELED.
- * The pipe is left open after a reset and can be used as normal.
- *
- * @param pipe Address of the pipe.
- */
-__syscall void k_pipe_reset(struct k_pipe *pipe);
-
-/**
- * @brief Close a pipe
- *
- * This routine closes a pipe. Any threads that were blocked on the pipe
- * will be unblocked and receive an error code.
- *
- * @param pipe Address of the pipe.
- */
-__syscall void k_pipe_close(struct k_pipe *pipe);
-#endif /* CONFIG_PIPES */
 /** @} */
 
 /**
  * @cond INTERNAL_HIDDEN
  */
+
 struct k_mem_slab_info {
 	uint32_t num_blocks;
 	size_t   block_size;
@@ -5445,7 +5175,7 @@ struct k_mem_slab {
  * @retval -EINVAL invalid data supplied
  *
  */
-int k_mem_slab_init(struct k_mem_slab *slab, void *buffer,
+extern int k_mem_slab_init(struct k_mem_slab *slab, void *buffer,
 			   size_t block_size, uint32_t num_blocks);
 
 /**
@@ -5460,7 +5190,7 @@ int k_mem_slab_init(struct k_mem_slab *slab, void *buffer,
  *
  * @param slab Address of the memory slab.
  * @param mem Pointer to block address area.
- * @param timeout Waiting period to wait for operation to complete.
+ * @param timeout Non-negative waiting period to wait for operation to complete.
  *        Use K_NO_WAIT to return without waiting,
  *        or K_FOREVER to wait as long as necessary.
  *
@@ -5470,7 +5200,7 @@ int k_mem_slab_init(struct k_mem_slab *slab, void *buffer,
  * @retval -EAGAIN Waiting period timed out.
  * @retval -EINVAL Invalid data supplied
  */
-int k_mem_slab_alloc(struct k_mem_slab *slab, void **mem,
+extern int k_mem_slab_alloc(struct k_mem_slab *slab, void **mem,
 			    k_timeout_t timeout);
 
 /**
@@ -5482,7 +5212,7 @@ int k_mem_slab_alloc(struct k_mem_slab *slab, void **mem,
  * @param slab Address of the memory slab.
  * @param mem Pointer to the memory block (as returned by k_mem_slab_alloc()).
  */
-void k_mem_slab_free(struct k_mem_slab *slab, void *mem);
+extern void k_mem_slab_free(struct k_mem_slab *slab, void *mem);
 
 /**
  * @brief Get the number of used blocks in a memory slab.
@@ -5589,11 +5319,9 @@ struct k_heap {
  * @param mem Pointer to memory.
  * @param bytes Size of memory region, in bytes
  */
-void k_heap_init(struct k_heap *h, void *mem,
-		size_t bytes) __attribute_nonnull(1);
+void k_heap_init(struct k_heap *h, void *mem, size_t bytes);
 
-/**
- * @brief Allocate aligned memory from a k_heap
+/** @brief Allocate aligned memory from a k_heap
  *
  * Behaves in all ways like k_heap_alloc(), except that the returned
  * memory (if available) will have a starting address in memory which
@@ -5613,7 +5341,7 @@ void k_heap_init(struct k_heap *h, void *mem,
  * @return Pointer to memory the caller can now use
  */
 void *k_heap_aligned_alloc(struct k_heap *h, size_t align, size_t bytes,
-			k_timeout_t timeout) __attribute_nonnull(1);
+			k_timeout_t timeout);
 
 /**
  * @brief Allocate memory from a k_heap
@@ -5637,58 +5365,7 @@ void *k_heap_aligned_alloc(struct k_heap *h, size_t align, size_t bytes,
  * @return A pointer to valid heap memory, or NULL
  */
 void *k_heap_alloc(struct k_heap *h, size_t bytes,
-		k_timeout_t timeout) __attribute_nonnull(1);
-
-/**
- * @brief Allocate and initialize memory for an array of objects from a k_heap
- *
- * Allocates memory for an array of num objects of size and initializes all
- * bytes in the allocated storage to zero.  If no memory is available
- * immediately, the call will block for the specified timeout (constructed
- * via the standard timeout API, or K_NO_WAIT or K_FOREVER) waiting for memory
- * to be freed.  If the allocation cannot be performed by the expiration of
- * the timeout, NULL will be returned.
- * Allocated memory is aligned on a multiple of pointer sizes.
- *
- * @note @a timeout must be set to K_NO_WAIT if called from ISR.
- * @note When CONFIG_MULTITHREADING=n any @a timeout is treated as K_NO_WAIT.
- *
- * @funcprops \isr_ok
- *
- * @param h Heap from which to allocate
- * @param num Number of objects to allocate
- * @param size Desired size of each object to allocate
- * @param timeout How long to wait, or K_NO_WAIT
- * @return A pointer to valid heap memory, or NULL
- */
-void *k_heap_calloc(struct k_heap *h, size_t num, size_t size, k_timeout_t timeout)
-	__attribute_nonnull(1);
-
-/**
- * @brief Reallocate memory from a k_heap
- *
- * Reallocates and returns a memory buffer from the memory region owned
- * by the heap.  If no memory is available immediately, the call will
- * block for the specified timeout (constructed via the standard
- * timeout API, or K_NO_WAIT or K_FOREVER) waiting for memory to be
- * freed.  If the allocation cannot be performed by the expiration of
- * the timeout, NULL will be returned.
- * Reallocated memory is aligned on a multiple of pointer sizes.
- *
- * @note @a timeout must be set to K_NO_WAIT if called from ISR.
- * @note When CONFIG_MULTITHREADING=n any @a timeout is treated as K_NO_WAIT.
- *
- * @funcprops \isr_ok
- *
- * @param h Heap from which to allocate
- * @param ptr Original pointer returned from a previous allocation
- * @param bytes Desired size of block to allocate
- * @param timeout How long to wait, or K_NO_WAIT
- *
- * @return Pointer to memory the caller can now use, or NULL
- */
-void *k_heap_realloc(struct k_heap *h, void *ptr, size_t bytes, k_timeout_t timeout)
-	__attribute_nonnull(1);
+				 k_timeout_t timeout);
 
 /**
  * @brief Free memory allocated by k_heap_alloc()
@@ -5700,12 +5377,12 @@ void *k_heap_realloc(struct k_heap *h, void *ptr, size_t bytes, k_timeout_t time
  * @param h Heap to which to return the memory
  * @param mem A valid memory block, or NULL
  */
-void k_heap_free(struct k_heap *h, void *mem) __attribute_nonnull(1);
+void k_heap_free(struct k_heap *h, void *mem);
 
 /* Hand-calculated minimum heap sizes needed to return a successful
  * 1-byte allocation.  See details in lib/os/heap.[ch]
  */
-#define Z_HEAP_MIN_SIZE ((sizeof(void *) > 4) ? 56 : 44)
+#define Z_HEAP_MIN_SIZE (sizeof(void *) > 4 ? 56 : 44)
 
 /**
  * @brief Define a static k_heap in the specified linker section
@@ -5797,7 +5474,7 @@ void k_heap_free(struct k_heap *h, void *mem) __attribute_nonnull(1);
  *
  * @return Address of the allocated memory if successful; otherwise NULL.
  */
-void *k_aligned_alloc(size_t align, size_t size);
+extern void *k_aligned_alloc(size_t align, size_t size);
 
 /**
  * @brief Allocate memory from the heap.
@@ -5810,7 +5487,7 @@ void *k_aligned_alloc(size_t align, size_t size);
  *
  * @return Address of the allocated memory if successful; otherwise NULL.
  */
-void *k_malloc(size_t size);
+extern void *k_malloc(size_t size);
 
 /**
  * @brief Free memory allocated from heap.
@@ -5822,7 +5499,7 @@ void *k_malloc(size_t size);
  *
  * @param ptr Pointer to previously allocated memory.
  */
-void k_free(void *ptr);
+extern void k_free(void *ptr);
 
 /**
  * @brief Allocate memory from heap, array style
@@ -5835,26 +5512,7 @@ void k_free(void *ptr);
  *
  * @return Address of the allocated memory if successful; otherwise NULL.
  */
-void *k_calloc(size_t nmemb, size_t size);
-
-/** @brief Expand the size of an existing allocation
- *
- * Returns a pointer to a new memory region with the same contents,
- * but a different allocated size.  If the new allocation can be
- * expanded in place, the pointer returned will be identical.
- * Otherwise the data will be copies to a new block and the old one
- * will be freed as per sys_heap_free().  If the specified size is
- * smaller than the original, the block will be truncated in place and
- * the remaining memory returned to the heap.  If the allocation of a
- * new block fails, then NULL will be returned and the old block will
- * not be freed or modified.
- *
- * @param ptr Original pointer returned from a previous allocation
- * @param size Amount of memory requested (in bytes).
- *
- * @return Pointer to memory the caller can now use, or NULL.
- */
-void *k_realloc(void *ptr, size_t size);
+extern void *k_calloc(size_t nmemb, size_t size);
 
 /** @} */
 
@@ -6014,16 +5672,15 @@ struct k_poll_event {
 
 	/** per-type data */
 	union {
-		/* The typed_* fields below are used by K_POLL_EVENT_*INITIALIZER() macros to ensure
-		 * type safety of polled objects.
-		 */
-		void *obj, *typed_K_POLL_TYPE_IGNORE;
-		struct k_poll_signal *signal, *typed_K_POLL_TYPE_SIGNAL;
-		struct k_sem *sem, *typed_K_POLL_TYPE_SEM_AVAILABLE;
-		struct k_fifo *fifo, *typed_K_POLL_TYPE_FIFO_DATA_AVAILABLE;
-		struct k_queue *queue, *typed_K_POLL_TYPE_DATA_AVAILABLE;
-		struct k_msgq *msgq, *typed_K_POLL_TYPE_MSGQ_DATA_AVAILABLE;
-		struct k_pipe *pipe, *typed_K_POLL_TYPE_PIPE_DATA_AVAILABLE;
+		void *obj;
+		struct k_poll_signal *signal;
+		struct k_sem *sem;
+		struct k_fifo *fifo;
+		struct k_queue *queue;
+		struct k_msgq *msgq;
+#ifdef CONFIG_PIPES
+		struct k_pipe *pipe;
+#endif
 	};
 };
 
@@ -6035,7 +5692,7 @@ struct k_poll_event {
 	.mode = _event_mode, \
 	.unused = 0, \
 	{ \
-		.typed_##_event_type = _event_obj, \
+		.obj = _event_obj, \
 	}, \
 	}
 
@@ -6048,7 +5705,7 @@ struct k_poll_event {
 	.mode = _event_mode, \
 	.unused = 0, \
 	{ \
-		.typed_##_event_type = _event_obj, \
+		.obj = _event_obj, \
 	}, \
 	}
 
@@ -6067,7 +5724,7 @@ struct k_poll_event {
  * @param obj Kernel object or poll signal.
  */
 
-void k_poll_event_init(struct k_poll_event *event, uint32_t type,
+extern void k_poll_event_init(struct k_poll_event *event, uint32_t type,
 			      int mode, void *obj);
 
 /**
@@ -6126,7 +5783,7 @@ __syscall int k_poll(struct k_poll_event *events, int num_events,
 
 __syscall void k_poll_signal_init(struct k_poll_signal *sig);
 
-/**
+/*
  * @brief Reset a poll signal object's state to unsignaled.
  *
  * @param sig A poll signal object
@@ -6286,7 +5943,22 @@ static inline void k_cpu_atomic_idle(unsigned int key)
 /**
  * @internal
  */
-void z_timer_expiration_handler(struct _timeout *timeout);
+#ifdef CONFIG_MULTITHREADING
+/**
+ * @internal
+ */
+extern void z_init_static_threads(void);
+#else
+/**
+ * @internal
+ */
+#define z_init_static_threads() do { } while (false)
+#endif
+
+/**
+ * @internal
+ */
+extern void z_timer_expiration_handler(struct _timeout *t);
 /**
  * INTERNAL_HIDDEN @endcond
  */
@@ -6301,12 +5973,6 @@ void z_timer_expiration_handler(struct _timeout *timeout);
  */
 __syscall void k_str_out(char *c, size_t n);
 #endif
-
-/**
- * @defgroup float_apis Floating Point APIs
- * @ingroup kernel_apis
- * @{
- */
 
 /**
  * @brief Disable preservation of floating point context information.
@@ -6371,10 +6037,6 @@ __syscall int k_float_disable(struct k_thread *thread);
 __syscall int k_float_enable(struct k_thread *thread, unsigned int options);
 
 /**
- * @}
- */
-
-/**
  * @brief Get the runtime statistics of a thread
  *
  * @param thread ID of thread.
@@ -6393,15 +6055,6 @@ int k_thread_runtime_stats_get(k_tid_t thread,
 int k_thread_runtime_stats_all_get(k_thread_runtime_stats_t *stats);
 
 /**
- * @brief Get the runtime statistics of all threads on specified cpu
- *
- * @param cpu The cpu number
- * @param stats Pointer to struct to copy statistics into.
- * @return -EINVAL if null pointers, otherwise 0
- */
-int k_thread_runtime_stats_cpu_get(int cpu, k_thread_runtime_stats_t *stats);
-
-/**
  * @brief Enable gathering of runtime statistics for specified thread
  *
  * This routine enables the gathering of runtime statistics for the specified
@@ -6410,7 +6063,7 @@ int k_thread_runtime_stats_cpu_get(int cpu, k_thread_runtime_stats_t *stats);
  * @param thread ID of thread
  * @return -EINVAL if invalid thread ID, otherwise 0
  */
-int k_thread_runtime_stats_enable(k_tid_t thread);
+extern int k_thread_runtime_stats_enable(k_tid_t thread);
 
 /**
  * @brief Disable gathering of runtime statistics for specified thread
@@ -6421,7 +6074,7 @@ int k_thread_runtime_stats_enable(k_tid_t thread);
  * @param thread ID of thread
  * @return -EINVAL if invalid thread ID, otherwise 0
  */
-int k_thread_runtime_stats_disable(k_tid_t thread);
+extern int k_thread_runtime_stats_disable(k_tid_t thread);
 
 /**
  * @brief Enable gathering of system runtime statistics
@@ -6430,7 +6083,7 @@ int k_thread_runtime_stats_disable(k_tid_t thread);
  * it does not affect the gathering of similar statistics for individual
  * threads.
  */
-void k_sys_runtime_stats_enable(void);
+extern void k_sys_runtime_stats_enable(void);
 
 /**
  * @brief Disable gathering of system runtime statistics
@@ -6439,14 +6092,14 @@ void k_sys_runtime_stats_enable(void);
  * it does not affect the gathering of similar statistics for individual
  * threads.
  */
-void k_sys_runtime_stats_disable(void);
+extern void k_sys_runtime_stats_disable(void);
 
 #ifdef __cplusplus
 }
 #endif
 
 #include <zephyr/tracing/tracing.h>
-#include <zephyr/syscalls/kernel.h>
+#include <syscalls/kernel.h>
 
 #endif /* !_ASMLANGUAGE */
 

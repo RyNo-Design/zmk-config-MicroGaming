@@ -7,7 +7,6 @@ Tests for the mixins class
 """
 
 import os
-
 import pytest
 
 

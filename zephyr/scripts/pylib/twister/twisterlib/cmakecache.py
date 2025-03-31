@@ -7,7 +7,6 @@
 import re
 from collections import OrderedDict
 
-
 class CMakeCacheEntry:
     '''Represents a CMake cache entry.
 
@@ -52,17 +51,16 @@ class CMakeCacheEntry:
         val = val.upper()
         if val in ('ON', 'YES', 'TRUE', 'Y'):
             return 1
-        elif (
-            val in ('OFF', 'NO', 'FALSE', 'N', 'IGNORE', 'NOTFOUND', '')
-            or val.endswith('-NOTFOUND')
-        ):
+        elif val in ('OFF', 'NO', 'FALSE', 'N', 'IGNORE', 'NOTFOUND', ''):
+            return 0
+        elif val.endswith('-NOTFOUND'):
             return 0
         else:
             try:
                 v = int(val)
                 return v != 0
             except ValueError as exc:
-                raise ValueError(f'invalid bool {val}') from exc
+                raise ValueError('invalid bool {}'.format(val)) from exc
 
     @classmethod
     def from_line(cls, line, line_no):
@@ -84,12 +82,13 @@ class CMakeCacheEntry:
             try:
                 value = cls._to_bool(value)
             except ValueError as exc:
-                args = exc.args + (f'on line {line_no}: {line}',)
+                args = exc.args + ('on line {}: {}'.format(line_no, line),)
                 raise ValueError(args) from exc
-        # If the value is a CMake list (i.e. is a string which contains a ';'),
-        # convert to a Python list.
-        elif type_ in ['STRING', 'INTERNAL'] and ';' in value:
-            value = value.split(';')
+        elif type_ in ['STRING', 'INTERNAL']:
+            # If the value is a CMake list (i.e. is a string which
+            # contains a ';'), convert to a Python list.
+            if ';' in value:
+                value = value.split(';')
 
         return CMakeCacheEntry(name, value)
 
@@ -115,7 +114,7 @@ class CMakeCache:
 
     def load(self, cache_file):
         entries = []
-        with open(cache_file) as cache:
+        with open(cache_file, 'r') as cache:
             for line_no, line in enumerate(cache):
                 entry = CMakeCacheEntry.from_line(line, line_no)
                 if entry:

@@ -1,8 +1,7 @@
-.. zephyr:code-sample:: qdec
-   :name: Quadrature Decoder Sensor
-   :relevant-api: sensor_interface
+.. _qdec_sensor:
 
-   Get rotation data from a quadrature decoder sensor.
+Quadrature Decoder Sensor
+#########################
 
 Overview
 ********
@@ -11,7 +10,6 @@ This sample reads the value of the counter which has been configured in
 quadrature decoder mode.
 
 It requires:
-
 * an external mechanical encoder
 * pin to be properly configured in the device tree
 
