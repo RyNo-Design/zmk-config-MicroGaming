@@ -5,7 +5,7 @@ manifest:
 
   projects:
     - name: zmk
-      remote: zmkfirmwarerm -rf /workspaces/zmk-config-MicroGaming/.west
+      remote: zmkfirmwarerm -rf /workspaces/zmk-config-MicroGaming/
       import: app/west.yml
 
   self:
