@@ -1,4 +1,4 @@
-if SHIELD_MICROGAMING
+if SHIELD_HUMMINGBIRD
             
 config ZMK_KEYBOARD_NAME
     default "MicroGaming"
