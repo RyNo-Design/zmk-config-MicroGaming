@@ -1,2 +1,2 @@
 config SHIELD_MICROGAMING
-    def_bool $(shield_list_contains, tubetest)
+    def_bool $(shield_list_contains, hummingbird)
