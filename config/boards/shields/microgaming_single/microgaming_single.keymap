@@ -23,7 +23,7 @@
 
          layer_2 {
              bindings = <
-                        &trans &bt BT SEL 0 &bt BT SEL 1 &bt BT SEL 2 &trans &trans &trans
+                        &trans &bt BT_SEL 0 &bt BT SEL 1 &bt BT SEL 2 &trans &trans &trans
                         &trans &trans &trans &trans &trans &trans &trans
                         &trans &trans &trans &trans &trans
                     >;
