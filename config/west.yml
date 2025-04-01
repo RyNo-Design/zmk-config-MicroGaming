@@ -1,13 +1,5 @@
 manifest:
-  remotes:
-    - name: zmkfirmware
-      url-base: https://github.com/zmkfirmware
-
   projects:
-    - name: zmk
-      remote: zmkfirmware
+    - name: hummingbird
+      path: config/modules/hummingbird
       revision: main
-      import: app/west.yml
-
-  self:
-    path: config
