@@ -31,7 +31,7 @@
 
          layer_3 {
              bindings = <
-                        &kp ESC &tg 2 &tg 3 &trans &trans &trans &trans
+                        &kp ESC &TG 2 &TG 3 &trans &trans &trans &trans
                         &df 2 &trans &trans &trans &trans &trans &trans
                         &trans &kp B &trans &kp BSPC &trans
                     >;
