@@ -23,7 +23,7 @@
 
          layer_2 {
              bindings = <
-                        &trans &BT_PRF1 &BT_PRF2 &BT_PRF3 &trans &trans &trans
+                        &trans &QK_BLUETOOTH_PROFILE1 &QK_BLUETOOTH_PROFILE2 &QK_BLUETOOTH_PROFILE3 &trans &trans &trans
                         &trans &trans &trans &trans &trans &trans &trans
                         &trans &trans &trans &trans &trans
                     >;
