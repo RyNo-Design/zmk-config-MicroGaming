@@ -2,4 +2,4 @@ config SHIELD_MICROGAMING_SINGLE
     bool "MicroGaming Single Shield"
     default y
     help
-        Custom shield for a non-split keyboard using Nice!Nano V2.
+        Custom shield for a non-split keyboard using the Nice!Nano V2.
