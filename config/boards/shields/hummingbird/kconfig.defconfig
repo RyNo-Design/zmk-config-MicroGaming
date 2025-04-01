@@ -1,6 +1,0 @@
-if SHIELD_PRO_MICRO
-            
-config ZMK_KEYBOARD_NAME
-    default "MicroGaming"
-
-endif
