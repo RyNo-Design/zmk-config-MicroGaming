@@ -6,27 +6,27 @@
          compatible = "zmk,keymap";
 
          layer_0 {
-             bindings = <&kp ESC &kp Q &kp W &kp E &kp R &kp G &kp DEL>,
-                        <&kp LSHFT &kp A &kp S &kp D &kp F &kp M &kp ENTER>,
-                        <&kp LCTRL &kp LGUI &kp TAB &kp SPACE &mo 3>;
+             bindings = <&kp_ESC &kp_Q &kp_W &kp_E &kp_R &kp_G &kp_DEL>,
+                        <&kp_LSHFT &kp_A &kp_S &kp_D &kp_F &kp_M &kp_ENTER>,
+                        <&kp_LCTRL &kp_LGUI &kp_TAB &kp_SPACE &mo_3>;
          };
 
          layer_1 {
-             bindings = <&trans &kp N1 &kp N2 &kp N3 &kp N4 &kp N5 &trans>,
-                        <&kp DOT &kp N6 &kp N7 &kp N8 &kp N9 &kp N0 &trans>,
-                        <&kp KP_ASTERISK &kp MINUS &kp KP_PLUS &trans &trans>;
+             bindings = <&trans &kp_N1 &kp_N2 &kp_N3 &kp_N4 &kp_N5 &trans>,
+                        <&kp_DOT &kp_N6 &kp_N7 &kp_N8 &kp_N9 &kp_N0 &trans>,
+                        <&KP_ASTERISK &kp_MINUS &KP_PLUS &trans &trans>;
          };
 
          layer_2 {
-             bindings = <&trans &bt BT_SEL 0 &bt BT_SEL 1 &bt BT_SEL 2 &trans &trans &trans>,
+             bindings = <&trans &bt BT_SEL_0 &bt BT_SEL_1 &bt BT_SEL_2 &trans &trans &trans>,
                         <&trans &trans &trans &trans &trans &trans &trans>,
                         <&trans &trans &trans &trans &trans>;
          };
 
          layer_3 {
-             bindings = <&kp ESC &tg 2 &tg 3 &trans &trans &trans &trans>,
-                        <&df 2 &trans &trans &trans &trans &trans &trans>,
-                        <&trans &kp B &trans &kp BSPC &trans>;
+             bindings = <&kp_ESC &tg_2 &tg_3 &trans &trans &trans &trans>,
+                        <&df_2 &trans &trans &trans &trans &trans &trans>,
+                        <&trans &kp_B &trans &kp_BSPC &trans>;
          };
      };
  };
