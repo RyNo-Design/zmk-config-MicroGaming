@@ -9,7 +9,7 @@
         layer_0 {
             bindings = <&kp ESC &kp Q &kp W &kp E &kp R &kp G &kp DEL>,
                        <&kp LSHFT &kp A &kp S &kp D &kp F &kp M &kp ENTER>,
-                       <&kp LCTRL &kp LGUI &kp TAB &kp SPACE &mo 4>;
+                       <&kp LCTRL &kp LGUI &kp TAB &kp SPACE &mo 3>;
         };
 
         layer_1 {
@@ -19,7 +19,7 @@
         };
 
         layer_2 {
-            bindings = <&trans &bt BT_SEL 0 &bt BT_SEL 1 &bt BT_SEL 2 &kp OUT_AUTO &trans &trans>,
+            bindings = <&trans &bt BT_SEL 0 &bt BT_SEL 1 &bt BT_SEL 2 &trans &trans &trans>,
                        <&trans &trans &trans &trans &trans &trans &trans>,
                        <&trans &trans &trans &trans &trans>;
         };
