@@ -1,0 +1,22 @@
+build:
+  shield: microgaming_single
+  board: nice_nano_v2
+
+include:
+  - boards/shields/microgaming_single/
+
+config:
+  CONFIG_ZMK_DISPLAY: y
+  CONFIG_ZMK_MOUSE: n
+  CONFIG_ZMK_SPLIT_ROLE_CENTRAL: n
+
+options:
+  - CONFIG_ZMK_SLEEP=y  # Enable deep sleep for power saving
+  - CONFIG_ZMK_RGB_UNDERGLOW=n
+
+features:
+  - behavior_tap_dance
+  - behavior_hold_tap
+  - sensor_rotate
+  - output_bluetooth
+  - output_usb
