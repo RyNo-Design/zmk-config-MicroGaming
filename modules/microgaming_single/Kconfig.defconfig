@@ -1,6 +1,0 @@
-if SHIELD_MICROGAMING_SINGLE
-
-config ZMK_KEYBOARD_NAME
-    default "Microgaming Single"
-
-endif
