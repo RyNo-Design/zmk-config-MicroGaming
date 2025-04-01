@@ -1,2 +1,2 @@
-config SHIELD_HUMMINGBIRD
-    def_bool $(shields_list_contains,hummingbird)
+config SHIELD_PRO_MICRO
+    def_bool $(shields_list_contains,pro_micro)
